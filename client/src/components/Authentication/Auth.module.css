@@ -1,0 +1,41 @@
+.paper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 30px 20px;
+}
+
+.form {
+  width: 100%;
+  margin-top: 20px;
+}
+
+.submit {
+  margin-top: 20px !important;
+  margin-bottom: 20px !important;
+  background-color: #097ae3 !important;
+  width: 30%;
+}
+
+.background {
+  background-color: #4568dc;
+  background: linear-gradient(315deg, #3a61e2 0%, #a65ca8 100%);
+  background-size: 400% 400%;
+  animation: gradient 10s ease infinite;
+  height: 100%;
+  width: 100%;
+}
+
+@keyframes gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+
+  50% {
+    background-position: 100% 50%;
+  }
+
+  100% {
+    background-position: 0% 50%;
+  }
+}
