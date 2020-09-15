@@ -122,7 +122,7 @@ const Register = () => {
                     color="primary"
                     className={styles.submit}
                   >
-                    Sign In
+                    Register
                   </Button>
                 </Box>
               </form>

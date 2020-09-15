@@ -105,7 +105,7 @@ const Login = () => {
                     color="primary"
                     className={styles.submit}
                   >
-                    Sign In
+                    Login
                   </Button>
                 </Box>
               </form>

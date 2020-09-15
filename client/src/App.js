@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Route, Switch } from "react-router-dom";
 import styles from "./App.module.css";
-import { Login, Register, Dashboard, NotFound } from "./components";
+import { Login, Register, NotFound, PageTemplate } from "./components";
 import UserContext from "./context/UserContext";
 import Axios from "axios";
 
@@ -27,11 +27,9 @@ function App() {
         "x-auth-token": token,
       };
 
-      const tokenIsValid = await Axios.post(
-        url + "/auth/token-is-valid",
-        null,
-        { headers }
-      );
+      const tokenIsValid = await Axios.post(url + "/auth/validate", null, {
+        headers,
+      });
 
       if (tokenIsValid.data) {
         const userRes = await Axios.get(url + "/auth/user", { headers });
@@ -53,14 +51,14 @@ function App() {
         <div className={styles.container}>
           <Switch>
             {userData.user ? (
-              <Route path="/" exact component={Dashboard} />
+              <Route path="/" exact component={PageTemplate} />
             ) : (
               <Route path="/" exact component={Register} />
             )}
             <Route path="/login" exact component={Login} />
             <Route path="/register" exact component={Register} />
             <Route component={NotFound} />
-          </Switch>{" "}
+          </Switch>
         </div>
       </UserContext.Provider>
     </Router>

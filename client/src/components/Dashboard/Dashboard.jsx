@@ -1,32 +1,57 @@
-import React, { useContext } from "react";
-import { useHistory } from "react-router-dom";
-import UserContext from "../../context/UserContext";
+import React from "react";
 import styles from "./Dashboard.module.css";
+import clsx from "clsx";
+import { makeStyles } from "@material-ui/core/styles";
+import { Box, Container, Grid, Paper } from "@material-ui/core";
+import Chart from "./Chart";
+import Balance from "./Balance";
+import Purchases from "./Purchases";
+import Copyright from "../Template/Copyright";
+
+const useStyles = makeStyles((theme) => ({
+  paper: {
+    padding: theme.spacing(2),
+    display: "flex",
+    overflow: "auto",
+    flexDirection: "column",
+  },
+  fixedHeight: {
+    height: 240,
+  },
+}));
 
 const Dashboard = () => {
-  const history = useHistory();
-  const { userData, setUserData } = useContext(UserContext);
+  const classes = useStyles();
 
-  if (!userData.user) {
-    console.log(userData);
-    history.push("/login");
-  }
-
-  const logout = () => {
-    setUserData({
-      token: undefined,
-      user: undefined,
-    });
-    localStorage.setItem("auth-token", "");
-    history.push("/login");
-  };
+  const fixedHeightPaper = clsx(classes.paper, classes.fixedHeight);
 
   return (
-    <div className={styles.container}>
-      <h1>Dashboard</h1>
-      <h3>Welcome {userData.user.username}</h3>
-      <button onClick={logout}>Log Out</button>
-    </div>
+         
+        <Container maxWidth="lg" className={styles.container}>
+          <Grid container spacing={3}>
+            {/* Chart */}
+            <Grid item xs={12} md={8} lg={9}>
+              <Paper className={fixedHeightPaper}>
+                <Chart />
+              </Paper>
+            </Grid>
+            {/* Balance */}
+            <Grid item xs={12} md={4} lg={3}>
+              <Paper className={fixedHeightPaper}>
+                <Balance />
+              </Paper>
+            </Grid>
+            {/* Recent Purchases */}
+            <Grid item xs={12}>
+              <Paper className={classes.paper}>
+                <Purchases />
+              </Paper>
+            </Grid>
+          </Grid>
+          <Box pt={4}>
+            <Copyright />
+          </Box>
+        </Container>
   );
 };
 

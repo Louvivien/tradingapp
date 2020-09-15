@@ -9,7 +9,7 @@ const User = require("./models/userModel");
 const bcrypt = require("bcryptjs");
 
 // SETUP
-dotenv.config({ path: "./server/config/config.env" });
+dotenv.config({ path: "./server/config/.env" });
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -38,7 +38,9 @@ mongoose
 
 // ROUTES
 const authRouter = require("./routes/authRoutes");
+const stockRouter = require("./routes/stockRoutes");
 app.use("/api/auth", authRouter);
+app.use("/api/", stockRouter);
 
 // APP
 app.listen(port, () => {
