@@ -3,10 +3,6 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
-const session = require("express-session");
-const passport = require("passport");
-const User = require("./models/userModel");
-const bcrypt = require("bcryptjs");
 
 // SETUP
 dotenv.config({ path: "./server/config/.env" });

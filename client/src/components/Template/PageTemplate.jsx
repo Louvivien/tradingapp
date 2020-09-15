@@ -19,12 +19,15 @@ import ChevronLeftIcon from "@material-ui/icons/ChevronLeft";
 import Navbar from "../Template/Navbar";
 import SecondNavbar from "../Template/SecondNavbar";
 import Dashboard from "../Dashboard/Dashboard";
+import News from "../News/News";
+import Search from "../Search/Search";
 
 const PageTemplate = () => {
   const history = useHistory();
   const classes = useStyles();
   const { userData, setUserData } = useContext(UserContext);
   const [open, setOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState("dashboard");
 
   if (!userData.user) {
     history.push("/login");
@@ -75,7 +78,9 @@ const PageTemplate = () => {
             noWrap
             className={styles.title}
           >
-            Dashboard
+            {currentPage === "dashboard" && "Dashboard"}
+            {currentPage === "news" && "Market News"}
+            {currentPage === "search" && "Search"}
           </Typography>
           <Typography color="inherit">
             Hello,{" "}
@@ -100,7 +105,7 @@ const PageTemplate = () => {
         </div>
         <Divider />
         <List>
-          <Navbar />
+          <Navbar currentPage={currentPage} setCurrentPage={setCurrentPage} />
         </List>
         <Divider />
         <List>
@@ -109,7 +114,9 @@ const PageTemplate = () => {
       </Drawer>
       <main className={styles.content}>
         <div className={classes.appBarSpacer} />
-        <Dashboard />
+        {currentPage === "dashboard" && <Dashboard />}
+        {currentPage === "news" && <News />}
+        {currentPage === "search" && <Search />}
       </main>
     </div>
   );
