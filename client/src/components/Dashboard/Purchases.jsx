@@ -70,7 +70,7 @@ const Purchases = () => {
   const classes = useStyles();
   return (
     <React.Fragment>
-      <Title>Recent Orders</Title>
+      <Title>Stocks in your Portfolio</Title>
       <Table size="small">
         <TableHead>
           <TableRow>

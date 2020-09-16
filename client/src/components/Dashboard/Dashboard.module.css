@@ -39,7 +39,7 @@
 }
 
 .appBarBackground {
-  background-color: #4568dc;
+  background-color: #3a61e2;
   background: linear-gradient(315deg, #3a61e2 0%, #775ca8 100%);
   background-size: 400% 400%;
   animation: gradient 20s ease infinite;

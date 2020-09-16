@@ -1,0 +1,50 @@
+.card {
+  margin: 0 2% !important;
+  margin-bottom: 45px !important;
+}
+
+.cardBorder {
+  border-bottom: 10px solid rgba(0, 0, 255, 0.5);
+}
+
+.information {
+  padding: 16px !important;
+  display: flex !important;
+  overflow: auto !important;
+  flex-direction: column !important;
+  background-color: #faf9f9e7 !important;
+  margin: 0 auto !important;
+}
+
+.addMargin {
+  margin-top: 20px !important;
+}
+
+.centerGrid {
+  margin: 0 auto !important;
+}
+
+.root {
+  flex-grow: 1;
+}
+
+.submit {
+  margin-top: 20px !important;
+  margin-bottom: 20px !important;
+  background-color: rgba(0, 0, 255, 0.5) !important;
+}
+
+.backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.form {
+  margin: 0 auto;
+  width: 80%;
+  margin-top: 20px;
+}

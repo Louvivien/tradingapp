@@ -26,32 +26,31 @@ const Dashboard = () => {
   const fixedHeightPaper = clsx(classes.paper, classes.fixedHeight);
 
   return (
-         
-        <Container maxWidth="lg" className={styles.container}>
-          <Grid container spacing={3}>
-            {/* Chart */}
-            <Grid item xs={12} md={8} lg={9}>
-              <Paper className={fixedHeightPaper}>
-                <Chart />
-              </Paper>
-            </Grid>
-            {/* Balance */}
-            <Grid item xs={12} md={4} lg={3}>
-              <Paper className={fixedHeightPaper}>
-                <Balance />
-              </Paper>
-            </Grid>
-            {/* Recent Purchases */}
-            <Grid item xs={12}>
-              <Paper className={classes.paper}>
-                <Purchases />
-              </Paper>
-            </Grid>
-          </Grid>
-          <Box pt={4}>
-            <Copyright />
-          </Box>
-        </Container>
+    <Container maxWidth="lg" className={styles.container}>
+      <Grid container spacing={3}>
+        {/* Chart */}
+        <Grid item xs={12} md={8} lg={9}>
+          <Paper className={fixedHeightPaper}>
+            <Chart />
+          </Paper>
+        </Grid>
+        {/* Balance */}
+        <Grid item xs={12} md={4} lg={3}>
+          <Paper className={fixedHeightPaper}>
+            <Balance />
+          </Paper>
+        </Grid>
+        {/* Recent Purchases */}
+        <Grid item xs={12}>
+          <Paper className={classes.paper}>
+            <Purchases />
+          </Paper>
+        </Grid>
+      </Grid>
+      <Box pt={4}>
+        <Copyright />
+      </Box>
+    </Container>
   );
 };
 
