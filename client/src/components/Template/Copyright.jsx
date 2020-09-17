@@ -18,8 +18,8 @@ const Copyright = () => {
         fake money.
       </Typography>
       <Typography variant="body2" color="textSecondary" align="center">
-        The data presented to you is not representative of real-world trading
-        conditions and is not guaranteed to be accurate.
+        The simulator is not representative of real-world trading conditions and
+        the data is not guaranteed to be accurate.
       </Typography>
     </div>
   );

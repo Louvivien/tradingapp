@@ -10,7 +10,7 @@ function preventDefault(event) {
 
 const Balance = () => {
   const { userData } = useContext(UserContext);
-
+  
   return (
     <React.Fragment>
       <Title>Current Balance</Title>

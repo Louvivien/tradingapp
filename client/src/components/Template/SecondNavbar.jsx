@@ -5,10 +5,10 @@ import ListItemText from "@material-ui/core/ListItemText";
 import SettingsIcon from "@material-ui/icons/Settings";
 import ExitToAppIcon from "@material-ui/icons/ExitToApp";
 
-const SecondNavbar = ({ logout }) => {
+const SecondNavbar = ({ logout, openSettings }) => {
   return (
     <div>
-      <ListItem button>
+      <ListItem button onClick={openSettings}>
         <ListItemIcon>
           <SettingsIcon />
         </ListItemIcon>

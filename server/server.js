@@ -26,6 +26,7 @@ mongoose
     useNewUrlParser: true,
     useCreateIndex: true,
     useUnifiedTopology: true,
+    useFindAndModify: false,
   })
   .then(() => {
     console.log("Connected to DB");
@@ -34,9 +35,14 @@ mongoose
 
 // ROUTES
 const authRouter = require("./routes/authRoutes");
+const dataRouter = require("./routes/dataRoutes");
+const newsRouter = require("./routes/newsRoutes");
 const stockRouter = require("./routes/stockRoutes");
+
 app.use("/api/auth", authRouter);
-app.use("/api/", stockRouter);
+app.use("/api/data", dataRouter);
+app.use("/api/news", newsRouter);
+app.use("/api/stock", stockRouter);
 
 // APP
 app.listen(port, () => {

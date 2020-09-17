@@ -21,6 +21,7 @@ import SecondNavbar from "../Template/SecondNavbar";
 import Dashboard from "../Dashboard/Dashboard";
 import News from "../News/News";
 import Search from "../Search/Search";
+import SettingsModal from "./SettingsModal";
 
 const PageTemplate = () => {
   const history = useHistory();
@@ -28,6 +29,7 @@ const PageTemplate = () => {
   const { userData, setUserData } = useContext(UserContext);
   const [open, setOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState("dashboard");
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   if (!userData.user) {
     history.push("/login");
@@ -48,6 +50,10 @@ const PageTemplate = () => {
 
   const handleDrawerClose = () => {
     setOpen(false);
+  };
+
+  const openSettings = () => {
+    setSettingsOpen(true);
   };
 
   return (
@@ -109,7 +115,7 @@ const PageTemplate = () => {
         </List>
         <Divider />
         <List>
-          <SecondNavbar logout={logout} />
+          <SecondNavbar logout={logout} openSettings={openSettings} />
         </List>
       </Drawer>
       <main className={styles.content}>
@@ -117,6 +123,7 @@ const PageTemplate = () => {
         {currentPage === "dashboard" && <Dashboard />}
         {currentPage === "news" && <News />}
         {currentPage === "search" && <Search />}
+        {settingsOpen && <SettingsModal setSettingsOpen={setSettingsOpen} />}
       </main>
     </div>
   );

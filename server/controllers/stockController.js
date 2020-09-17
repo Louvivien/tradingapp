@@ -1,61 +1,89 @@
-const Axios = require("axios");
-const data = require("../config/stocksData");
+const mongoose = require("mongoose");
+const User = require("../models/userModel");
+const Stock = require("../models/stockModel");
 
-exports.getStockMetaData = async (req, res) => {
+exports.purchaseStock = async (req, res) => {
   try {
-    const url = `https://api.tiingo.com/tiingo/daily/${req.params.ticker}?token=${process.env.TIINGO_API_KEY}`;
+    const { userId, ticker, quantity, price } = req.body;
+    const user = await User.findById(userId);
 
-    const response = await Axios.get(url);
-    return res.status(200).json({
-      status: "success",
-      data: response.data,
-    });
-  } catch (error) {
-    console.log(error);
-    return res.status(200).json({
-      status: "fail",
-    });
-  }
-};
-
-exports.getStockInfo = (req, res) => {
-  let info;
-  data.stockData.forEach((stock) => {
-    if (stock.ticker.toLowerCase() === req.params.ticker.toLowerCase()) {
-      info = stock;
+    if (!user) {
+      return res.status(200).json({
+        status: "fail",
+        message: "Credentials couldn't be validated.",
+      });
     }
-  });
 
-  if (info) {
+    const totalPrice = quantity * price;
+    if (user.balance - totalPrice < 0) {
+      return res.status(200).json({
+        status: "fail",
+        message: `You don't have enough cash to purchase this stock.`,
+      });
+    }
+
+    const purchase = new Stock({ userId, ticker, quantity, price });
+    await purchase.save();
+    const updatedUser = await User.findByIdAndUpdate(userId, {
+      balance:
+        Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100,
+    });
+
     return res.status(200).json({
       status: "success",
-      data: info,
-    });
-  } else {
-    return res.status(200).json({
-      status: "fail",
-    });
-  }
-};
-
-exports.getStockHistoricData = async (req, res) => {
-  try {
-    const startDate = new Date();
-    startDate.setFullYear(startDate.getFullYear() - 2);
-    const year = startDate.getFullYear();
-    const month = startDate.getMonth();
-    const day = startDate.getDate();
-    console.log(year, month, day, startDate.toDateString());
-    const url = `https://api.tiingo.com/tiingo/daily/${req.params.ticker}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY}&resampleFreq=weekly`;
-    console.log(url);
-    const response = await Axios.get(url);
-    return res.status(200).json({
-      status: "success",
-      data: response.data,
+      user: {
+        username: updatedUser.username,
+        id: updatedUser._id,
+        balance:
+          Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100,
+      },
     });
   } catch (error) {
     return res.status(200).json({
       status: "fail",
+      message: "Something unexpected happened.",
+    });
+  }
+};
+
+exports.getStock = async (req, res) => {
+  try {
+    const stocks = await Stock.find({ userId: req.params.userId });
+    return res.status(200).json({
+      status: "success",
+      stocks,
+    });
+  } catch (error) {
+    return res.status(200).json({
+      status: "fail",
+      message: "Something unexpected happened.",
+    });
+  }
+};
+
+exports.resetAccount = async (req, res) => {
+  try {
+    const stocks = await Stock.find({ userId: req.params.userId });
+    stocks.forEach(async (stock) => {
+      await Stock.findByIdAndDelete(stock._id);
+    });
+
+    const updatedUser = await User.findByIdAndUpdate(req.params.userId, {
+      balance: 100000,
+    });
+
+    return res.status(200).json({
+      status: "success",
+      user: {
+        username: updatedUser.username,
+        id: updatedUser._id,
+        balance: 100000,
+      },
+    });
+  } catch (error) {
+    return res.status(200).json({
+      status: "fail",
+      message: "Something unexpected happened.",
     });
   }
 };
