@@ -16,13 +16,12 @@ const useStyles = makeStyles((theme) => ({
     flexDirection: "column",
   },
   fixedHeight: {
-    height: 240,
+    height: 350,
   },
 }));
 
-const Dashboard = () => {
+const Dashboard = ({ purchasedStocks }) => {
   const classes = useStyles();
-
   const fixedHeightPaper = clsx(classes.paper, classes.fixedHeight);
 
   return (
@@ -37,13 +36,13 @@ const Dashboard = () => {
         {/* Balance */}
         <Grid item xs={12} md={4} lg={3}>
           <Paper className={fixedHeightPaper}>
-            <Balance />
+            <Balance purchasedStocks={purchasedStocks} />
           </Paper>
         </Grid>
         {/* Recent Purchases */}
         <Grid item xs={12}>
           <Paper className={classes.paper}>
-            <Purchases />
+            <Purchases purchasedStocks={purchasedStocks} />
           </Paper>
         </Grid>
       </Grid>

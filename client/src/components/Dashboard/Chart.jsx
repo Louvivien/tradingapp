@@ -1,66 +1,34 @@
-import React from "react";
-import { useTheme } from "@material-ui/core/styles";
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  Label,
-  ResponsiveContainer,
-} from "recharts";
+import React, { useState, useEffect } from "react";
 import Title from "../Template/Title.jsx";
-
-// Generate Sales Data
-function createData(time, amount) {
-  return { time, amount };
-}
-
-const data = [
-  createData("00:00", 0),
-  createData("03:00", 300),
-  createData("06:00", 600),
-  createData("09:00", 800),
-  createData("12:00", 1500),
-  createData("15:00", 2000),
-  createData("18:00", 2400),
-  createData("21:00", 2400),
-  createData("24:00", undefined),
-];
+import LineChart from "../Search/LineChart";
+import Axios from "axios";
 
 const Chart = () => {
-  const theme = useTheme();
+  const [chartData, setChartData] = useState(undefined);
+
+  useEffect(() => {
+    const getData = async () => {
+      const url = `http://127.0.0.1:5000/api/data/random`;
+      const response = await Axios.get(url);
+      if (response.data.status === "success") {
+        setChartData(response.data);
+      }
+    };
+    getData();
+  }, []);
 
   return (
     <React.Fragment>
-      <Title>Today</Title>
-      <ResponsiveContainer>
-        <LineChart
-          data={data}
-          margin={{
-            top: 16,
-            right: 16,
-            bottom: 0,
-            left: 24,
-          }}
-        >
-          <XAxis dataKey="time" stroke={theme.palette.text.secondary} />
-          <YAxis stroke={theme.palette.text.secondary}>
-            <Label
-              angle={270}
-              position="left"
-              style={{ textAnchor: "middle", fill: theme.palette.text.primary }}
-            >
-              Sales ($)
-            </Label>
-          </YAxis>
-          <Line
-            type="monotone"
-            dataKey="amount"
-            stroke={theme.palette.primary.main}
-            dot={false}
+      {chartData && (
+        <div style={{ minHeight: "240px" }}>
+          <Title>Explore {chartData.name}'s stock chart</Title>
+          <LineChart
+            pastDataPeriod={chartData.data}
+            stockInfo={{ ticker: chartData.ticker }}
+            duration={"3 years"}
           />
-        </LineChart>
-      </ResponsiveContainer>
+        </div>
+      )}
     </React.Fragment>
   );
 };

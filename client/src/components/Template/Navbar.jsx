@@ -3,8 +3,6 @@ import ListItem from "@material-ui/core/ListItem";
 import ListItemIcon from "@material-ui/core/ListItemIcon";
 import ListItemText from "@material-ui/core/ListItemText";
 import DashboardIcon from "@material-ui/icons/Dashboard";
-import BarChartIcon from "@material-ui/icons/BarChart";
-import ShowChartIcon from "@material-ui/icons/ShowChart";
 import SearchIcon from "@material-ui/icons/Search";
 import InfoIcon from "@material-ui/icons/Info";
 
@@ -36,12 +34,6 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
         </ListItemIcon>
         <ListItemText primary="Dashboard" />
       </ListItem>
-      <ListItem button selected={currentPage === "stocks"}>
-        <ListItemIcon>
-          <ShowChartIcon />
-        </ListItemIcon>
-        <ListItemText primary="My Stocks" />
-      </ListItem>
       <ListItem
         button
         selected={currentPage === "search"}
@@ -51,12 +43,6 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
           <SearchIcon />
         </ListItemIcon>
         <ListItemText primary="Search" />
-      </ListItem>
-      <ListItem button>
-        <ListItemIcon>
-          <BarChartIcon />
-        </ListItemIcon>
-        <ListItemText primary="Reports" />
       </ListItem>
       <ListItem
         button

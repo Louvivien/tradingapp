@@ -193,7 +193,13 @@ const PurchaseCard = ({ setSelected, balance }) => {
   );
 };
 
-const PurchaseModal = ({ setSelected, stockInfo, pastDay }) => {
+const PurchaseModal = ({
+  setSelected,
+  stockInfo,
+  pastDay,
+  setPurchasedStocks,
+  purchasedStocks,
+}) => {
   return (
     <motion.div
       className={styles.backdrop}
@@ -207,6 +213,8 @@ const PurchaseModal = ({ setSelected, stockInfo, pastDay }) => {
             stockInfo={stockInfo}
             pastDay={pastDay}
             setSelected={setSelected}
+            setPurchasedStocks={setPurchasedStocks}
+            purchasedStocks={purchasedStocks}
           />
         </motion.div>
       </Container>
@@ -214,7 +222,13 @@ const PurchaseModal = ({ setSelected, stockInfo, pastDay }) => {
   );
 };
 
-const PurchaseModalContent = ({ setSelected, stockInfo, pastDay }) => {
+const PurchaseModalContent = ({
+  setSelected,
+  stockInfo,
+  pastDay,
+  setPurchasedStocks,
+  purchasedStocks,
+}) => {
   const [quantity, setQuantity] = useState(1);
   const [total, setTotal] = useState(Number(pastDay.adjClose));
   const { userData, setUserData } = useContext(UserContext);
@@ -268,6 +282,20 @@ const PurchaseModalContent = ({ setSelected, stockInfo, pastDay }) => {
         user: response.data.user,
       });
       setSelected(false);
+
+      const newStock = {
+        id: response.data.stockId,
+        ticker: stockInfo.ticker,
+        name: stockInfo.name,
+        purchasePrice: pastDay.adjClose,
+        purchaseDate: new Date(),
+        quantity: Number(quantity),
+        currentDate: new Date(),
+        currentPrice: pastDay.adjClose,
+      };
+      const newPurchasedStocks = [...purchasedStocks, newStock];
+      console.log(newPurchasedStocks);
+      setPurchasedStocks(newPurchasedStocks);
     } else {
       console.log("error!! ", response.data);
     }
@@ -364,7 +392,7 @@ const PurchaseModalContent = ({ setSelected, stockInfo, pastDay }) => {
   );
 };
 
-const StockCard = ({ currentStock }) => {
+const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
   const { userData } = useContext(UserContext);
   const [selected, setSelected] = useState(false);
   const [stockInfo, setStockInfo] = useState(undefined);
@@ -375,7 +403,7 @@ const StockCard = ({ currentStock }) => {
 
   useEffect(() => {
     const getInfo = async () => {
-      const url = `http://127.0.0.1:5000/api/data/${currentStock.ticker}`;
+      const url = `http://127.0.0.1:5000/api/data/prices/${currentStock.ticker}`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
         setStockInfo(response.data.data);
@@ -385,7 +413,7 @@ const StockCard = ({ currentStock }) => {
     getInfo();
 
     const getData = async () => {
-      const url = `http://127.0.0.1:5000/api/data/${currentStock.ticker}/full`;
+      const url = `http://127.0.0.1:5000/api/data/prices/${currentStock.ticker}/full`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
         setSixMonthAverages(response.data.sixMonthAverages);
@@ -436,6 +464,8 @@ const StockCard = ({ currentStock }) => {
               stockInfo={stockInfo}
               pastDay={pastDay}
               setSelected={setSelected}
+              setPurchasedStocks={setPurchasedStocks}
+              purchasedStocks={purchasedStocks}
             />
           )}
         </div>
@@ -444,7 +474,7 @@ const StockCard = ({ currentStock }) => {
   );
 };
 
-const Search = () => {
+const Search = ({ setPurchasedStocks, purchasedStocks }) => {
   const classes = useStyles();
   const [value, setValue] = useState(null);
   const [currentStock, setCurrentStock] = useState(null);
@@ -492,7 +522,13 @@ const Search = () => {
           />
         )}
       />
-      {currentStock && <StockCard currentStock={currentStock} />}
+      {currentStock && (
+        <StockCard
+          setPurchasedStocks={setPurchasedStocks}
+          purchasedStocks={purchasedStocks}
+          currentStock={currentStock}
+        />
+      )}
       <br />
       <br />
       <br />
