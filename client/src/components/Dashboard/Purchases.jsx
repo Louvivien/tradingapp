@@ -1,14 +1,24 @@
-import React from "react";
+import React, { useState } from "react";
+import { Link } from "@material-ui/core";
 import Table from "@material-ui/core/Table";
 import TableBody from "@material-ui/core/TableBody";
 import TableCell from "@material-ui/core/TableCell";
 import TableHead from "@material-ui/core/TableHead";
 import TableRow from "@material-ui/core/TableRow";
 import Title from "../Template/Title.jsx";
+import SaleModal from "./SaleModal";
 
 const Purchases = ({ purchasedStocks }) => {
+  const [saleOpen, setSaleOpen] = useState(false);
+  const [stock, setStock] = useState(undefined);
+
   const roundNumber = (num) => {
     return Math.round((num + Number.EPSILON) * 100) / 100;
+  };
+
+  const openSaleModal = (stock) => {
+    setStock(stock);
+    setSaleOpen(true);
   };
 
   return (
@@ -30,7 +40,9 @@ const Purchases = ({ purchasedStocks }) => {
           <TableBody>
             {purchasedStocks.map((row) => (
               <TableRow key={row.id}>
-                <TableCell>{row.ticker}</TableCell>
+                <TableCell>
+                  <Link onClick={() => openSaleModal(row)}>{row.ticker}</Link>
+                </TableCell>
                 <TableCell>{row.name || "----"}</TableCell>
                 <TableCell>{row.quantity || "----"}</TableCell>
                 <TableCell>${row.purchasePrice || "----"}</TableCell>
@@ -53,6 +65,9 @@ const Purchases = ({ purchasedStocks }) => {
             ))}
           </TableBody>
         </Table>
+        {saleOpen && stock && (
+          <SaleModal setSaleOpen={setSaleOpen} stock={stock} />
+        )}
       </div>
     </React.Fragment>
   );

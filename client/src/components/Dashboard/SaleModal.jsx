@@ -1,6 +1,6 @@
 import React, { useState, useContext } from "react";
 import UserContext from "../../context/UserContext";
-import styles from "../Dashboard/Dashboard.module.css";
+import styles from "./Dashboard.module.css";
 import {
   Typography,
   IconButton,
@@ -17,7 +17,7 @@ import { motion } from "framer-motion";
 import CloseIcon from "@material-ui/icons/Close";
 import Axios from "axios";
 
-const SettingsModal = ({ setSettingsOpen }) => {
+const SaleModal = ({ setSaleOpen, stock }) => {
   return (
     <motion.div
       className={styles.backdrop}
@@ -27,47 +27,47 @@ const SettingsModal = ({ setSettingsOpen }) => {
     >
       <Container>
         <motion.div animate={{ opacity: 1, y: -20 }}>
-          <SettingsModalContent setSettingsOpen={setSettingsOpen} />
+          <SaleModalContent setSaleOpen={setSaleOpen} stock={stock} />
         </motion.div>
       </Container>
     </motion.div>
   );
 };
 
-const SettingsModalContent = ({ setSettingsOpen }) => {
+const SaleModalContent = ({ setSaleOpen, stock }) => {
   const { userData, setUserData } = useContext(UserContext);
-  const [activateSafetyButton, setActiveSafetyButton] = useState(false);
+  const [quantity, setQuantity] = useState(1);
+
+  const handleQuantityChange = (e) => {
+    if (!isNaN(e.target.value) && Number(e.target.value) <= stock.quantity) {
+      setQuantity(e.target.value);
+    }
+  };
 
   const handleClick = () => {
-    setSettingsOpen(false);
+    setSaleOpen(false);
   };
 
-  const handleResetOn = () => {
-    setActiveSafetyButton(true);
-  };
-
-  const handleResetOff = () => {
-    setActiveSafetyButton(false);
-  };
-
-  const resetAccount = async (e) => {
+  const sellStock = async (e) => {
     e.preventDefault();
 
     const headers = {
       "x-auth-token": userData.token,
     };
 
-    const url = `http://127.0.0.1:5000/api/stock/${userData.user.id}`;
-    console.log(url, headers);
-    const response = await Axios.delete(url, {
+    const data = {
+      stockId: stock.id,
+      quantity: Number(quantity),
+      userId: userData.user.id,
+      price: Number(stock.currentPrice),
+    };
+
+    const url = `http://127.0.0.1:5000/api/stock`;
+    const response = await Axios.patch(url, data, {
       headers,
     });
 
     if (response.data.status === "success") {
-      setUserData({
-        token: userData.token,
-        user: response.data.user,
-      });
       window.location.reload();
     }
   };
@@ -92,7 +92,7 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
           />
           <CardContent>
             <Typography component="h1" variant="h6" align="center">
-              Settings
+              Sell
             </Typography>
             <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
               <TextField
@@ -100,22 +100,34 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
                 margin="normal"
                 fullWidth
                 disabled
-                id="Username"
-                label="Username"
-                name="Username"
-                autoComplete="Username"
-                value={userData.user.username}
+                id="name"
+                label="Name"
+                name="Name"
+                autoComplete="Name"
+                value={stock.name}
               />
               <TextField
                 variant="outlined"
                 margin="normal"
                 fullWidth
                 disabled
-                id="balance"
-                label="Balance"
-                name="balance"
-                autoComplete="balance"
-                value={userData.user.balance}
+                id="price"
+                label="Price"
+                name="price"
+                autoComplete="price"
+                value={stock.currentPrice}
+              />
+              <TextField
+                variant="outlined"
+                margin="normal"
+                required
+                fullWidth
+                id="quantity"
+                label="Quantity"
+                name="quantity"
+                autoComplete="quantity"
+                value={quantity}
+                onChange={handleQuantityChange}
               />
             </form>
             <br />
@@ -124,39 +136,12 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
                 type="submit"
                 variant="contained"
                 color="primary"
-                className={styles.reset}
-                onClick={handleResetOn}
+                className={styles.confirm}
+                onClick={sellStock}
               >
-                Reset My Account
+                Confirm
               </Button>
             </Box>
-            {activateSafetyButton && (
-              <div>
-                <Typography component="p" variant="caption" align="center">
-                  This is a permanent change. If you are sure press Reset.
-                </Typography>
-                <Box display="flex" justifyContent="center">
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    color="primary"
-                    className={styles.reset}
-                    onClick={resetAccount}
-                  >
-                    Reset
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    color="primary"
-                    className={styles.confirm}
-                    onClick={handleResetOff}
-                  >
-                    Cancel
-                  </Button>
-                </Box>
-              </div>
-            )}
 
             <br />
             <br />
@@ -167,4 +152,4 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
   );
 };
 
-export default SettingsModal;
+export default SaleModal;
