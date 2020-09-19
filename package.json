@@ -4,7 +4,8 @@
   "description": "Stock Trading Simulator Web App",
   "main": "./server/server.js",
   "scripts": {
-    "start": "nodemon ./server/server.js"
+    "start": "node server/server.js",
+    "heroku-postbuild": "NPM_CONFIG_PRODUCTION=false npm install npm && run build"
   },
   "repository": {
     "type": "git",
