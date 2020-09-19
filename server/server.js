@@ -44,6 +44,10 @@ app.use("/api/data", dataRouter);
 app.use("/api/news", newsRouter);
 app.use("/api/stock", stockRouter);
 
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static("client/build"));
+}
+
 // APP
 app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
