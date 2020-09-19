@@ -1,5 +1,5 @@
 import React from "react";
-import styles from "./Dashboard.module.css";
+import styles from "../Template/PageTemplate.module.css";
 import clsx from "clsx";
 import { makeStyles } from "@material-ui/core/styles";
 import { Box, Container, Grid, Paper } from "@material-ui/core";

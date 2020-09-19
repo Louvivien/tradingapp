@@ -59,7 +59,7 @@ exports.stockData = [
     endDate: "2020-09-15",
     exchangeCode: "NYSE",
     startDate: "1972-06-01",
-    name: "American Express Company AMEX",
+    name: "American Express Company",
     ticker: "AXP",
   },
   {

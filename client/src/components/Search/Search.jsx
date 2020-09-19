@@ -1,30 +1,19 @@
 import React, { useState, useEffect, useContext } from "react";
 import UserContext from "../../context/UserContext";
-import {
-  TextField,
-  Container,
-  Typography,
-  Grid,
-  Box,
-  Card,
-  CardHeader,
-  CardContent,
-  Button,
-  IconButton,
-} from "@material-ui/core/";
+import { TextField, Container, Grid, Box, Card } from "@material-ui/core/";
 import Autocomplete, {
   createFilterOptions,
 } from "@material-ui/lab/Autocomplete";
 import { makeStyles } from "@material-ui/core/styles";
-import LineChart from "./LineChart";
+import LineChart from "../Template/LineChart";
 import BarChart from "./BarChart";
 import Copyright from "../Template/Copyright";
-import Title from "../Template/Title";
 import styles from "./Search.module.css";
-import clsx from "clsx";
-import { motion } from "framer-motion";
-import CloseIcon from "@material-ui/icons/Close";
 import Axios from "axios";
+import InfoCard from "./InfoCard";
+import PriceCard from "./PriceCard";
+import PurchaseCard from "./PurchaseCard";
+import PurchaseModal from "./PurchaseModal";
 
 const filter = createFilterOptions();
 
@@ -37,60 +26,6 @@ const useStyles = makeStyles((theme) => ({
     marginBottom: "40px",
   },
 }));
-
-const BodyText = ({ text }) => {
-  return (
-    <Typography variant="body2" color="inherit" align="center" display="block">
-      {text}
-    </Typography>
-  );
-};
-
-const HeaderText = ({ text }) => {
-  return (
-    <Typography variant="body1" color="inherit" align="center" display="block">
-      {text}
-    </Typography>
-  );
-};
-
-const InfoCard = ({ stockInfo, price }) => {
-  return (
-    <Grid container spacing={3}>
-      <Grid
-        item
-        xs={12}
-        component={Card}
-        className={clsx(styles.card, styles.cardBorder)}
-      >
-        <CardContent>
-          <Title>{stockInfo.name}</Title>
-          <Typography variant="body2">{stockInfo.description}</Typography>
-          <Grid container spacing={3} className={styles.addMargin}>
-            <Grid item sm={3} xs={4} className={styles.centerGrid}>
-              <div className={styles.information}>
-                <HeaderText text={"Stock Symbol:"} />
-                <BodyText text={stockInfo.ticker} />
-              </div>
-            </Grid>
-            <Grid item sm={3} xs={4} className={styles.centerGrid}>
-              <div className={styles.information}>
-                <HeaderText text={"Current Price:"} />
-                <BodyText text={price} />
-              </div>
-            </Grid>
-            <Grid item sm={3} xs={4} className={styles.centerGrid}>
-              <div className={styles.information}>
-                <HeaderText text={"Exchange:"} />
-                <BodyText text={stockInfo.exchangeCode} />
-              </div>
-            </Grid>
-          </Grid>
-        </CardContent>
-      </Grid>
-    </Grid>
-  );
-};
 
 const LineChartCard = ({ pastDataPeriod, stockInfo, duration }) => {
   return (
@@ -115,279 +50,6 @@ const BarChartCard = ({ sixMonthAverages, stockInfo }) => {
   return (
     <Grid item xs={12} sm component={Card} className={styles.card}>
       <BarChart sixMonthAverages={sixMonthAverages} stockInfo={stockInfo} />
-    </Grid>
-  );
-};
-
-const PriceCard = ({ pastDay }) => {
-  return (
-    <Grid container spacing={3}>
-      <Grid item xs sm component={Card} className={styles.card}>
-        <Typography color="textSecondary" align="center">
-          Opening:
-        </Typography>
-        <Typography variant="h6" align="center">
-          ${pastDay.adjOpen}
-        </Typography>
-      </Grid>
-      <Grid item xs sm component={Card} className={styles.card}>
-        <Typography color="textSecondary" align="center">
-          High:
-        </Typography>
-        <Typography variant="h6" align="center">
-          ${pastDay.adjHigh}
-        </Typography>
-      </Grid>
-      <Grid item xs sm component={Card} className={styles.card}>
-        <Typography color="textSecondary" align="center">
-          Low:
-        </Typography>
-        <Typography variant="h6" align="center">
-          ${pastDay.adjLow}
-        </Typography>
-      </Grid>
-      <Grid item xs sm component={Card} className={styles.card}>
-        <Typography color="textSecondary" align="center">
-          Closing:
-        </Typography>
-        <Typography variant="h6" align="center">
-          ${pastDay.adjClose}
-        </Typography>
-      </Grid>
-    </Grid>
-  );
-};
-
-const PurchaseCard = ({ setSelected, balance }) => {
-  return (
-    <Grid item xs={12} sm component={Card} className={styles.card}>
-      <br />
-      <br />
-      <Typography
-        color="textSecondary"
-        align="center"
-        className={styles.addMargin}
-      >
-        Your Cash Balance:
-      </Typography>
-      <Typography variant="h6" align="center">
-        {balance ? "$" + balance.toLocaleString() : "Balance Unavailable"}
-      </Typography>
-      <br />
-      <br />
-      <Typography variant="body2" align="center" className={styles.addMargin}>
-        You have sufficient funds to buy this stock.
-      </Typography>
-      <Box display="flex" justifyContent="center">
-        <Button
-          type="submit"
-          variant="contained"
-          color="primary"
-          className={styles.submit}
-          onClick={() => setSelected(true)}
-        >
-          Open Purchase System
-        </Button>
-      </Box>
-    </Grid>
-  );
-};
-
-const PurchaseModal = ({
-  setSelected,
-  stockInfo,
-  pastDay,
-  setPurchasedStocks,
-  purchasedStocks,
-}) => {
-  return (
-    <motion.div
-      className={styles.backdrop}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      id="backdrop"
-    >
-      <Container>
-        <motion.div animate={{ opacity: 1, y: -20 }}>
-          <PurchaseModalContent
-            stockInfo={stockInfo}
-            pastDay={pastDay}
-            setSelected={setSelected}
-            setPurchasedStocks={setPurchasedStocks}
-            purchasedStocks={purchasedStocks}
-          />
-        </motion.div>
-      </Container>
-    </motion.div>
-  );
-};
-
-const PurchaseModalContent = ({
-  setSelected,
-  stockInfo,
-  pastDay,
-  setPurchasedStocks,
-  purchasedStocks,
-}) => {
-  const [quantity, setQuantity] = useState(1);
-  const [total, setTotal] = useState(Number(pastDay.adjClose));
-  const { userData, setUserData } = useContext(UserContext);
-
-  const handleQuantityChange = (e) => {
-    if (!isNaN(e.target.value)) {
-      if (
-        userData.user.balance -
-          Number(pastDay.adjClose) * Number(e.target.value) <
-        0
-      ) {
-        return;
-      }
-
-      setQuantity(e.target.value);
-      setTotal(
-        Math.round(
-          (Number(pastDay.adjClose) * Number(e.target.value) + Number.EPSILON) *
-            100
-        ) / 100
-      );
-    }
-  };
-
-  const handleClick = (e) => {
-    setSelected(false);
-  };
-
-  const handlePurchase = async (e) => {
-    e.preventDefault();
-
-    const headers = {
-      "x-auth-token": userData.token,
-    };
-
-    const purchase = {
-      userId: userData.user.id,
-      ticker: stockInfo.ticker,
-      quantity: Number(quantity),
-      price: pastDay.adjClose,
-    };
-
-    const url = "http://127.0.0.1:5000/api/stock";
-    const response = await Axios.post(url, purchase, {
-      headers,
-    });
-
-    if (response.data.status === "success") {
-      setUserData({
-        token: userData.token,
-        user: response.data.user,
-      });
-      setSelected(false);
-
-      const newStock = {
-        id: response.data.stockId,
-        ticker: stockInfo.ticker,
-        name: stockInfo.name,
-        purchasePrice: pastDay.adjClose,
-        purchaseDate: new Date(),
-        quantity: Number(quantity),
-        currentDate: new Date(),
-        currentPrice: pastDay.adjClose,
-      };
-      const newPurchasedStocks = [...purchasedStocks, newStock];
-      console.log(newPurchasedStocks);
-      setPurchasedStocks(newPurchasedStocks);
-    } else {
-      console.log("error!! ", response.data);
-    }
-  };
-
-  return (
-    <Grid
-      container
-      spacing={0}
-      direction="column"
-      alignItems="center"
-      justify="center"
-      style={{ minHeight: "100vh" }}
-    >
-      <Box width="60vh" boxShadow={1}>
-        <Card className={styles.paper}>
-          <CardHeader
-            action={
-              <IconButton aria-label="Close" onClick={handleClick}>
-                <CloseIcon />
-              </IconButton>
-            }
-          />
-          <CardContent>
-            <Typography component="h1" variant="h6" align="center">
-              Purchase {stockInfo.name} Stock
-            </Typography>
-            <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
-              <TextField
-                variant="outlined"
-                margin="normal"
-                fullWidth
-                disabled
-                id="stock"
-                label="Stock Name"
-                name="stock"
-                autoComplete="stock"
-                value={stockInfo.name}
-              />
-              <TextField
-                variant="outlined"
-                margin="normal"
-                fullWidth
-                disabled
-                id="price"
-                label="Stock Price"
-                name="price"
-                autoComplete="price"
-                value={pastDay.adjClose}
-              />
-              <TextField
-                variant="outlined"
-                margin="normal"
-                required
-                fullWidth
-                id="quantity"
-                label="Quantity"
-                name="quantity"
-                autoComplete="quantity"
-                value={quantity}
-                onChange={handleQuantityChange}
-              />
-              <Typography
-                variant="body2"
-                align="center"
-                className={styles.addMargin}
-              >
-                Total = ${total.toLocaleString()}
-              </Typography>
-              <Typography variant="body2" align="center">
-                Cash Balance after purchase:{" "}
-                {userData
-                  ? "$" + (userData.user.balance - total).toLocaleString()
-                  : "Balance Unavailable"}
-              </Typography>
-              <Box display="flex" justifyContent="center">
-                <Button
-                  type="submit"
-                  variant="contained"
-                  color="primary"
-                  className={styles.submit}
-                  onClick={handlePurchase}
-                >
-                  Confirm
-                </Button>
-              </Box>
-            </form>
-            <br />
-            <br />
-          </CardContent>
-        </Card>
-      </Box>
     </Grid>
   );
 };
@@ -551,7 +213,7 @@ const stocks = [
   { name: "Coca-Cola", ticker: "KO" },
   { name: "McDonald's", ticker: "MCD" },
   { name: "Nike", ticker: "NKE" },
-  { name: "Procters & Gamble", ticker: "PG" },
+  { name: "Procter & Gamble", ticker: "PG" },
   { name: "Verizon", ticker: "VZ" },
   { name: "Salesforce", ticker: "CRM" },
   { name: "Visa", ticker: "V" },

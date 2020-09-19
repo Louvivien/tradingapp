@@ -1,6 +1,6 @@
 import React, { useState, useContext } from "react";
 import UserContext from "../../context/UserContext";
-import styles from "../Dashboard/Dashboard.module.css";
+import styles from "./PageTemplate.module.css";
 import {
   Typography,
   IconButton,
@@ -112,7 +112,7 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
                 fullWidth
                 disabled
                 id="balance"
-                label="Balance"
+                label="Cash Balance"
                 name="balance"
                 autoComplete="balance"
                 value={userData.user.balance}

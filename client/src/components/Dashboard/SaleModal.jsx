@@ -1,6 +1,6 @@
 import React, { useState, useContext } from "react";
 import UserContext from "../../context/UserContext";
-import styles from "./Dashboard.module.css";
+import styles from "../Template/PageTemplate.module.css";
 import {
   Typography,
   IconButton,
@@ -35,7 +35,7 @@ const SaleModal = ({ setSaleOpen, stock }) => {
 };
 
 const SaleModalContent = ({ setSaleOpen, stock }) => {
-  const { userData, setUserData } = useContext(UserContext);
+  const { userData } = useContext(UserContext);
   const [quantity, setQuantity] = useState(1);
 
   const handleQuantityChange = (e) => {

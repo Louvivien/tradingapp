@@ -152,6 +152,8 @@ exports.getRandomStockData = async (req, res) => {
       });
     }
 
+    data.reverse();
+
     return res.status(200).json({
       status: "success",
       ticker: stock.ticker,

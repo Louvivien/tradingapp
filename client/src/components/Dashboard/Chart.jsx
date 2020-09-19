@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import Title from "../Template/Title.jsx";
-import LineChart from "../Search/LineChart";
+import LineChart from "../Template/LineChart";
 import Axios from "axios";
 
 const Chart = () => {
@@ -21,7 +21,7 @@ const Chart = () => {
     <React.Fragment>
       {chartData && (
         <div style={{ minHeight: "240px" }}>
-          <Title>Explore {chartData.name}'s stock chart</Title>
+          <Title>Explore {chartData.name}'s Stock Chart</Title>
           <LineChart
             pastDataPeriod={chartData.data}
             stockInfo={{ ticker: chartData.ticker }}

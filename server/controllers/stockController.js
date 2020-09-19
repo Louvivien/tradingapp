@@ -146,6 +146,14 @@ const getPricesData = async (stocks) => {
 
 exports.getStockForUser = async (req, res) => {
   try {
+    if (req.user !== req.params.userId) {
+      console.log(req.user, userId);
+      return res.status(200).json({
+        status: "fail",
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
     const stocks = await Stock.find({ userId: req.params.userId });
     const stocksData = await getPricesData(stocks);
     const modifiedStocks = stocks.map((stock) => {
@@ -191,6 +199,14 @@ exports.getStockForUser = async (req, res) => {
 
 exports.resetAccount = async (req, res) => {
   try {
+    if (req.user !== req.params.userId) {
+      console.log(req.user, userId);
+      return res.status(200).json({
+        status: "fail",
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
     const stocks = await Stock.find({ userId: req.params.userId });
     stocks.forEach(async (stock) => {
       await Stock.findByIdAndDelete(stock._id);

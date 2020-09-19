@@ -1,7 +1,7 @@
 import React, { useContext, useState, useEffect } from "react";
 import { useHistory } from "react-router-dom";
 import UserContext from "../../context/UserContext";
-import styles from "../Dashboard/Dashboard.module.css";
+import styles from "./PageTemplate.module.css";
 import clsx from "clsx";
 import useStyles from "./styles";
 import {
