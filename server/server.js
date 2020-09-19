@@ -3,6 +3,7 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
+const path = require("path");
 
 // SETUP
 dotenv.config({ path: "./server/config/.env" });
@@ -39,28 +40,17 @@ const dataRouter = require("./routes/dataRoutes");
 const newsRouter = require("./routes/newsRoutes");
 const stockRouter = require("./routes/stockRoutes");
 
-let protected = ["transformed.js", "main.css", "favicon.ico"];
-
-/*
-app.get("*", (req, res) => {
-  let path = req.params["0"].substring(1);
-
-  if (protected.includes(path)) {
-    // Return the actual file
-    res.sendFile(`${__dirname}/build/${path}`);
-  } else {
-    // Otherwise, redirect to /build/index.html
-    res.sendFile(`${__dirname}/build/index.html`);
-  }
-});*/
-
 app.use("/api/auth", authRouter);
 app.use("/api/data", dataRouter);
 app.use("/api/news", newsRouter);
 app.use("/api/stock", stockRouter);
 
 if (process.env.NODE_ENV === "production") {
-  app.use(express.static("client/build"));
+  app.use(express.static(path.join(__dirname, "client/build")));
+
+  app.get("*", (req, res) => {
+    res.sendFile(path.join(__dirname + "/client/build/index.html"));
+  });
 }
 
 // APP
