@@ -39,10 +39,17 @@ const dataRouter = require("./routes/dataRoutes");
 const newsRouter = require("./routes/newsRoutes");
 const stockRouter = require("./routes/stockRoutes");
 
-app.get("/*", (req, res) => {
-  let url = path.join(__dirname, "../client/build", "index.html");
-  if (!url.startsWith("/api/")) url = url.substring(1);
-  res.sendFile(url);
+app.get("*", (req, res) => {
+
+  let path = req.params['0'].substring(1)
+
+  if (protected.includes(path)) {
+    // Return the actual file
+    res.sendFile(`${__dirname}/build/${path}`);
+  } else {
+    // Otherwise, redirect to /build/index.html
+    res.sendFile(`${__dirname}/build/index.html`);
+  }
 });
 
 app.use("/api/auth", authRouter);
