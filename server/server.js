@@ -39,6 +39,12 @@ const dataRouter = require("./routes/dataRoutes");
 const newsRouter = require("./routes/newsRoutes");
 const stockRouter = require("./routes/stockRoutes");
 
+app.get("/*", (req, res) => {
+  let url = path.join(__dirname, "../client/build", "index.html");
+  if (!url.startsWith("/api/")) url = url.substring(1);
+  res.sendFile(url);
+});
+
 app.use("/api/auth", authRouter);
 app.use("/api/data", dataRouter);
 app.use("/api/news", newsRouter);
