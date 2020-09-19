@@ -39,9 +39,10 @@ const dataRouter = require("./routes/dataRoutes");
 const newsRouter = require("./routes/newsRoutes");
 const stockRouter = require("./routes/stockRoutes");
 
-app.get("*", (req, res) => {
+let protected = ["transformed.js", "main.css", "favicon.ico"];
 
-  let path = req.params['0'].substring(1)
+app.get("*", (req, res) => {
+  let path = req.params["0"].substring(1);
 
   if (protected.includes(path)) {
     // Return the actual file
