@@ -62,7 +62,7 @@ const SaleModalContent = ({ setSaleOpen, stock }) => {
       price: Number(stock.currentPrice),
     };
 
-    const url = `http://127.0.0.1:5000/api/stock`;
+    const url = `/api/stock`;
     const response = await Axios.patch(url, data, {
       headers,
     });

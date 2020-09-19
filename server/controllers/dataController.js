@@ -11,7 +11,6 @@ exports.getStockMetaData = async (req, res) => {
       data: response.data,
     });
   } catch (error) {
-    console.log(error);
     return res.status(200).json({
       status: "fail",
     });

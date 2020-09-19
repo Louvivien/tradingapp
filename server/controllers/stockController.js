@@ -61,7 +61,6 @@ exports.sellStock = async (req, res) => {
     const { userId, stockId, quantity, price } = req.body;
 
     if (req.user !== userId) {
-      console.log(req.user, userId);
       return res.status(200).json({
         status: "fail",
         message: "Credentials couldn't be validated.",
@@ -118,7 +117,6 @@ exports.sellStock = async (req, res) => {
       },
     });
   } catch (error) {
-    console.log(error);
     return res.status(200).json({
       status: "fail",
       message: "Something unexpected happened.",
@@ -147,7 +145,6 @@ const getPricesData = async (stocks) => {
 exports.getStockForUser = async (req, res) => {
   try {
     if (req.user !== req.params.userId) {
-      console.log(req.user, userId);
       return res.status(200).json({
         status: "fail",
         message: "Credentials couldn't be validated.",
@@ -200,7 +197,6 @@ exports.getStockForUser = async (req, res) => {
 exports.resetAccount = async (req, res) => {
   try {
     if (req.user !== req.params.userId) {
-      console.log(req.user, userId);
       return res.status(200).json({
         status: "fail",
         message: "Credentials couldn't be validated.",

@@ -57,8 +57,7 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
       "x-auth-token": userData.token,
     };
 
-    const url = `http://127.0.0.1:5000/api/stock/${userData.user.id}`;
-    console.log(url, headers);
+    const url = `/api/stock/${userData.user.id}`;
     const response = await Axios.delete(url, {
       headers,
     });

@@ -38,7 +38,7 @@ const PageTemplate = () => {
   }
 
   const getPurchasedStocks = async () => {
-    const url = `http://127.0.0.1:5000/api/stock/${userData.user.id}`;
+    const url = `/api/stock/${userData.user.id}`;
     const headers = {
       "x-auth-token": userData.token,
     };

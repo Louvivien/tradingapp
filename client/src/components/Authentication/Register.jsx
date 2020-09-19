@@ -47,7 +47,6 @@ const Register = () => {
 
   const onSubmit = async (e) => {
     e.preventDefault();
-    console.log("submit from register");
     if (!usernameError && !passwordError) {
       const newUser = { username, password };
       const url = "/api/auth/register";

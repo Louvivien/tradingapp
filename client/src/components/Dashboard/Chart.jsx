@@ -8,7 +8,7 @@ const Chart = () => {
 
   useEffect(() => {
     const getData = async () => {
-      const url = `http://127.0.0.1:5000/api/data/random`;
+      const url = `/api/data/random`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
         setChartData(response.data);

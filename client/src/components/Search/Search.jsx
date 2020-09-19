@@ -65,7 +65,7 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
 
   useEffect(() => {
     const getInfo = async () => {
-      const url = `http://127.0.0.1:5000/api/data/prices/${currentStock.ticker}`;
+      const url = `/api/data/prices/${currentStock.ticker}`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
         setStockInfo(response.data.data);
@@ -75,7 +75,7 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
     getInfo();
 
     const getData = async () => {
-      const url = `http://127.0.0.1:5000/api/data/prices/${currentStock.ticker}/full`;
+      const url = `/api/data/prices/${currentStock.ticker}/full`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
         setSixMonthAverages(response.data.sixMonthAverages);

@@ -118,10 +118,9 @@ const PurchaseModalContent = ({
         currentPrice: pastDay.adjClose,
       };
       const newPurchasedStocks = [...purchasedStocks, newStock];
-      console.log(newPurchasedStocks);
       setPurchasedStocks(newPurchasedStocks);
     } else {
-      console.log("error!! ", response.data);
+      console.log("Couldn't purchase stock.");
     }
   };
 
