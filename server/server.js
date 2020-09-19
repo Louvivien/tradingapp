@@ -41,6 +41,7 @@ const stockRouter = require("./routes/stockRoutes");
 
 let protected = ["transformed.js", "main.css", "favicon.ico"];
 
+/*
 app.get("*", (req, res) => {
   let path = req.params["0"].substring(1);
 
@@ -51,7 +52,7 @@ app.get("*", (req, res) => {
     // Otherwise, redirect to /build/index.html
     res.sendFile(`${__dirname}/build/index.html`);
   }
-});
+});*/
 
 app.use("/api/auth", authRouter);
 app.use("/api/data", dataRouter);
