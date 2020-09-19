@@ -95,7 +95,7 @@ const PurchaseModalContent = ({
       price: pastDay.adjClose,
     };
 
-    const url = "http://127.0.0.1:5000/api/stock";
+    const url = "/api/stock";
     const response = await Axios.post(url, purchase, {
       headers,
     });

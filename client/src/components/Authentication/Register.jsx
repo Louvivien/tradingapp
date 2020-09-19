@@ -50,7 +50,7 @@ const Register = () => {
     console.log("submit from register");
     if (!usernameError && !passwordError) {
       const newUser = { username, password };
-      const url = "http://127.0.0.1:5000/api/auth/register";
+      const url = "/api/auth/register";
       const registerRes = await Axios.post(url, newUser);
 
       if (registerRes.data.status === "fail") {

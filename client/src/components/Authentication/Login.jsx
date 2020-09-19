@@ -38,7 +38,7 @@ const Login = () => {
   const onSubmit = async (e) => {
     e.preventDefault();
     const newUser = { username, password };
-    const url = "http://127.0.0.1:5000/api/auth/login";
+    const url = "/api/auth/login";
     const loginRes = await Axios.post(url, newUser);
 
     if (loginRes.data.status === "fail") {

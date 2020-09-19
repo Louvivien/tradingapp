@@ -92,7 +92,7 @@ const News = () => {
 
   useEffect(() => {
     const getCards = async () => {
-      const url = "http://127.0.0.1:5000/api/news";
+      const url = "/api/news";
       const response = await Axios.get(url);
       if (response.data.status === "success" && response.data.data.length > 0) {
         const newsCards = response.data.data.slice(0, 9);
