@@ -43,7 +43,7 @@ exports.getStockHistoricData = async (req, res) => {
     const startDate = new Date();
     startDate.setFullYear(startDate.getFullYear() - 2);
     const year = startDate.getFullYear();
-    const month = startDate.getMonth();
+    const month = startDate.getMonth() + 1;
     const day = startDate.getDate();
 
     const url = `https://api.tiingo.com/tiingo/daily/${req.params.ticker}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY}`;
@@ -112,6 +112,7 @@ exports.getStockHistoricData = async (req, res) => {
       sixMonthAverages,
     });
   } catch (error) {
+    console.log(error);
     return res.status(200).json({
       status: "fail",
     });
@@ -135,7 +136,7 @@ exports.getRandomStockData = async (req, res) => {
     const startDate = new Date();
     startDate.setFullYear(startDate.getFullYear() - 3);
     const year = startDate.getFullYear();
-    const month = startDate.getMonth();
+    const month = startDate.getMonth() + 1;
     const day = startDate.getDate();
 
     const url = `https://api.tiingo.com/tiingo/daily/${stock.ticker}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY}`;
