@@ -46,6 +46,7 @@ const Register = () => {
   };
 
   const onSubmit = async (e) => {
+    console.log("submit");
     e.preventDefault();
     if (!usernameError && !passwordError) {
       const newUser = { username, password };
@@ -53,6 +54,7 @@ const Register = () => {
       const registerRes = await Axios.post(url, newUser);
 
       if (registerRes.data.status === "fail") {
+        console.log("register failed");
         if (!registerRes.data.type) {
           setPasswordError(registerRes.data.message);
           setUsernameError(registerRes.data.message);

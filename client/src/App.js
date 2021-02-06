@@ -26,11 +26,11 @@ function App() {
       const headers = {
         "x-auth-token": token,
       };
-
+      console.log("here");
       const tokenIsValid = await Axios.post(url + "/auth/validate", null, {
         headers,
       });
-
+      console.log(tokenIsValid);
       if (tokenIsValid.data) {
         const userRes = await Axios.get(url + "/auth/user", { headers });
         setUserData({
@@ -40,6 +40,7 @@ function App() {
       } else {
         setUserData({ token: undefined, user: undefined });
       }
+      console.log("end");
     };
 
     checkLoggedIn();
