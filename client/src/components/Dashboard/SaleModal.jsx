@@ -16,6 +16,7 @@ import {
 import { motion } from "framer-motion";
 import CloseIcon from "@material-ui/icons/Close";
 import Axios from "axios";
+import config from "../../config/Config";
 
 const SaleModal = ({ setSaleOpen, stock }) => {
   return (
@@ -62,7 +63,7 @@ const SaleModalContent = ({ setSaleOpen, stock }) => {
       price: Number(stock.currentPrice),
     };
 
-    const url = `/api/stock`;
+    const url = config.base_url + `/api/stock`;
     const response = await Axios.patch(url, data, {
       headers,
     });

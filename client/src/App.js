@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from "react";
-import { BrowserRouter as Router, Route, Switch } from "react-router-dom";
+import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import styles from "./App.module.css";
 import { Login, Register, NotFound, PageTemplate } from "./components";
 import UserContext from "./context/UserContext";
 import Axios from "axios";
+import config from "./config/Config";
 
 function App() {
   const [userData, setUserData] = useState({
     token: undefined,
     user: undefined,
   });
-
-  const url = "/api";
 
   useEffect(() => {
     const checkLoggedIn = async () => {
@@ -26,13 +25,19 @@ function App() {
       const headers = {
         "x-auth-token": token,
       };
-      console.log("here");
-      const tokenIsValid = await Axios.post(url + "/auth/validate", null, {
-        headers,
-      });
-      console.log(tokenIsValid);
+
+      const tokenIsValid = await Axios.post(
+        config.base_url + "/api/auth/validate",
+        null,
+        {
+          headers,
+        }
+      );
+
       if (tokenIsValid.data) {
-        const userRes = await Axios.get(url + "/auth/user", { headers });
+        const userRes = await Axios.get(config.base_url + "/api/auth/user", {
+          headers,
+        });
         setUserData({
           token,
           user: userRes.data,
@@ -40,7 +45,6 @@ function App() {
       } else {
         setUserData({ token: undefined, user: undefined });
       }
-      console.log("end");
     };
 
     checkLoggedIn();
@@ -50,16 +54,16 @@ function App() {
     <Router>
       <UserContext.Provider value={{ userData, setUserData }}>
         <div className={styles.container}>
-          <Switch>
+          <Routes>
             {userData.user ? (
-              <Route path="/" exact component={PageTemplate} />
+              <Route path="/" element={<PageTemplate />} />
             ) : (
-              <Route path="/" exact component={Register} />
+              <Route path="/" element={<Register />} />
             )}
-            <Route path="/login" exact component={Login} />
-            <Route path="/register" exact component={Register} />
-            <Route component={NotFound} />
-          </Switch>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route element={<NotFound />} />
+          </Routes>
         </div>
       </UserContext.Provider>
     </Router>

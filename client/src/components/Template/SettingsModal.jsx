@@ -16,6 +16,7 @@ import {
 import { motion } from "framer-motion";
 import CloseIcon from "@material-ui/icons/Close";
 import Axios from "axios";
+import config from "../../config/Config";
 
 const SettingsModal = ({ setSettingsOpen }) => {
   return (
@@ -57,7 +58,7 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
       "x-auth-token": userData.token,
     };
 
-    const url = `/api/stock/${userData.user.id}`;
+    const url = config.base_url + `/api/stock/${userData.user.id}`;
     const response = await Axios.delete(url, {
       headers,
     });

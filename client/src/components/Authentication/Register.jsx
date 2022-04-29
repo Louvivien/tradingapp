@@ -10,13 +10,13 @@ import {
   Grid,
   Link,
 } from "@material-ui/core";
-import { useHistory } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import Axios from "axios";
-
+import config from "../../config/Config";
 import styles from "./Auth.module.css";
 
 const Register = () => {
-  const history = useHistory();
+  const navigate = useNavigate();
 
   const [username, setUsername] = useState("");
   const [usernameError, setUsernameError] = useState("");
@@ -46,15 +46,13 @@ const Register = () => {
   };
 
   const onSubmit = async (e) => {
-    console.log("submit");
     e.preventDefault();
     if (!usernameError && !passwordError) {
       const newUser = { username, password };
-      const url = "/api/auth/register";
+      const url = config.base_url + "/api/auth/register";
       const registerRes = await Axios.post(url, newUser);
 
       if (registerRes.data.status === "fail") {
-        console.log("register failed");
         if (!registerRes.data.type) {
           setPasswordError(registerRes.data.message);
           setUsernameError(registerRes.data.message);
@@ -64,7 +62,7 @@ const Register = () => {
           setPasswordError(registerRes.data.message);
         }
       } else {
-        history.push("/login");
+        navigate("/login");
       }
     }
   };

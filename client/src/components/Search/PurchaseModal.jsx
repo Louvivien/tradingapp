@@ -16,6 +16,7 @@ import CloseIcon from "@material-ui/icons/Close";
 import styles from "./Search.module.css";
 import { motion } from "framer-motion";
 import Axios from "axios";
+import config from "../../config/Config";
 
 const PurchaseModal = ({
   setSelected,
@@ -95,7 +96,7 @@ const PurchaseModalContent = ({
       price: pastDay.adjClose,
     };
 
-    const url = "/api/stock";
+    const url = config.base_url + "/api/stock";
     const response = await Axios.post(url, purchase, {
       headers,
     });
@@ -119,8 +120,6 @@ const PurchaseModalContent = ({
       };
       const newPurchasedStocks = [...purchasedStocks, newStock];
       setPurchasedStocks(newPurchasedStocks);
-    } else {
-      console.log("Couldn't purchase stock.");
     }
   };
 

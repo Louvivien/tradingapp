@@ -10,14 +10,15 @@ import {
   Grid,
   Link,
 } from "@material-ui/core";
-import { useHistory } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import UserContext from "../../context/UserContext";
 import Axios from "axios";
+import config from "../../config/Config";
 
 import styles from "./Auth.module.css";
 
 const Login = () => {
-  const history = useHistory();
+  const navigate = useNavigate();
   const { setUserData } = useContext(UserContext);
 
   const [username, setUsername] = useState("");
@@ -38,7 +39,7 @@ const Login = () => {
   const onSubmit = async (e) => {
     e.preventDefault();
     const newUser = { username, password };
-    const url = "/api/auth/login";
+    const url = config.base_url + "/api/auth/login";
     const loginRes = await Axios.post(url, newUser);
 
     if (loginRes.data.status === "fail") {
@@ -47,7 +48,7 @@ const Login = () => {
     } else {
       setUserData(loginRes.data);
       localStorage.setItem("auth-token", loginRes.data.token);
-      history.push("/");
+      navigate("/");
     }
   };
 

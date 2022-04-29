@@ -2,13 +2,14 @@ import React, { useState, useEffect } from "react";
 import Title from "../Template/Title.jsx";
 import LineChart from "../Template/LineChart";
 import Axios from "axios";
+import config from "../../config/Config";
 
 const Chart = () => {
   const [chartData, setChartData] = useState(undefined);
 
   useEffect(() => {
     const getData = async () => {
-      const url = `/api/data/random`;
+      const url = config.base_url + `/api/data/random`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
         setChartData(response.data);

@@ -14,6 +14,7 @@ import InfoCard from "./InfoCard";
 import PriceCard from "./PriceCard";
 import PurchaseCard from "./PurchaseCard";
 import PurchaseModal from "./PurchaseModal";
+import config from "../../config/Config";
 
 const filter = createFilterOptions();
 
@@ -65,7 +66,7 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
 
   useEffect(() => {
     const getInfo = async () => {
-      const url = `/api/data/prices/${currentStock.ticker}`;
+      const url = config.base_url + `/api/data/prices/${currentStock.ticker}`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
         setStockInfo(response.data.data);
@@ -75,7 +76,7 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
     getInfo();
 
     const getData = async () => {
-      const url = `/api/data/prices/${currentStock.ticker}/full`;
+      const url = config.base_url + `/api/data/prices/${currentStock.ticker}/full`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
         setSixMonthAverages(response.data.sixMonthAverages);

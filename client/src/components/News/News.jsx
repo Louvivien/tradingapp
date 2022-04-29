@@ -12,6 +12,7 @@ import {
 import { makeStyles } from "@material-ui/core/styles";
 import Skeleton from "@material-ui/lab/Skeleton";
 import Axios from "axios";
+import config from "../../config/Config";
 
 const useStyles = makeStyles((theme) => ({
   appBarSpacer: theme.mixins.toolbar,
@@ -92,7 +93,7 @@ const News = () => {
 
   useEffect(() => {
     const getCards = async () => {
-      const url = "/api/news";
+      const url = config.base_url + "/api/news";
       const response = await Axios.get(url);
       if (response.data.status === "success" && response.data.data.length > 0) {
         const newsCards = response.data.data.slice(0, 9);

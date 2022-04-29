@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect } from "react";
-import { useHistory } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import UserContext from "../../context/UserContext";
 import styles from "./PageTemplate.module.css";
 import clsx from "clsx";
@@ -23,6 +23,7 @@ import Search from "../Search/Search";
 import SettingsModal from "./SettingsModal";
 import Axios from "axios";
 import { makeStyles } from "@material-ui/core/styles";
+import config from "../../config/Config";
 
 const drawerWidth = 240;
 
@@ -66,7 +67,7 @@ const useStyles = makeStyles((theme) => ({
 }));
 
 const PageTemplate = () => {
-  const history = useHistory();
+  const navigate = useNavigate();
   const classes = useStyles();
   const { userData, setUserData } = useContext(UserContext);
   const [open, setOpen] = useState(false);
@@ -75,11 +76,11 @@ const PageTemplate = () => {
   const [purchasedStocks, setPurchasedStocks] = useState([]);
 
   if (!userData.user) {
-    history.push("/login");
+    navigate("/login");
   }
 
   const getPurchasedStocks = async () => {
-    const url = `/api/stock/${userData.user.id}`;
+    const url = config.base_url + `/api/stock/${userData.user.id}`;
     const headers = {
       "x-auth-token": userData.token,
     };
@@ -103,7 +104,7 @@ const PageTemplate = () => {
       user: undefined,
     });
     localStorage.setItem("auth-token", "");
-    history.push("/login");
+    navigate("/login");
   };
 
   const handleDrawerOpen = () => {

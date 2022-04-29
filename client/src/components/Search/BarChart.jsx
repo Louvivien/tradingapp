@@ -1,5 +1,6 @@
 import React from "react";
 import { Bar } from "react-chartjs-2";
+import Chart from 'chart.js/auto';
 
 const BarChart = ({ sixMonthAverages, stockInfo }) => {
   const monthNames = [
@@ -17,7 +18,7 @@ const BarChart = ({ sixMonthAverages, stockInfo }) => {
     "Dec",
   ];
 
-  const lineChart = sixMonthAverages ? (
+  const barChart = sixMonthAverages ? (
     <Bar
       data={{
         labels: sixMonthAverages.map(({ month }) => monthNames[month]),
@@ -32,13 +33,9 @@ const BarChart = ({ sixMonthAverages, stockInfo }) => {
       options={{
         maintainAspectRatio: false,
         scales: {
-          yAxes: [
-            {
-              ticks: {
-                beginAtZero: true,
-              },
-            },
-          ],
+          y: {
+            beginAtZero: true,
+          }
         },
         legend: { display: false },
         layout: {
@@ -61,7 +58,7 @@ const BarChart = ({ sixMonthAverages, stockInfo }) => {
     />
   ) : null;
 
-  return lineChart;
+  return barChart;
 };
 
 export default BarChart;

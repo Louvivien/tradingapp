@@ -1,6 +1,6 @@
 {
   "name": "stock-trading-simulator",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Stock Trading Simulator Web App",
   "main": "./server/server.js",
   "scripts": {
@@ -20,7 +20,7 @@
   },
   "homepage": "https://github.com/OktarianTB/stock-trading-simulator#readme",
   "dependencies": {
-    "axios": "^0.21.1",
+    "axios": "^0.21.4",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.5",
     "cors": "^2.8.5",
@@ -28,7 +28,7 @@
     "express": "^4.17.1",
     "express-session": "^1.17.1",
     "jsonwebtoken": "^8.5.1",
-    "mongoose": "^5.10.5",
+    "mongoose": "^6.3.1",
     "passport": "^0.4.1",
     "passport-local": "^1.0.0"
   },

@@ -1,9 +1,9 @@
 import React from "react";
-import { useHistory } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 const NotFound = () => {
-  const history = useHistory();
-  history.push("/");
+  const navigate = useNavigate();
+  navigate("/");
 
   return <h1>Not Found!</h1>;
 };
