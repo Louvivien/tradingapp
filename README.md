@@ -7,7 +7,7 @@ Welcome to my Trading App!
 
 It can connect to Alpaca to get positions and orders, sell and buy stocks.
 
-Credit for UI: [OktarianTB](https://github.com/OktarianTB/stock-trading-simulator.git) (_Might take a few minutes for the website to load if no one has accessed it recently_)
+Credit for UI: [OktarianTB](https://github.com/OktarianTB/stock-trading-simulator) 
 
 
 ## Installation
