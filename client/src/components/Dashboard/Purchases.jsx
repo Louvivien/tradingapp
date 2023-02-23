@@ -12,6 +12,7 @@ import styles from "./Dashboard.module.css";
 const Purchases = ({ purchasedStocks }) => {
   const [saleOpen, setSaleOpen] = useState(false);
   const [stock, setStock] = useState(undefined);
+  
 
   const roundNumber = (num) => {
     return Math.round((num + Number.EPSILON) * 100) / 100;
@@ -103,3 +104,4 @@ const Purchases = ({ purchasedStocks }) => {
 };
 
 export default Purchases;
+

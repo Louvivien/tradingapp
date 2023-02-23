@@ -10,6 +10,8 @@ function App() {
   const [userData, setUserData] = useState({
     token: undefined,
     user: undefined,
+    ALPACA_API_KEY_ID: undefined,
+    ALPACA_API_SECRET_KEY: undefined,
   });
 
   useEffect(() => {
@@ -18,7 +20,7 @@ function App() {
       if (token == null) {
         localStorage.setItem("auth-token", "");
         token = "";
-        setUserData({ token: undefined, user: undefined });
+        setUserData({ token: undefined, user: undefined, ALPACA_API_KEY_ID: undefined, ALPACA_API_SECRET_KEY: undefined });
         return;
       }
 
@@ -38,12 +40,13 @@ function App() {
         const userRes = await Axios.get(config.base_url + "/api/auth/user", {
           headers,
         });
+        
         setUserData({
           token,
           user: userRes.data,
         });
       } else {
-        setUserData({ token: undefined, user: undefined });
+        setUserData({ token: undefined, user: undefined, ALPACA_API_KEY_ID: undefined, ALPACA_API_SECRET_KEY: undefined });
       }
     };
 

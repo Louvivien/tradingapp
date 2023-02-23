@@ -19,7 +19,17 @@ const userSchema = new Schema(
       type: Number,
       required: true,
       default: 100000
-    }
+    },
+    ALPACA_API_KEY_ID:{
+      type: String,
+      required: true,
+      default: process.env.ALPACA_API_KEY_ID
+    },
+    ALPACA_API_SECRET_KEY:{
+      type: String,
+      required: true,
+      default: process.env.ALPACA_API_SECRET_KEY
+    },
   },
   {
     timestamps: true,

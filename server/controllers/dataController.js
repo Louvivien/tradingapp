@@ -40,6 +40,19 @@ exports.getStockInfo = (req, res) => {
 // Data needed: average for each of the last 6 months + latest daily data + last month of data points + last 2 years of data points, sampled weekly
 exports.getStockHistoricData = async (req, res) => {
   try {
+
+    // Get the last price for the stock using the Alpaca API
+    const alpacaUrl = `https://data.alpaca.markets/v2/stocks/${req.params.ticker}/quotes/latest`;
+    const alpacaResponse = await Axios.get(alpacaUrl, {
+      headers: {
+        'APCA-API-KEY-ID': process.env.ALPACA_API_KEY_ID,
+        'APCA-API-SECRET-KEY': process.env.ALPACA_API_SECRET_KEY,
+      },
+    });
+    const lastPrice = alpacaResponse.data.quote.ap;
+
+
+    // Get the historical stock data for the given ticker from the Tiingo API
     const startDate = new Date();
     startDate.setFullYear(startDate.getFullYear() - 2);
     const year = startDate.getFullYear();
@@ -110,6 +123,9 @@ exports.getStockHistoricData = async (req, res) => {
       pastMonth,
       pastTwoYears,
       sixMonthAverages,
+      today: {
+        lastPrice: lastPrice,
+      },
     });
   } catch (error) {
     console.log(error);
@@ -142,6 +158,7 @@ exports.getRandomStockData = async (req, res) => {
     const url = `https://api.tiingo.com/tiingo/daily/${stock.ticker}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY}`;
 
     const response = await Axios.get(url);
+    
 
     const data = [];
     for (let i = response.data.length - 1; i >= 0; i -= 5) {

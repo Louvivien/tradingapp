@@ -37,29 +37,49 @@ const SettingsModal = ({ setSettingsOpen }) => {
 
 const SettingsModalContent = ({ setSettingsOpen }) => {
   const { userData, setUserData } = useContext(UserContext);
+  const [ALPACA_API_KEY_ID, setApiKeyId] = useState(userData.user.ALPACA_API_KEY_ID);
+  const [ALPACA_API_SECRET_KEY, setApiSecretKey] = useState(userData.user.ALPACA_API_SECRET_KEY);
   const [activateSafetyButton, setActiveSafetyButton] = useState(false);
+
+  
+
+  
+  const handleApiKeyChange = (event) => {
+    console.log(event.target.value);
+    setApiKeyId(event.target.value);
+  }  
+
+  const handleApiSecretKeyChange = (event) => {
+    console.log(event.target.value);
+    setApiSecretKey(event.target.value);
+};
 
   const handleClick = () => {
     setSettingsOpen(false);
   };
 
-  const handleResetOn = () => {
+  const handleEditOn = () => {
     setActiveSafetyButton(true);
   };
 
-  const handleResetOff = () => {
+  const handleEditOff = () => {
     setActiveSafetyButton(false);
   };
 
-  const resetAccount = async (e) => {
+  const editAccount = async (e) => {
     e.preventDefault();
 
     const headers = {
       "x-auth-token": userData.token,
     };
 
+    const keys = {
+      ALPACA_API_KEY_ID: ALPACA_API_KEY_ID,
+      ALPACA_API_SECRET_KEY: ALPACA_API_SECRET_KEY,
+    };
+
     const url = config.base_url + `/api/stock/${userData.user.id}`;
-    const response = await Axios.delete(url, {
+    const response = await Axios.post(url, keys,{
       headers,
     });
 
@@ -117,6 +137,30 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
                 autoComplete="balance"
                 value={userData.user.balance}
               />
+               <TextField
+                variant="outlined"
+                margin="normal"
+                fullWidth
+                id="ALPACA_API_KEY_ID"
+                label="ALPACA_API_KEY_ID"
+                name="ALPACA_API_KEY_ID"
+                autoComplete="ALPACA_API_KEY_ID"
+                value={ALPACA_API_KEY_ID}
+                onChange={handleApiKeyChange}
+
+                />
+              <TextField
+                variant="outlined"
+                margin="normal"
+                fullWidth
+                id="ALPACA_API_SECRET_KEY"
+                label="ALPACA_API_SECRET_KEY"
+                name="ALPACA_API_SECRET_KEY"
+                autoComplete="ALPACA_API_SECRET_KEY"
+                value={ALPACA_API_SECRET_KEY}
+                onChange={handleApiSecretKeyChange}
+
+                />
             </form>
             <br />
             <Box display="flex" justifyContent="center">
@@ -125,15 +169,15 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
                 variant="contained"
                 color="primary"
                 className={styles.reset}
-                onClick={handleResetOn}
+                onClick={handleEditOn}
               >
-                Reset My Account
+                Edit My Account
               </Button>
             </Box>
             {activateSafetyButton && (
               <div>
                 <Typography component="p" variant="caption" align="center">
-                  This is a permanent change. If you are sure press Reset.
+                  This is a permanent change. If you are sure press Edit.
                 </Typography>
                 <Box display="flex" justifyContent="center">
                   <Button
@@ -141,16 +185,16 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
                     variant="contained"
                     color="primary"
                     className={styles.reset}
-                    onClick={resetAccount}
+                    onClick={editAccount}
                   >
-                    Reset
+                    Edit
                   </Button>
                   <Button
                     type="submit"
                     variant="contained"
                     color="primary"
                     className={styles.confirm}
-                    onClick={handleResetOff}
+                    onClick={handleEditOff}
                   >
                     Cancel
                   </Button>

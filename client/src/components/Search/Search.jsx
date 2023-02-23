@@ -61,6 +61,7 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
   const [stockInfo, setStockInfo] = useState(undefined);
   const [sixMonthAverages, setSixMonthAverages] = useState(undefined);
   const [pastDay, setPastDay] = useState(undefined);
+  const [today, setToday] = useState(undefined);
   const [pastMonth, setPastMonth] = useState(undefined);
   const [pastTwoYears, setPastTwoYears] = useState(undefined);
 
@@ -81,6 +82,7 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
       if (response.data.status === "success") {
         setSixMonthAverages(response.data.sixMonthAverages);
         setPastDay(response.data.pastDay);
+        setToday(response.data.today);
         setPastMonth(response.data.pastMonth);
         setPastTwoYears(response.data.pastTwoYears);
       }
@@ -125,6 +127,7 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
           {selected && (
             <PurchaseModal
               stockInfo={stockInfo}
+              today={today}
               pastDay={pastDay}
               setSelected={setSelected}
               setPurchasedStocks={setPurchasedStocks}

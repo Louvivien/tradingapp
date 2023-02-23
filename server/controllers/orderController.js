@@ -212,7 +212,8 @@ const getPricesData = async (stocks) => {
 
 
 
-exports.getStockForUser = async (req, res) => {
+exports.getOrderForUser = async (req, res) => {
+
   try {
     if (req.user !== req.params.userId) {
       return res.status(200).json({
@@ -221,81 +222,31 @@ exports.getStockForUser = async (req, res) => {
       });
     }
 
-
+    // Set up Alpaca API client for the user
     const alpacaConfig = await setAlpaca(req.params.userId);
-    
     const alpacaApi = new Alpaca(alpacaConfig);
 
-    const positions = await alpacaApi.getPositions();
-
+    // Retrieve all orders for the user
     const orders = await alpacaApi.getOrders({
-      status: 'closed',
-    });
+      status: 'all',
+  });
 
-    const ordersBySymbol = {};
+  
 
-    orders.forEach((order) => {
-      if (order.side === 'buy' && !ordersBySymbol[order.symbol]) {
-        ordersBySymbol[order.symbol] = order;
-      }
-    });
-
-    const stocks = positions.map((position) => {
-      const order = ordersBySymbol[position.symbol];
-
-      const purchaseDate = order ? moment(order.filled_at).format('YYYY-MM-DD') : null;
-
-      return {
-        id: position.symbol,
-        ticker: position.symbol,
-        price: position.avg_entry_price,
-        quantity: position.qty,
-        purchaseDate,
-      };
-    });
-
-    const stocksData = await getPricesData(stocks);
-    const modifiedStocks = stocks.map((stock) => {
-      let name;
-      let currentPrice;
-      let currentDate;
-      data.stockData.forEach((stockData) => {
-        if (stockData.ticker.toLowerCase() === stock.ticker.toLowerCase()) {
-          name = stockData.name;
-        }
-      });
-
-      stocksData.forEach((stockData) => {
-        if (stockData.ticker.toLowerCase() === stock.ticker.toLowerCase()) {
-          currentDate = stockData.date;
-          currentPrice = stockData.adjClose;
-        }
-      });
-
-      return {
-        id: stock.id,
-        ticker: stock.ticker,
-        name,
-        purchasePrice: stock.price,
-        purchaseDate: stock.purchaseDate,
-        quantity: stock.quantity,
-        currentDate,
-        currentPrice,
-      };
-    });
-
+    // Return the user's orders
     return res.status(200).json({
       status: "success",
-      stocks: modifiedStocks,
+        orders: orders,
     });
   } catch (error) {
     console.error(error);
-    return res.status(200).json({
-      status: "fail",
-      message: "Something unexpected happened.",
+    return res.status(500).json({
+      status: "error",
+      message: "An error occurred while retrieving the user's orders.",
     });
   }
 };
+
 
 
 

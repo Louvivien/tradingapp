@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@alpacahq/alpaca-trade-api": "^2.16.1",
     "@babel/runtime": "^7.17.9",
     "@material-ui/core": "^4.11.0",
     "@material-ui/icons": "^4.9.1",
@@ -20,7 +21,8 @@
     "react-chartjs-2": "^4.1.0",
     "react-router-dom": "^6.3.0",
     "react-scripts": "^5.0.1",
-    "recharts": "^2.1.9"
+    "recharts": "^2.1.9",
+    "socket.io-client": "^4.6.1"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -41,6 +43,7 @@
   "devDependencies": {
     "@babel/core": "^7.17.9",
     "ajv": "^8.11.0",
+    "assert": "^2.0.0",
     "eslint": "^8.2.0",
     "eslint-config-airbnb": "^19.0.4",
     "eslint-config-airbnb-base": "^15.0.0",
@@ -48,7 +51,11 @@
     "eslint-plugin-jsx-a11y": "^6.5.1",
     "eslint-plugin-react": "^7.28.0",
     "eslint-plugin-react-hooks": "^4.3.0",
+    "path-browserify": "^1.0.1",
     "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "react-app-rewired": "^2.2.1",
+    "react-dom": "^18.0.0",
+    "url": "^0.11.0",
+    "util": "^0.12.5"
   }
 }

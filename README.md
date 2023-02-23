@@ -1,31 +1,13 @@
-# Stock Trading Simulator
+# Trading App
 
-## Contents
-* [About](#about)
-* [Installation](#installation)
-* [Development](#development)
-* [Deployment](#deployment)
 
 
 ## About
-Welcome to my Stock Trading Simulator! 
+Welcome to my Trading App!
 
-The goal of this web app is to allow users to learn about investing in a fun and risk-free manner. Users can access stock data and charts and use the app to buy and sell stocks using their $100k budget to simulate in a simplistic way the investing process.
+It can connect to Alpaca to get positions and orders, sell and buy stocks.
 
-
-It consists of a dynamic ReactJS frontend using Material UI, React Routing and Hooks. The backend API uses NodesJS and ExpressJS to perform user authentication and user and stock information retrieval. Furthermore, the data is stored in a MongoDB database.
-\
-\
-\
-![dashboard.png](dashboard.png)
-\
-\
-\
-This project was selected as an outstanding entry to AlgoExpert's Summer-Fall 2020 project contest: [Algoexpert Contest](https://www.algoexpert.io/swe-project-contests/2020-summer)
-
-Demo video: [YouTube](https://www.youtube.com/watch?v=VmBlRCFoDK8)
-
-Check it out: [Website](https://oktarian-trading-simulator.herokuapp.com/) (_Might take a few minutes for the website to load if no one has accessed it recently_)
+Credit for UI: [OktarianTB](https://github.com/OktarianTB/stock-trading-simulator.git) (_Might take a few minutes for the website to load if no one has accessed it recently_)
 
 
 ## Installation
@@ -51,8 +33,7 @@ cd client
 npm run start
 ```
 
-## Development
-coming soon...
+## To do
+Add live data from alpaca
 
-## Deployment
-coming soon...
+

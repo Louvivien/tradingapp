@@ -7,5 +7,8 @@ exports.getUser = async (req, res) => {
     username: user.username,
     id: user._id,
     balance: user.balance,
+    ALPACA_API_KEY_ID: user.ALPACA_API_KEY_ID,
+    ALPACA_API_SECRET_KEY: user.ALPACA_API_SECRET_KEY,
+
   });
 };

@@ -6,6 +6,7 @@ import { Box, Container, Grid, Paper } from "@material-ui/core";
 import Chart from "./Chart";
 import Balance from "./Balance";
 import Purchases from "./Purchases";
+import Orders from "./Orders";
 import Copyright from "../Template/Copyright";
 
 const useStyles = makeStyles((theme) => ({
@@ -20,7 +21,7 @@ const useStyles = makeStyles((theme) => ({
   },
 }));
 
-const Dashboard = ({ purchasedStocks }) => {
+const Dashboard = ({ purchasedStocks, orderList }) => {
   const classes = useStyles();
   const fixedHeightPaper = clsx(classes.paper, classes.fixedHeight);
 
@@ -45,6 +46,13 @@ const Dashboard = ({ purchasedStocks }) => {
             <Purchases purchasedStocks={purchasedStocks} />
           </Paper>
         </Grid>
+        {/* Orders History */}
+        <Grid item xs={12}>
+          <Paper className={classes.paper}>
+            <Orders orderList={orderList} />
+          </Paper>
+        </Grid>
+        
       </Grid>
       <Box pt={4}>
         <Copyright />

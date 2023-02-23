@@ -1,6 +1,10 @@
 const User = require("../models/userModel");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const Alpaca = require('@alpacahq/alpaca-trade-api');
+const setAlpaca = require('../config/alpaca');
+
+
 
 const errorMessage = (res, error) => {
   return res.status(400).json({ status: "fail", message: error.message });
@@ -55,6 +59,7 @@ exports.loginUser = async (req, res) => {
       });
     }
 
+
     const user = await User.findOne({ username });
 
     if (!user) {
@@ -72,13 +77,31 @@ exports.loginUser = async (req, res) => {
       });
     }
 
+
+    const ALPACA_API_KEY_ID = User.ALPACA_API_KEY_ID;
+    const ALPACA_API_SECRET_KEY = User.ALPACA_API_SECRET_KEY;
+
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+
+    //connect to alpaca when signedin
+
+    const alpacaConfig = await setAlpaca(user._id); 
+    const alpacaApi = new Alpaca(alpacaConfig);
+    console.log("Connected to Alpaca");
+
+    // get user's balance from Alpaca
+    const balance = await alpacaApi.getAccount();
+    const userBalance = balance.cash;
+    
+
     return res.status(200).json({
       token,
       user: {
         username,
         id: user._id,
-        balance: user.balance,
+        balance: userBalance,
+        ALPACA_API_KEY_ID: ALPACA_API_KEY_ID,
+        ALPACA_API_SECRET_KEY: ALPACA_API_SECRET_KEY,
       },
     });
   } catch (error) {

@@ -12,7 +12,7 @@ const Chart = () => {
       const url = config.base_url + `/api/data/random`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
-        setChartData(response.data);
+        setChartData(response.data);        
       }
     };
     getData();

@@ -1,5 +1,10 @@
-import React, { useState, useContext } from "react";
+import React, { useState, useContext, useEffect } from "react";
 import UserContext from "../../context/UserContext";
+import io from 'socket.io-client';
+
+const socket = io('http://localhost:5000', { transports: ['websocket'] });
+
+
 import {
   Container,
   Typography,
@@ -60,6 +65,32 @@ const PurchaseModalContent = ({
   const [quantity, setQuantity] = useState(1);
   const [total, setTotal] = useState(Number(today.lastPrice));
   const { userData, setUserData } = useContext(UserContext);
+  const [stockData, setStockData] = useState(null);
+  const { ticker } = stockInfo; 
+  
+console.log(ticker);
+
+
+  useEffect(() => {
+
+    // emit event to subscribe to real-time data for specific ticker
+    socket.emit('subscribe', { ticker });
+
+    // listen for real-time data from server
+    socket.on('stockData', (data) => {
+      console.log(data);
+      setStockData(data);
+    });
+
+    return () => {
+      // clean up socket connection
+      socket.emit('unsubscribe', { ticker });
+      socket.off('stockData');
+    };
+  }, [ticker]);
+
+
+
 
   const handleQuantityChange = (e) => {
     if (!isNaN(e.target.value)) {
@@ -171,7 +202,11 @@ const PurchaseModalContent = ({
                 label="Stock Price"
                 name="price"
                 autoComplete="price"
-                value={today.lastPrice}
+                value={stockData ? (
+                  <div>{stockData.open}</div>
+                ) : (
+                  <div>Loading...</div>
+                )}
               />
               <TextField
                 variant="outlined"

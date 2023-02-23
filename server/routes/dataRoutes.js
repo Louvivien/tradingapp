@@ -10,4 +10,5 @@ router.route("/prices/:ticker").get(getStockInfo);
 router.route("/prices/:ticker/full").get(getStockHistoricData);
 router.route("/random").get(getRandomStockData);
 
+
 module.exports = router;

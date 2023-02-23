@@ -74,6 +74,8 @@ const PageTemplate = () => {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [purchasedStocks, setPurchasedStocks] = useState([]);
+  const [orderList, setOrderList] = useState([]);
+
 
   if (!userData.user) {
     navigate("/login");
@@ -94,8 +96,30 @@ const PageTemplate = () => {
     }
   };
 
+  const getOrderList = async () => {
+    const url = config.base_url + `/api/order/${userData.user.id}`;
+    const headers = {
+      "x-auth-token": userData.token,
+    };
+
+    const response = await Axios.get(url, {
+      headers,
+    });
+
+    if (response.data.status === "success") {
+      setOrderList(response.data.orders);
+      console.log("response.data.orders ", response.data.orders);
+      
+    }
+  };
+
+
+
+
+
   useEffect(() => {
     getPurchasedStocks();
+    getOrderList();
   }, []);
 
   const logout = () => {
@@ -187,7 +211,10 @@ const PageTemplate = () => {
       <main className={styles.content}>
         <div className={classes.appBarSpacer} />
         {currentPage === "dashboard" && (
-          <Dashboard purchasedStocks={purchasedStocks} />
+          <Dashboard 
+          purchasedStocks={purchasedStocks}
+          orderList={orderList}
+          />
         )}
         {currentPage === "news" && <News />}
         {currentPage === "search" && (

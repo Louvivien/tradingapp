@@ -32,6 +32,58 @@ mongoose
   })
   .catch((err) => console.log(err));
 
+// STREAM DATA
+const http = require('http');
+const server = http.createServer(app);
+const io = require('socket.io')(server);
+
+const Alpaca = require('@alpacahq/alpaca-trade-api');
+const alpaca = new Alpaca({
+  keyId: process.env.ALPACA_API_KEY_ID,
+  secretKey: process.env.ALPACA_API_SECRET_KEY,
+  paper: true, //change to false for real trading
+});
+
+io.on('connection', (socket) => {
+  console.log(`Client connected with ID: ${socket.id}`);
+  let stream = null;
+
+  //when client sends a ticker
+  socket.on('subscribe', (ticker) => {
+    console.log(`Subscribing to data for ${ticker}`);
+
+    const stream = alpaca.data_stream_v2;
+    stream.onConnect(function () {
+        console.log("Connected");
+        stream.subscribeForTrades([(ticker)]);
+      });
+  
+      stream.connect();
+      stream.onStateChange((state) => {
+        console.log(state);
+      });
+      stream.onStockQuote((quote) => {
+        console.log(quote);
+      });
+      stream.onStockTrade((trade) => {
+        console.log(trade);
+        socket.emit('data', trade);
+
+      });
+    
+
+  });
+
+  //when client disconnects
+  socket.on('disconnect', () => {
+    console.log(`Client disconnected with ID: ${socket.id}`);
+    if (stream) {
+      console.log(`Unsubscribing from data for ${stream.ticker}`);
+      stream.stop();
+    }
+  });
+});
+
 // ROUTES
 const authRouter = require("./routes/authRoutes");
 const dataRouter = require("./routes/dataRoutes");
@@ -39,14 +91,11 @@ const newsRouter = require("./routes/newsRoutes");
 const stockRouter = require("./routes/stockRoutes");
 const orderRouter = require("./routes/orderRoutes");
 
-
 app.use("/api/auth", authRouter);
 app.use("/api/data", dataRouter);
 app.use("/api/news", newsRouter);
 app.use("/api/stock", stockRouter);
 app.use("/api/order", orderRouter);
-
-
 
 if (process.env.NODE_ENV === "production") {
   app.use(express.static("client/build"));
@@ -57,6 +106,6 @@ if (process.env.NODE_ENV === "production") {
 }
 
 // APP
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
