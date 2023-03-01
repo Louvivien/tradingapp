@@ -50,26 +50,35 @@ io.on('connection', (socket) => {
 
   //when client sends a ticker
   socket.on('subscribe', (ticker) => {
-    console.log(`Subscribing to data for ${ticker}`);
+
+    let symbol;
+    if (typeof ticker === 'string') {
+      symbol = ticker;
+    } else if (Array.isArray(ticker)) {
+      symbol = ticker[0];
+    } else if (typeof ticker === 'object' && ticker.ticker) {
+      symbol = ticker.ticker;
+    } else {
+      console.error('Invalid ticker:', ticker);
+      return;
+    }
+
+    console.log(`Subscribing to data for ${symbol}`);
 
     const stream = alpaca.data_stream_v2;
     stream.onConnect(function () {
         console.log("Connected");
-        stream.subscribeForTrades([(ticker)]);
+        stream.subscribeForQuotes([(symbol)]);
       });
   
-      stream.connect();
-      stream.onStateChange((state) => {
-        console.log(state);
-      });
       stream.onStockQuote((quote) => {
         console.log(quote);
+        socket.emit('stockData', trade);
       });
-      stream.onStockTrade((trade) => {
-        console.log(trade);
-        socket.emit('data', trade);
 
-      });
+      stream.connect();
+
+      
     
 
   });
@@ -79,7 +88,7 @@ io.on('connection', (socket) => {
     console.log(`Client disconnected with ID: ${socket.id}`);
     if (stream) {
       console.log(`Unsubscribing from data for ${stream.ticker}`);
-      stream.stop();
+      stream.disconnect();
     }
   });
 });

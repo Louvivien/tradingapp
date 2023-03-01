@@ -2,7 +2,6 @@ import React, { useState, useContext, useEffect } from "react";
 import UserContext from "../../context/UserContext";
 import io from 'socket.io-client';
 
-const socket = io('http://localhost:5000', { transports: ['websocket'] });
 
 
 import {
@@ -66,15 +65,19 @@ const PurchaseModalContent = ({
   const [total, setTotal] = useState(Number(today.lastPrice));
   const { userData, setUserData } = useContext(UserContext);
   const [stockData, setStockData] = useState(null);
-  const { ticker } = stockInfo; 
+  const { ticker } = stockInfo;
   
-console.log(ticker);
 
 
   useEffect(() => {
 
+    const socket = io('http://localhost:5000', { transports: ['websocket'] });
+
+
     // emit event to subscribe to real-time data for specific ticker
     socket.emit('subscribe', { ticker });
+    console.log(ticker);
+    
 
     // listen for real-time data from server
     socket.on('stockData', (data) => {
