@@ -38,6 +38,8 @@ const http = require('http');
 const server = http.createServer(app);
 const io = require('socket.io')(server);
 let stream = null;
+let currentSubscription = null;
+
 
 
 const Alpaca = require('@alpacahq/alpaca-trade-api');
@@ -47,14 +49,12 @@ const alpaca = new Alpaca({
   paper: true, //change to false for real trading
 });
 
-io.on('connection', (socket) => {
+io.on("connection", (socket) => {
   console.log(`Client connected with ID: ${socket.id}`);
   const stream = alpaca.data_stream_v2;
 
-
   //when client sends a ticker
   socket.on('subscribe', (ticker) => {
-
     let symbol;
     if (typeof ticker === 'string') {
       symbol = ticker;
@@ -66,14 +66,19 @@ io.on('connection', (socket) => {
       console.error('Invalid ticker:', ticker);
       return;
     }
-
-    console.log(`Subscribing to data for ${symbol}`);
-
-    stream.onConnect(function () {
+  
+    if (currentSubscription !== symbol) {
+      console.log(`Subscribing to data for ${symbol}`);
+  
+      if (currentSubscription) {
+        stream.unsubscribeFromQuotes([currentSubscription]);
+      }
+  
+      stream.onConnect(function () {
         console.log("Connected");
         stream.subscribeForQuotes([(symbol)]);
       });
-
+  
       stream.onError((err) => {
         console.log(err);
       });
@@ -82,24 +87,26 @@ io.on('connection', (socket) => {
         console.log(quote);
         socket.emit('stockData', quote);
       });
-
+  
       stream.onDisconnect(() => {
         console.log("Disconnected");
       });
-
+  
       stream.connect();
-
+  
+      currentSubscription = symbol;
+    }
   });
+  
 
   //when client disconnects
-  socket.on('disconnect', () => {
+  socket.on("disconnect", () => {
     console.log(`Client disconnected with ID: ${socket.id}`);
-      // console.log(`Unsubscribing from data for ${ticker}`);
-       stream.disconnect();
+    // console.log(`Unsubscribing from data for ${ticker}`);
+    stream.disconnect();
   });
-
-
 });
+
 
 // ROUTES
 const authRouter = require("./routes/authRoutes");

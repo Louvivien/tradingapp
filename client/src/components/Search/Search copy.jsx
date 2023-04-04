@@ -65,14 +65,9 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
   const [today, setToday] = useState(undefined);
   const [pastMonth, setPastMonth] = useState(undefined);
   const [pastTwoYears, setPastTwoYears] = useState(undefined);
-  const [currentTicker, setCurrentTicker] = useState(null);
 
   useEffect(() => {
-    console.log("currentStock:", currentStock);
-    if (!currentStock) return;
-
     const getInfo = async () => {
-      console.log("getInfo called");
       const url = config.base_url + `/api/data/prices/${currentStock.ticker}`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
@@ -80,10 +75,10 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
       }
     };
 
+    getInfo();
+
     const getData = async () => {
-      console.log("getData called");
-      const url =
-        config.base_url + `/api/data/prices/${currentStock.ticker}/full`;
+      const url = config.base_url + `/api/data/prices/${currentStock.ticker}/full`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
         setSixMonthAverages(response.data.sixMonthAverages);
@@ -94,23 +89,15 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
       }
     };
 
-    getInfo();
     getData();
-  }, [currentStock]);
-
-  console.log("stockInfo:", stockInfo);
-  console.log("sixMonthAverages:", sixMonthAverages);
-  console.log("pastDay:", pastDay);
-  console.log("today:", today);
-  console.log("pastMonth:", pastMonth);
-  console.log("pastTwoYears:", pastTwoYears);
+  }, [currentStock.ticker]);
 
   return (
     <div className={styles.root}>
       {stockInfo && pastDay && (
         <InfoCard stockInfo={stockInfo} price={pastDay.adjClose} />
       )}
-      {stockInfo && sixMonthAverages && pastDay && pastMonth && pastTwoYears && (
+      {sixMonthAverages && pastDay && pastMonth && pastTwoYears && (
         <div>
           <Grid container spacing={3}>
             <LineChartCard
@@ -155,28 +142,14 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
 };
 
 
-
 const Search = ({ setPurchasedStocks, purchasedStocks }) => {
   const classes = useStyles();
   const { userData } = useContext(UserContext);
   const [value, setValue] = useState(null);
   const [currentStock, setCurrentStock] = useState(null);
   const [options, setOptions] = useState([]);
-  const [inputValue, setInputValue] = useState('');
-
-  const onInputChange = (event, newValue) => {
-    setInputValue(newValue);
-  };
-
-  useEffect(() => {
-    if (inputValue !== '') {
-      fetchOptions(inputValue);
-    }
-  }, [inputValue]);
 
   const onSearchChange = (event, newValue) => {
-    console.log("onSearchChange newValue:", newValue); // Add this line
-
     setValue(newValue);
     if (newValue) {
       console.log("new value:", newValue);
@@ -187,7 +160,6 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
   };
 
   const fetchOptions = async (value) => {
-
     const headers = {
       "x-auth-token": userData.token,
     };
@@ -208,7 +180,10 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
       <Autocomplete
         value={value}
         onChange={onSearchChange}
-        onInputChange={onInputChange}
+        onInputChange={(event, newValue) => {
+          setValue(newValue);
+          fetchOptions(newValue);
+        }}
         filterOptions={(options, params) => {
           let filtered = filter(options, params);
           if (currentStock) {
@@ -224,7 +199,6 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
         getOptionLabel={(option) => {
           return option.name || "";
         }}
-        getOptionSelected={(option, value) => option.ticker === value.ticker}
         renderOption={(option) => option.name}
         style={{
           maxWidth: "700px",
@@ -239,6 +213,7 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
           />
         )}
       />
+
 
 
 

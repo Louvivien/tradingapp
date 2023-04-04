@@ -9,11 +9,13 @@ const moment = require('moment');
 
 
 
-exports.purchaseStock = async (req, res) => {    
+exports.purchaseStock = async (req, res) => {
   try {
-    const { userId, ticker, quantity, price } = req.body;
+    const { userId, ticker, quantity, price} = req.body;
     console.log(req.body);
-    
+    const trail_percent = parseFloat(req.body.trail_percent);
+
+
     if (req.user !== userId) {
       return res.status(200).json({
         status: "fail",
@@ -23,7 +25,6 @@ exports.purchaseStock = async (req, res) => {
 
     const user = await User.findById(userId);
     console.log(user);
-
 
     if (!user) {
       return res.status(200).json({
@@ -55,22 +56,22 @@ exports.purchaseStock = async (req, res) => {
     });
     console.log("order sent");
 
-    // const purchase = new Stock({ userId, ticker, quantity, price });
-    // console.log("new stock added to db");
-
-    // await purchase.save();
-    // const updatedUser = await User.findByIdAndUpdate(userId, {
-    //   balance:
-    //     Math.round((user.balance - price + Number.EPSILON) * 100) / 100,
-    // });
-
-    // const salePrice = order.filled_avg_price * order.filled_qty;
+    // Create a trailing stop order
+    await alpacaApi.createOrder({
+      symbol: ticker,
+      qty: quantity,
+      side: 'sell',
+      type: 'trailing_stop',
+      trail_percent: trail_percent,
+      time_in_force: 'gtc',
+    });
+    console.log("trailing stop order sent");
 
     const updatedUser = await User.findByIdAndUpdate(userId, {
       balance:
         Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100,
     });
-        
+
     return res.status(200).json({
       status: "success",
       stockId: ticker,
@@ -83,6 +84,7 @@ exports.purchaseStock = async (req, res) => {
     });
 
   } catch (error) {
+    console.error('Error:', error); // Add this line to print the error message
     return res.status(200).json({
       status: "fail",
       message: "Something unexpected happened.",
@@ -186,6 +188,56 @@ exports.sellStock = async (req, res) => {
 };
 
 
+exports.getMarketStatus = async (req, res) => {
+  console.log(`getMarketStatus`);
+  try {
+    const userId = req.params.userId;
+    const alpacaConfig = await setAlpaca(userId);
+    const alpacaApi = new Alpaca(alpacaConfig);
+
+    const clock = await alpacaApi.getClock();
+    res.json({ is_open: clock.is_open, next_open: clock.next_open });
+  } catch (error) {
+    res.status(500).json({ message: "Error fetching market status" });
+  }
+};
+
+
+exports.searchStocks = async (req, res) => {
+  try {
+    const { userId, value } = req.params;
+
+    if (req.user !== userId) {
+      return res.status(200).json({
+        status: "fail",
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const url = `https://api.tiingo.com/tiingo/utilities/search?query=${value}&token=${process.env.TIINGO_API_KEY2}`;
+    const response = await Axios.get(url);
+
+    const securities = response.data;
+    const filteredSecurities = securities.filter(security => security.assetType === 'Stock').slice(0, 20);
+
+    console.log("API request sent", value);
+
+    return res.status(200).json({
+      status: "success",
+      data: filteredSecurities.map(security => ({ name: security.name, ticker: security.ticker })),
+    });
+  } catch (error) {
+    console.error('Error:', error);
+    return res.status(200).json({
+      status: "fail",
+      message: "Something unexpected happened.",
+    });
+  }
+};
+
+
+
+
 
 const getPricesData = async (stocks) => {
   try {
@@ -209,6 +261,7 @@ const getPricesData = async (stocks) => {
     return [];
   }
 };
+
 
 
 

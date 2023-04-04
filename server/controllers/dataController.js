@@ -1,9 +1,10 @@
 const Axios = require("axios");
 const data = require("../config/stocksData");
+const setAlpaca = require('../config/alpaca');
 
 exports.getStockMetaData = async (req, res) => {
   try {
-    const url = `https://api.tiingo.com/tiingo/daily/${req.params.ticker}?token=${process.env.TIINGO_API_KEY}`;
+    const url = `https://api.tiingo.com/tiingo/daily/${req.params.ticker}?token=${process.env.TIINGO_API_KEY2}`;
 
     const response = await Axios.get(url);
     return res.status(200).json({
@@ -17,25 +18,37 @@ exports.getStockMetaData = async (req, res) => {
   }
 };
 
-exports.getStockInfo = (req, res) => {
-  let info;
-  data.stockData.forEach((stock) => {
-    if (stock.ticker.toLowerCase() === req.params.ticker.toLowerCase()) {
-      info = stock;
-    }
-  });
 
-  if (info) {
+exports.getStockInfo = async (req, res) => {
+  const { ticker } = req.params;
+  const apiUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=summaryDetail%2CsummaryProfile%2CdefaultKeyStatistics%2CassetProfile%2Cprice`;
+
+  try {
+    const response = await Axios.get(apiUrl);
+    const data = response.data.quoteSummary.result[0];
+
+    const stockInfo = {
+      description: data.assetProfile.longBusinessSummary || "N/A",
+      name: data.price.longName || "N/A",
+      exchangeCode: data.price.exchangeName || "N/A",
+      startDate: data.assetProfile.startDate || "N/A",
+      endDate: "N/A",
+      ticker: ticker
+    };
+
     return res.status(200).json({
       status: "success",
-      data: info,
+      data: stockInfo
     });
-  } else {
-    return res.status(200).json({
-      status: "fail",
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      status: "error",
+      message: "Failed to retrieve stock information"
     });
   }
 };
+
 
 // Data needed: average for each of the last 6 months + latest daily data + last month of data points + last 2 years of data points, sampled weekly
 exports.getStockHistoricData = async (req, res) => {
@@ -59,10 +72,11 @@ exports.getStockHistoricData = async (req, res) => {
     const month = startDate.getMonth() + 1;
     const day = startDate.getDate();
 
-    const url = `https://api.tiingo.com/tiingo/daily/${req.params.ticker}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY}`;
+    const url = `https://api.tiingo.com/tiingo/daily/${req.params.ticker}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY2}`;
 
     const response = await Axios.get(url);
     const data = response.data;
+    
 
     // Last month
     const pastMonth = [];
@@ -180,6 +194,41 @@ exports.getRandomStockData = async (req, res) => {
   } catch (error) {
     return res.status(200).json({
       status: "fail",
+    });
+  }
+};
+
+exports.getPortfolioData = async (req, res) => {
+  const userId = req.params.userId;
+
+  if (req.user !== userId) {
+    return res.status(401).json({
+      status: 'fail',
+      message: 'Unauthorized access',
+    });
+  }
+
+  const alpacaConfig = await setAlpaca(userId);
+  const alpacaApi = Axios.create({
+    headers: {
+      'APCA-API-KEY-ID': alpacaConfig.keyId,
+      'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+    },
+  });
+
+  try {
+    const response = await alpacaApi.get('https://paper-api.alpaca.markets/v2/account/portfolio/history?period=12M');
+
+
+    return res.status(200).json({
+      status: 'success',
+      data: response.data,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Error fetching portfolio history',
     });
   }
 };

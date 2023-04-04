@@ -67,23 +67,26 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
   const [pastTwoYears, setPastTwoYears] = useState(undefined);
   const [currentTicker, setCurrentTicker] = useState(null);
 
-  useEffect(() => {
-    console.log("currentStock:", currentStock);
-    if (!currentStock) return;
 
+  useEffect(() => {
+    console.log("currentStock:", currentStock); // Add this line
+
+    if (!currentStock) return;
+  
     const getInfo = async () => {
-      console.log("getInfo called");
+      console.log("getInfo called"); // Add this line
+
       const url = config.base_url + `/api/data/prices/${currentStock.ticker}`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
         setStockInfo(response.data.data);
       }
     };
-
+  
     const getData = async () => {
-      console.log("getData called");
-      const url =
-        config.base_url + `/api/data/prices/${currentStock.ticker}/full`;
+      console.log("getData called"); // Add this line
+
+      const url = config.base_url + `/api/data/prices/${currentStock.ticker}/full`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
         setSixMonthAverages(response.data.sixMonthAverages);
@@ -93,18 +96,13 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
         setPastTwoYears(response.data.pastTwoYears);
       }
     };
-
+  
     getInfo();
     getData();
   }, [currentStock]);
+  
 
-  console.log("stockInfo:", stockInfo);
-  console.log("sixMonthAverages:", sixMonthAverages);
-  console.log("pastDay:", pastDay);
-  console.log("today:", today);
-  console.log("pastMonth:", pastMonth);
-  console.log("pastTwoYears:", pastTwoYears);
-
+ 
   return (
     <div className={styles.root}>
       {stockInfo && pastDay && (
@@ -153,7 +151,6 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
     </div>
   );
 };
-
 
 
 const Search = ({ setPurchasedStocks, purchasedStocks }) => {
