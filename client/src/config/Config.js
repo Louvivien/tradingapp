@@ -1,5 +1,9 @@
-var config = {};
+const config = {};
 
-config.base_url = "http://localhost:5000";
+if (process.env.NODE_ENV === 'production') {
+  config.base_url = process.env.REACT_APP_BASE_URL_PROD;
+} else {
+  config.base_url = process.env.REACT_APP_BASE_URL_DEV;
+}
 
 export default config;
