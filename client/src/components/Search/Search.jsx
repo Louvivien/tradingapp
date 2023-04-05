@@ -68,11 +68,9 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
   const [currentTicker, setCurrentTicker] = useState(null);
 
   useEffect(() => {
-    console.log("currentStock:", currentStock);
     if (!currentStock) return;
 
     const getInfo = async () => {
-      console.log("getInfo called");
       const url = config.base_url + `/api/data/prices/${currentStock.ticker}`;
       const response = await Axios.get(url);
       if (response.data.status === "success") {
@@ -81,7 +79,6 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
     };
 
     const getData = async () => {
-      console.log("getData called");
       const url =
         config.base_url + `/api/data/prices/${currentStock.ticker}/full`;
       const response = await Axios.get(url);
@@ -97,13 +94,6 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
     getInfo();
     getData();
   }, [currentStock]);
-
-  console.log("stockInfo:", stockInfo);
-  console.log("sixMonthAverages:", sixMonthAverages);
-  console.log("pastDay:", pastDay);
-  console.log("today:", today);
-  console.log("pastMonth:", pastMonth);
-  console.log("pastTwoYears:", pastTwoYears);
 
   return (
     <div className={styles.root}>
@@ -175,11 +165,9 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
   }, [inputValue]);
 
   const onSearchChange = (event, newValue) => {
-    console.log("onSearchChange newValue:", newValue); // Add this line
 
     setValue(newValue);
     if (newValue) {
-      console.log("new value:", newValue);
       setCurrentStock(newValue);
     } else {
       setCurrentStock(null);
@@ -193,7 +181,6 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
     };
     const url = config.base_url + `/api/stock/search/${userData.user.id}/${value || ''}`;
     const response = await Axios.get(url, { headers });
-    console.log("API response:", response);
     if (response.data.status === 'success') {
       setOptions(response.data.data);
     }

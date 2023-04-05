@@ -235,46 +235,24 @@ exports.searchStocks = async (req, res) => {
 };
 
 
-const isMarketOpen = async () => {
-  try {
-    const response = await Axios.get('https://api.alpaca.markets/v2/clock', {
-      headers: {
-        'APCA-API-KEY-ID': process.env.ALPACA_API_KEY_ID,
-        'APCA-API-SECRET-KEY': process.env.ALPACA_API_SECRET_KEY,
-      },
-    });
-    return response.data.is_open;
-  } catch (error) {
-    console.error('Error fetching market status:', error);
-    return false;
-  }
-};
 
 
-const getPricesData = async (stocks, marketOpen) => {
+
+const getPricesData = async (stocks) => {
   try {
     const promises = stocks.map(async (stock) => {
-      let url;
-      if (marketOpen) {
-        url = `https://data.alpaca.markets/v2/stocks/${stock.ticker}/quotes/latest`;
-      } else {
-        url = `https://data.alpaca.markets/v2/stocks/${stock.ticker}/trades/latest`;
-      }
-
+      const url = `https://data.alpaca.markets/v2/stocks/${stock.ticker}/quotes/latest`;
       const response = await Axios.get(url, {
         headers: {
           'APCA-API-KEY-ID': process.env.ALPACA_API_KEY_ID,
           'APCA-API-SECRET-KEY': process.env.ALPACA_API_SECRET_KEY,
         },
       });
-
-      const currentPrice = marketOpen ? response.data.quote.ap : response.data.trade.p;
-      const date = marketOpen ? response.data.quote.t : response.data.trade.t;
-
+      console.log(`Stock: ${stock.ticker}, Response: `, response.data); // Add this line
       return {
         ticker: stock.ticker,
-        date: date,
-        adjClose: currentPrice,
+        date: response.data.quote.t,
+        adjClose: response.data.quote.ap,
       };
     });
 
@@ -283,7 +261,6 @@ const getPricesData = async (stocks, marketOpen) => {
     return [];
   }
 };
-
 
 
 
@@ -297,10 +274,13 @@ exports.getStockForUser = async (req, res) => {
       });
     }
 
+
     const alpacaConfig = await setAlpaca(req.params.userId);
+    
     const alpacaApi = new Alpaca(alpacaConfig);
 
     const positions = await alpacaApi.getPositions();
+
     const orders = await alpacaApi.getOrders({
       status: 'closed',
     });
@@ -315,6 +295,7 @@ exports.getStockForUser = async (req, res) => {
 
     const stocks = positions.map((position) => {
       const order = ordersBySymbol[position.symbol];
+
       const purchaseDate = order ? moment(order.filled_at).format('YYYY-MM-DD') : null;
 
       return {
@@ -326,14 +307,13 @@ exports.getStockForUser = async (req, res) => {
       };
     });
 
-    const marketOpen = await isMarketOpen(); // Check if the market is open
-    const stocksData = await getPricesData(stocks, marketOpen); // Pass the market status to getPricesData
+    const stocksData = await getPricesData(stocks);
+    console.log("Stocks Data: ", stocksData); // Add this line
 
     const modifiedStocks = stocks.map((stock) => {
       let name;
       let currentPrice;
       let currentDate;
-
       data.stockData.forEach((stockData) => {
         if (stockData.ticker.toLowerCase() === stock.ticker.toLowerCase()) {
           name = stockData.name;

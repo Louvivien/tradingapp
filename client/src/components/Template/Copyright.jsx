@@ -6,20 +6,18 @@ const Copyright = () => {
     <div>
       <Typography variant="body2" color="textSecondary" align="center">
         {"Copyright © "}
-        <Link color="inherit" href="https://github.com/OktarianTB">
-          Oktarian Tilney-Bassett
+        <Link color="inherit" href="https://github.com/Louvivien">
+          Louvivien
         </Link>{" "}
         {new Date().getFullYear()}
         {"."}
       </Typography>
       <br />
       <Typography variant="body2" color="textSecondary" align="center">
-        This simulator is for entertainment & educational purposes only and uses
-        fake money.
+        
       </Typography>
       <Typography variant="body2" color="textSecondary" align="center">
-        The simulator is not representative of real-world trading conditions and
-        the data is not guaranteed to be accurate.
+        
       </Typography>
     </div>
   );
