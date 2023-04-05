@@ -99,7 +99,7 @@ const PurchaseModalContent = ({
   
   useEffect(() => {
     if (marketOpen) {
-      const socket = io("http://localhost:5000", { transports: ["websocket"] });
+      const socket = io(config.base_url, { transports: ["websocket"] });
   
       // emit event to subscribe to real-time data for specific ticker
       socket.emit("subscribe", { ticker });
@@ -150,7 +150,7 @@ const PurchaseModalContent = ({
 
   const handleClick = (e) => {
     setSelected(false);
-    const socket = io('http://localhost:5000', { transports: ['websocket'] });
+    const socket = io(config.base_url, { transports: ['websocket'] });
     socket.disconnect();
     socket.off();
 
