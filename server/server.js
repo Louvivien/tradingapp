@@ -26,6 +26,11 @@ app.use(cors({
   allowedHeaders: ["Content-Type", "Authorization"]
 }));
 
+// Logs
+app.use((req, res, next) => {
+  console.log(`Incoming ${req.method} request for ${req.url}`);
+  next();
+});
 
 
 
