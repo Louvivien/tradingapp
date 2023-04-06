@@ -4,8 +4,8 @@ services:
     env: node
     context: server
     nodeVersion: 14.20.1  
-    buildCommand: npm install
-    startCommand: npm start
+    buildCommand: yarn install
+    startCommand: yarn start
     envVars:
       - key: NODE_ENV
         value: production
