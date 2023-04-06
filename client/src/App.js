@@ -15,7 +15,6 @@ function App() {
   });
 
   useEffect(() => {
-    console.log("Base URL:", config.base_url);
 
     const checkLoggedIn = async () => {
       let token = localStorage.getItem("auth-token");
