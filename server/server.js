@@ -5,6 +5,8 @@ const cookieParser = require("cookie-parser");
 const path = require("path");
 const setAlpaca = require('./config/alpaca');
 const Alpaca = require('@alpacahq/alpaca-trade-api');
+const cors = require("cors");
+
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -17,20 +19,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser("secretcode"));
 
-// Custom CORS middleware
-const corsMiddleware = (req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "https://tradingapp-rust.vercel.app");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  if (req.method === "OPTIONS") {
-    return res.status(200).send();
-  }
-  next();
-};
-
-// Use custom CORS middleware
-app.use(corsMiddleware);
+app.use(cors())
 
 
 
