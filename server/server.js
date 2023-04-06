@@ -24,7 +24,7 @@ const corsMiddleware = (req, res, next) => {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.setHeader("Access-Control-Allow-Credentials", "true");
   if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
+    return res.status(200).send();
   }
   next();
 };
