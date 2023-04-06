@@ -30,7 +30,7 @@ const corsMiddleware = (req, res, next) => {
 };
 
 // Use custom CORS middleware
-app.use(corsMiddleware);
+app.use(corsMiddleware, { optionsSuccessStatus: 200 });
 
 
 
