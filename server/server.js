@@ -21,7 +21,6 @@ app.use(cors())
 
 
 
-
 // Connect to MongoDB
 const DB = process.env.MONGO_URI.replace(
   "<password>",
