@@ -140,7 +140,7 @@ res.sendFile(path.join(__dirname + "/../client/build/index.html"));
 }
 
 // Start the server
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
 
