@@ -4,20 +4,22 @@ const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
 const path = require("path");
-
-// SETUP
-dotenv.config({ path: "./server/config/.env" });
+const setAlpaca = require('./config/alpaca');
+const Alpaca = require('@alpacahq/alpaca-trade-api');
 
 const app = express();
 const port = process.env.PORT || 5000;
 
+// Load environment variables from .env file
+dotenv.config({ path: "./server/config/.env" });
 
+// Middleware
 app.use(cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser("secretcode"));
 
-// DATABASE
+// Connect to MongoDB
 const DB = process.env.MONGO_URI.replace(
   "<password>",
   process.env.MONGO_PASSWORD
@@ -29,86 +31,81 @@ mongoose
     useUnifiedTopology: true,
   })
   .then(() => {
-    console.log("Connected to DB");
+    console.log("Connected to MongoDB");
   })
   .catch((err) => console.log(err));
 
-// STREAM DATA
-const http = require('http');
-const server = http.createServer(app);
+// Create an HTTP server and listen for socket connections
+const server = require('http').createServer(app);
 const io = require('socket.io')(server);
-let stream = null;
-let currentSubscription = null;
 
+// Connect to Alpaca API and handle socket events
+setAlpaca().then(alpacaConfig => {
+  const alpaca = new Alpaca({
+    keyId: alpacaConfig.keyId,
+    secretKey: alpacaConfig.secretKey,
+    paper: true, // change to false for real trading
+  });
 
+  let currentSubscription = null;
 
-const Alpaca = require('@alpacahq/alpaca-trade-api');
-const alpaca = new Alpaca({
-  keyId: process.env.ALPACA_API_KEY_ID,
-  secretKey: process.env.ALPACA_API_SECRET_KEY,
-  paper: true, //change to false for real trading
-});
+  io.on("connection", (socket) => {
+    console.log(`Client connected with ID: ${socket.id}`);
 
-io.on("connection", (socket) => {
-  console.log(`Client connected with ID: ${socket.id}`);
-  const stream = alpaca.data_stream_v2;
-
-  //when client sends a ticker
-  socket.on('subscribe', (ticker) => {
-    let symbol;
-    if (typeof ticker === 'string') {
-      symbol = ticker;
-    } else if (Array.isArray(ticker)) {
-      symbol = ticker[0];
-    } else if (typeof ticker === 'object' && ticker.ticker) {
-      symbol = ticker.ticker;
-    } else {
-      console.error('Invalid ticker:', ticker);
-      return;
-    }
-  
-    if (currentSubscription !== symbol) {
-      console.log(`Subscribing to data for ${symbol}`);
-  
-      if (currentSubscription) {
-        stream.unsubscribeFromQuotes([currentSubscription]);
+    socket.on('subscribe', (ticker) => {
+      let symbol;
+      if (typeof ticker === 'string') {
+        symbol = ticker;
+      } else if (Array.isArray(ticker)) {
+        symbol = ticker[0];
+      } else if (typeof ticker === 'object' && ticker.ticker) {
+        symbol = ticker.ticker;
+      } else {
+        console.error('Invalid ticker:', ticker);
+        return;
       }
-  
-      stream.onConnect(function () {
-        console.log("Connected");
-        stream.subscribeForQuotes([(symbol)]);
-      });
-  
-      stream.onError((err) => {
-        console.log(err);
-      });
-  
-      stream.onStockQuote((quote) => {
-        console.log(quote);
-        socket.emit('stockData', quote);
-      });
-  
-      stream.onDisconnect(() => {
-        console.log("Disconnected");
-      });
-  
-      stream.connect();
-  
-      currentSubscription = symbol;
-    }
-  });
-  
 
-  //when client disconnects
-  socket.on("disconnect", () => {
-    console.log(`Client disconnected with ID: ${socket.id}`);
-    // console.log(`Unsubscribing from data for ${ticker}`);
-    stream.disconnect();
+      if (currentSubscription !== symbol) {
+        console.log(`Subscribing to data for ${symbol}`);
+
+        if (currentSubscription) {
+          alpaca.data_stream_v2.unsubscribeFromQuotes([currentSubscription]);
+        }
+
+        alpaca.data_stream_v2.onConnect(() => {
+          console.log("Connected to Alpaca data stream");
+          alpaca.data_stream_v2.subscribeForQuotes([symbol]);
+        });
+
+        alpaca.data_stream_v2.onError((err) => {
+          console.log(err);
+        });
+
+        alpaca.data_stream_v2.onStockQuote((quote) => {
+          console.log(quote);
+          socket.emit('stockData', quote);
+        });
+
+        alpaca.data_stream_v2.onDisconnect(() => {
+          console.log("Disconnected from Alpaca data stream");
+        });
+
+        alpaca.data_stream_v2.connect();
+
+        currentSubscription = symbol;
+      }
+    });
+
+    socket.on("disconnect", () => {
+      console.log(`Client disconnected with ID: ${socket.id}`);
+      alpaca.data_stream_v2.disconnect();
+    });
   });
+}).catch((err) => {
+  console.log(err);
 });
 
-
-// ROUTES
+// Routes
 const authRouter = require("./routes/authRoutes");
 const dataRouter = require("./routes/dataRoutes");
 const newsRouter = require("./routes/newsRoutes");
@@ -121,15 +118,24 @@ app.use("/api/news", newsRouter);
 app.use("/api/stock", stockRouter);
 app.use("/api/order", orderRouter);
 
+// Serve static files in production
 if (process.env.NODE_ENV === "production") {
-  app.use(express.static("client/build"));
+app.use(express.static("client/build"));
 
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(__dirname + "/../client/build/index.html"));
-  });
+app.get("*", (req, res) => {
+res.sendFile(path.join(__dirname + "/../client/build/index.html"));
+});
 }
 
-// APP
+// Start the server
 server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
+
+
+
+
+
+
+
+

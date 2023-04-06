@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useContext } from "react";
 import UserContext from "../../context/UserContext";
-import { TextField, Container, Grid, Box, Card } from "@material-ui/core/";
-import Autocomplete, {
-  createFilterOptions,
-} from "@material-ui/lab/Autocomplete";
-import { makeStyles } from "@material-ui/core/styles";
+import { TextField, Container, Grid, Box, Card } from "@mui/material";
+import Autocomplete from "@mui/material/Autocomplete";
+import { makeStyles } from "@mui/styles";
 import LineChart from "../Template/LineChart";
 import BarChart from "./BarChart";
 import Copyright from "../Template/Copyright";
@@ -17,17 +15,22 @@ import PurchaseModal from "./PurchaseModal";
 import config from "../../config/Config";
 
 
-const filter = createFilterOptions();
 
-const useStyles = makeStyles((theme) => ({
+const useStyles = makeStyles({
   paper: {
-    padding: theme.spacing(2),
+    padding: '16px',
     display: "flex",
     overflow: "auto",
     flexDirection: "column",
     marginBottom: "40px",
   },
-}));
+  container: {
+    marginTop: "64px", 
+    width: "100%", 
+    paddingLeft: 0, 
+    paddingRight: 0, 
+  },
+});
 
 const LineChartCard = ({ pastDataPeriod, stockInfo, duration }) => {
   return (
@@ -103,6 +106,8 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
       {stockInfo && sixMonthAverages && pastDay && pastMonth && pastTwoYears && (
         <div>
           <Grid container spacing={3}>
+
+
             <LineChartCard
               pastDataPeriod={pastTwoYears}
               stockInfo={stockInfo}
@@ -144,8 +149,6 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
   );
 };
 
-
-
 const Search = ({ setPurchasedStocks, purchasedStocks }) => {
   const classes = useStyles();
   const { userData } = useContext(UserContext);
@@ -158,6 +161,7 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
     setInputValue(newValue);
   };
 
+
   useEffect(() => {
     if (inputValue !== '') {
       fetchOptions(inputValue);
@@ -165,7 +169,6 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
   }, [inputValue]);
 
   const onSearchChange = (event, newValue) => {
-
     setValue(newValue);
     if (newValue) {
       setCurrentStock(newValue);
@@ -174,8 +177,8 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
     }
   };
 
-  const fetchOptions = async (value) => {
 
+  const fetchOptions = async (value) => {
     const headers = {
       "x-auth-token": userData.token,
     };
@@ -188,21 +191,22 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
 
 
 
-
   return (
-    <Container className={classes.addMargin}>
+    <Container className={`${classes.container} ${classes.addMargin}`}> 
 
       <Autocomplete
+        style={{ maxHeight: 200 }}
         value={value}
         onChange={onSearchChange}
         onInputChange={onInputChange}
         filterOptions={(options, params) => {
-          let filtered = filter(options, params);
-          if (currentStock) {
-            filtered = filtered.slice(0, 4);
-          }
-          return filtered;
+          return options.filter(
+            (option) =>
+              option.name.toLowerCase().includes(params.inputValue.toLowerCase()) ||
+              option.ticker.toLowerCase().includes(params.inputValue.toLowerCase())
+          );
         }}
+
         selectOnFocus
         clearOnBlur
         handleHomeEndKeys
@@ -211,8 +215,12 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
         getOptionLabel={(option) => {
           return option.name || "";
         }}
-        getOptionSelected={(option, value) => option.ticker === value.ticker}
-        renderOption={(option) => option.name}
+        isOptionEqualToValue={(option, value) => option.ticker === value.ticker}
+        renderOption={(props, option, { selected }) => (
+          <li {...props}>
+            {option.name}
+          </li>
+        )}
         style={{
           maxWidth: "700px",
           margin: "30px auto",
@@ -225,6 +233,7 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
             variant="outlined"
           />
         )}
+
       />
 
 
@@ -237,6 +246,7 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
         />
       )}
       <br />
+
       <br />
       <br />
     </Container>
@@ -246,3 +256,4 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
 
 
 export default Search;
+

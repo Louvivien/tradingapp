@@ -1,5 +1,5 @@
 import React from "react";
-import { Grid, Typography, Card } from "@material-ui/core/";
+import { Grid, Typography, Card } from "@mui/material/";
 import styles from "./Search.module.css";
 
 const PriceCard = ({ pastDay }) => {

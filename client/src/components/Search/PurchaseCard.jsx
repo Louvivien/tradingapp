@@ -1,5 +1,5 @@
 import React from "react";
-import { Grid, Typography, Card, Box, Button } from "@material-ui/core/";
+import { Grid, Typography, Card, Box, Button } from "@mui/material/";
 import styles from "./Search.module.css";
 
 const PurchaseCard = ({ setSelected, balance }) => {

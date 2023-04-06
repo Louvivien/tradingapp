@@ -1,5 +1,4 @@
 const Axios = require("axios");
-const data = require("../config/stocksData");
 const setAlpaca = require('../config/alpaca');
 
 exports.getStockMetaData = async (req, res) => {
@@ -53,17 +52,18 @@ exports.getStockInfo = async (req, res) => {
 // Data needed: average for each of the last 6 months + latest daily data + last month of data points + last 2 years of data points, sampled weekly
 exports.getStockHistoricData = async (req, res) => {
   try {
+    const userId = req.params.userId;
+    const alpacaConfig = await setAlpaca(userId);
 
     // Get the last price for the stock using the Alpaca API
     const alpacaUrl = `https://data.alpaca.markets/v2/stocks/${req.params.ticker}/quotes/latest`;
     const alpacaResponse = await Axios.get(alpacaUrl, {
       headers: {
-        'APCA-API-KEY-ID': process.env.ALPACA_API_KEY_ID,
-        'APCA-API-SECRET-KEY': process.env.ALPACA_API_SECRET_KEY,
+        'APCA-API-KEY-ID': alpacaConfig.keyId,
+        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
       },
     });
     const lastPrice = alpacaResponse.data.quote.ap;
-
 
     // Get the historical stock data for the given ticker from the Tiingo API
     const startDate = new Date();
@@ -72,7 +72,7 @@ exports.getStockHistoricData = async (req, res) => {
     const month = startDate.getMonth() + 1;
     const day = startDate.getDate();
 
-    const url = `https://api.tiingo.com/tiingo/daily/${req.params.ticker}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY2}`;
+    const url = `https://api.tiingo.com/tiingo/daily/${req.params.ticker}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY1}`;
 
     const response = await Axios.get(url);
     const data = response.data;
@@ -217,7 +217,7 @@ exports.getPortfolioData = async (req, res) => {
   });
 
   try {
-    const response = await alpacaApi.get('https://paper-api.alpaca.markets/v2/account/portfolio/history?period=12M');
+    const response = await alpacaApi.get(alpacaConfig.apiURL+'/v2/account/portfolio/history?period=12M');
 
 
     return res.status(200).json({

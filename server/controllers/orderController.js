@@ -1,10 +1,8 @@
 const User = require("../models/userModel");
 const Stock = require("../models/stockModel");
-const data = require("../config/stocksData");
 const setAlpaca = require('../config/alpaca');
 const Alpaca = require('@alpacahq/alpaca-trade-api');
 const Axios = require("axios");
-const moment = require('moment');
 
 
 
@@ -55,16 +53,6 @@ exports.purchaseStock = async (req, res) => {
     });
     console.log("order sent");
 
-    // const purchase = new Stock({ userId, ticker, quantity, price });
-    // console.log("new stock added to db");
-
-    // await purchase.save();
-    // const updatedUser = await User.findByIdAndUpdate(userId, {
-    //   balance:
-    //     Math.round((user.balance - price + Number.EPSILON) * 100) / 100,
-    // });
-
-    // const salePrice = order.filled_avg_price * order.filled_qty;
 
     const updatedUser = await User.findByIdAndUpdate(userId, {
       balance:
@@ -186,34 +174,7 @@ exports.sellStock = async (req, res) => {
 };
 
 
-
-const getPricesData = async (stocks) => {
-  try {
-    const promises = stocks.map(async (stock) => {
-      const url = `https://data.alpaca.markets/v2/stocks/${stock.ticker}/quotes/latest`;
-      const response = await Axios.get(url, {
-        headers: {
-          'APCA-API-KEY-ID': process.env.ALPACA_API_KEY_ID,
-          'APCA-API-SECRET-KEY': process.env.ALPACA_API_SECRET_KEY,
-        },
-      });
-      return {
-        ticker: stock.ticker,
-        date: response.data.quote.t,
-        adjClose: response.data.quote.ap,
-      };
-    });
-
-    return Promise.all(promises);
-  } catch (error) {
-    return [];
-  }
-};
-
-
-
 exports.getOrderForUser = async (req, res) => {
-
   try {
     if (req.user !== req.params.userId) {
       return res.status(200).json({
@@ -224,19 +185,23 @@ exports.getOrderForUser = async (req, res) => {
 
     // Set up Alpaca API client for the user
     const alpacaConfig = await setAlpaca(req.params.userId);
-    const alpacaApi = new Alpaca(alpacaConfig);
+    const apiUrl = alpacaConfig.apiURL;
 
     // Retrieve all orders for the user
-    const orders = await alpacaApi.getOrders({
-      status: 'all',
-  });
-
-  
+    const ordersResponse = await Axios.get(`${apiUrl}/v2/orders`, {
+      headers: {
+        'APCA-API-KEY-ID': alpacaConfig.keyId,
+        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+      },
+      params: {
+        status: 'all',
+      },
+    });
 
     // Return the user's orders
     return res.status(200).json({
       status: "success",
-        orders: orders,
+      orders: ordersResponse.data,
     });
   } catch (error) {
     console.error(error);
@@ -250,6 +215,7 @@ exports.getOrderForUser = async (req, res) => {
 
 
 
+
 exports.editAccount = async (req, res) => {
   try {
     const { ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY, } = req.body;
@@ -259,11 +225,6 @@ exports.editAccount = async (req, res) => {
         message: "Credentials couldn't be validated.",
       });
     }
-
-    // const stocks = await Stock.find({ userId: req.params.userId });
-    // stocks.forEach(async (stock) => {
-    //   await Stock.findByIdAndDelete(stock._id);
-    // });
 
     const updatedUser = await User.findByIdAndUpdate(req.params.userId, {
       balance: User.balance,

@@ -12,9 +12,9 @@ import {
   Card,
   CardHeader,
   CardContent,
-} from "@material-ui/core";
+} from "@mui/material";
 import { motion } from "framer-motion";
-import CloseIcon from "@material-ui/icons/Close";
+import CloseIcon from "@mui/icons-material/Close";
 import Axios from "axios";
 import config from "../../config/Config";
 

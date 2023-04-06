@@ -1,10 +1,11 @@
 const User = require("../models/userModel");
 const Stock = require("../models/stockModel");
-const data = require("../config/stocksData");
 const setAlpaca = require('../config/alpaca');
+const data = require("../config/stocksData");
 const Alpaca = require('@alpacahq/alpaca-trade-api');
 const Axios = require("axios");
 const moment = require('moment');
+
 
 
 
@@ -218,6 +219,7 @@ exports.searchStocks = async (req, res) => {
     const response = await Axios.get(url);
 
     const securities = response.data;
+    
     const filteredSecurities = securities.filter(security => security.assetType === 'Stock').slice(0, 20);
 
 
@@ -235,12 +237,13 @@ exports.searchStocks = async (req, res) => {
 };
 
 
-const isMarketOpen = async () => {
+const isMarketOpen = async (userId) => {
   try {
-    const response = await Axios.get('https://api.alpaca.markets/v2/clock', {
+    const alpacaConfig = await setAlpaca(userId);
+    const response = await Axios.get(alpacaConfig.apiURL+'/v2/clock', {
       headers: {
-        'APCA-API-KEY-ID': process.env.ALPACA_API_KEY_ID,
-        'APCA-API-SECRET-KEY': process.env.ALPACA_API_SECRET_KEY,
+        'APCA-API-KEY-ID': alpacaConfig.keyId,
+        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
       },
     });
     return response.data.is_open;
@@ -250,9 +253,10 @@ const isMarketOpen = async () => {
   }
 };
 
-
-const getPricesData = async (stocks, marketOpen) => {
+const getPricesData = async (stocks, marketOpen, userId) => {
   try {
+    const alpacaConfig = await setAlpaca(userId);
+
     const promises = stocks.map(async (stock) => {
       let url;
       if (marketOpen) {
@@ -263,8 +267,8 @@ const getPricesData = async (stocks, marketOpen) => {
 
       const response = await Axios.get(url, {
         headers: {
-          'APCA-API-KEY-ID': process.env.ALPACA_API_KEY_ID,
-          'APCA-API-SECRET-KEY': process.env.ALPACA_API_SECRET_KEY,
+          'APCA-API-KEY-ID': alpacaConfig.keyId,
+          'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
         },
       });
 
@@ -298,22 +302,37 @@ exports.getStockForUser = async (req, res) => {
     }
 
     const alpacaConfig = await setAlpaca(req.params.userId);
-    const alpacaApi = new Alpaca(alpacaConfig);
+    const apiUrl = alpacaConfig.apiURL;
 
-    const positions = await alpacaApi.getPositions();
-    const orders = await alpacaApi.getOrders({
-      status: 'closed',
+    const positionsResponse = await Axios.get(`${apiUrl}/v2/positions`, {
+      headers: {
+        'APCA-API-KEY-ID': alpacaConfig.keyId,
+        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+      },
+    });
+
+    
+
+
+    const ordersResponse = await Axios.get(`${apiUrl}/v2/orders`, {
+      headers: {
+        'APCA-API-KEY-ID': alpacaConfig.keyId,
+        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+      },
+      params: {
+        status: 'closed',
+      },
     });
 
     const ordersBySymbol = {};
 
-    orders.forEach((order) => {
+    ordersResponse.data.forEach((order) => {
       if (order.side === 'buy' && !ordersBySymbol[order.symbol]) {
         ordersBySymbol[order.symbol] = order;
       }
     });
 
-    const stocks = positions.map((position) => {
+    const stocks = positionsResponse.data.map((position) => {
       const order = ordersBySymbol[position.symbol];
       const purchaseDate = order ? moment(order.filled_at).format('YYYY-MM-DD') : null;
 
@@ -371,6 +390,7 @@ exports.getStockForUser = async (req, res) => {
     });
   }
 };
+
 
 
 

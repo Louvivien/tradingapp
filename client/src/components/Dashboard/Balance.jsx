@@ -1,6 +1,6 @@
 import React, { useContext, useState, useEffect } from "react";
 import UserContext from "../../context/UserContext";
-import { Typography } from "@material-ui/core/";
+import { Typography } from "@mui/material/";
 import Title from "../Template/Title.jsx";
 import styles from "./Dashboard.module.css";
 

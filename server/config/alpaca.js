@@ -1,21 +1,25 @@
 const User = require("../models/userModel");
 
 async function setAlpaca(userId) {
-  const user = await User.findById(userId).exec();
+  let keyId = process.env.ALPACA_API_KEY_ID;
+  let secretKey = process.env.ALPACA_API_SECRET_KEY;
 
-  let keyId = user?.ALPACA_API_KEY_ID;
-  let secretKey = user?.ALPACA_API_SECRET_KEY;  
+  if (userId) {
+    const user = await User.findById(userId).exec();
 
-  // If the keys are not present in the user database, fallback to process.env values
+    keyId = user.ALPACA_API_KEY_ID || keyId;
+    secretKey = user.ALPACA_API_SECRET_KEY || secretKey;
+  }
+
   if (!keyId || !secretKey) {
-    keyId = process.env.ALPACA_API_KEY_ID;
-    secretKey = process.env.ALPACA_API_SECRET_KEY;
+    throw new Error("API keys are missing.");
   }
 
   return {
     keyId,
     secretKey,
     paper: true,
+    apiURL: "https://paper-api.alpaca.markets"
   };
 }
 

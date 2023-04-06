@@ -34,6 +34,9 @@ npm run start
 ```
 
 ## To do
-Add live data from alpaca
+Delete const data = require("../config/stocksData") from stockController.
+Add loading on the PageTemplate
+Manage API limit for tiingo
+
 
 

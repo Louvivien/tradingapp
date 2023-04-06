@@ -1,58 +1,53 @@
 import React from "react";
 import styles from "../Template/PageTemplate.module.css";
 import clsx from "clsx";
-import { makeStyles } from "@material-ui/core/styles";
-import { Box, Container, Grid, Paper } from "@material-ui/core";
+import { styled } from "@mui/system";
+import { Box, Container, Grid, Paper } from "@mui/material";
 import Chart from "./Chart";
 import Balance from "./Balance";
 import Purchases from "./Purchases";
 import Orders from "./Orders";
 import Copyright from "../Template/Copyright";
 
-const useStyles = makeStyles((theme) => ({
-  paper: {
-    padding: theme.spacing(2),
-    display: "flex",
-    overflow: "auto",
-    flexDirection: "column",
-  },
-  fixedHeight: {
-    height: 350,
-  },
+const StyledPaper = styled(Paper)(({ theme }) => ({
+  padding: theme.spacing(2),
+  display: "flex",
+  overflow: "auto",
+  flexDirection: "column",
 }));
 
-const Dashboard = ({ purchasedStocks, orderList }) => {
-  const classes = useStyles();
-  const fixedHeightPaper = clsx(classes.paper, classes.fixedHeight);
+const FixedHeightPaper = styled(StyledPaper)({
+  height: 350,
+});
 
+const Dashboard = ({ purchasedStocks, orderList }) => {
   return (
     <Container maxWidth="lg" className={styles.container}>
       <Grid container spacing={3}>
         {/* Chart */}
         <Grid item xs={12} md={8} lg={9}>
-          <Paper className={fixedHeightPaper}>
+          <FixedHeightPaper>
             <Chart />
-          </Paper>
+          </FixedHeightPaper>
         </Grid>
         {/* Balance */}
         <Grid item xs={12} md={4} lg={3}>
-          <Paper className={fixedHeightPaper}>
+          <FixedHeightPaper>
             <Balance purchasedStocks={purchasedStocks} />
-          </Paper>
+          </FixedHeightPaper>
         </Grid>
         {/* Recent Purchases */}
         <Grid item xs={12}>
-          <Paper className={classes.paper}>
+          <StyledPaper>
             <Purchases purchasedStocks={purchasedStocks} />
-          </Paper>
+          </StyledPaper>
         </Grid>
         {/* Orders History */}
         <Grid item xs={12}>
-          <Paper className={classes.paper}>
+          <StyledPaper>
             <Orders orderList={orderList} />
-          </Paper>
+          </StyledPaper>
         </Grid>
-        
       </Grid>
       <Box pt={4}>
         <Copyright />

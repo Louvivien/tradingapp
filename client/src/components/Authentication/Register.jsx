@@ -9,7 +9,7 @@ import {
   CardContent,
   Grid,
   Link,
-} from "@material-ui/core";
+} from "@mui/material";
 import { useNavigate } from "react-router-dom";
 import Axios from "axios";
 import config from "../../config/Config";
