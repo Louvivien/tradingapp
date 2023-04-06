@@ -18,13 +18,8 @@ dotenv.config({ path: "./server/config/.env" });
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser("secretcode"));
+app.use(cors())
 
-app.use(cors({
-  origin: "https://tradingapp-rust.vercel.app",
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"]
-}));
 
 // Logs
 app.use((req, res, next) => {
