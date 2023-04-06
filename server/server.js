@@ -11,8 +11,9 @@ const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 5000;
 
+
 // Load environment variables from .env file
-dotenv.config({ path: "./server/config/.env" });
+dotenv.config({ path: "./config/.env" });
 
 // Middleware
 app.use(express.urlencoded({ extended: true }));
@@ -139,7 +140,7 @@ res.sendFile(path.join(__dirname + "/../client/build/index.html"));
 }
 
 // Start the server
-server.listen(port, () => {
+app.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
 
