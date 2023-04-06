@@ -33,10 +33,20 @@ cd client
 npm run start
 ```
 
+## Deployement
+The front is optimized to be deployed on Vercel
+
+The back is optimized to be deployed on Render
+
+
 ## To do
 Delete const data = require("../config/stocksData") from stockController.
+
 Add loading on the PageTemplate
+
 Manage API limit for tiingo
+
+Optimize live data websocket connection
 
 
 
