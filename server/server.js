@@ -14,8 +14,15 @@ const port = process.env.PORT || 5000;
 dotenv.config({ path: "./server/config/.env" });
 
 // Middleware
-app.use(cors());
-app.options("*", cors());
+const corsOptions = {
+  origin: "https://tradingapp-rust.vercel.app",
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  credentials: true,
+  allowedHeaders: "Content-Type, Authorization, X-Requested-With",
+};
+
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser("secretcode"));
