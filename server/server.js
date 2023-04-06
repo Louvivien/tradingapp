@@ -1,5 +1,4 @@
 const express = require("express");
-const cors = require("cors");
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
@@ -14,15 +13,27 @@ const port = process.env.PORT || 5000;
 dotenv.config({ path: "./server/config/.env" });
 
 // Middleware
-app.use(cors({
-  origin: "https://tradingapp-rust.vercel.app",
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true
-}));
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser("secretcode"));
+
+// Custom CORS middleware
+const corsMiddleware = (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "https://tradingapp-rust.vercel.app");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+};
+
+// Use custom CORS middleware
+app.use(corsMiddleware);
+
+
+
 
 // Connect to MongoDB
 const DB = process.env.MONGO_URI.replace(
