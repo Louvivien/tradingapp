@@ -110,7 +110,6 @@ exports.loginUser = async (req, res) => {
 };
 
 exports.validate = async (req, res) => {
-  console.log("Validating user...");
   try {
     const token = req.header("x-auth-token");
     if (!token) {

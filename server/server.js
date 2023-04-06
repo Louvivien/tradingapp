@@ -132,7 +132,7 @@ app.use("/api/order", orderRouter);
 
 
 // Start the server
-app.listen(port, () => {
+server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
 
