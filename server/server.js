@@ -14,7 +14,7 @@ const port = process.env.PORT || 5000;
 dotenv.config({ path: "./server/config/.env" });
 
 // Middleware
-app.use(cors());
+app.options("*", cors());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser("secretcode"));
