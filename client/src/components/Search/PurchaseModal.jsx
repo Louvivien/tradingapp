@@ -212,7 +212,7 @@ const PurchaseModalContent = ({
     direction="column"
     alignItems="center"
     justify="center"
-    style={{ minHeight: "100vh", marginTop: "64px" }} // Add marginTop: "64px" or any desired value
+    style={{ minHeight: "100vh", marginTop: "95px" }} // Add marginTop: "64px" or any desired value
   >
       <Box width="60vh" boxShadow={1}>
         <Card className={styles.paper}>
