@@ -80,8 +80,8 @@ const SaleModalContent = ({ setSaleOpen, stock }) => {
       direction="column"
       alignItems="center"
       justify="center"
-      style={{ minHeight: "100vh" }}
-    >
+      style={{ minHeight: "100vh", marginTop: "95px" }}
+      >
       <Box width="60vh" boxShadow={1}>
         <Card>
           <CardHeader
