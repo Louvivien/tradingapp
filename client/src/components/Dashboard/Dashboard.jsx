@@ -20,7 +20,7 @@ const FixedHeightPaper = styled(StyledPaper)({
   height: 350,
 });
 
-const Dashboard = ({ purchasedStocks, orderList }) => {
+const Dashboard = ({ accountBalance, purchasedStocks, orderList }) => {
   return (
     <Container maxWidth="lg" className={styles.container}>
       <Grid container spacing={3}>
@@ -33,7 +33,7 @@ const Dashboard = ({ purchasedStocks, orderList }) => {
         {/* Balance */}
         <Grid item xs={12} md={4} lg={3}>
           <FixedHeightPaper>
-            <Balance purchasedStocks={purchasedStocks} />
+          <Balance accountBalance={accountBalance} purchasedStocks={purchasedStocks} />
           </FixedHeightPaper>
         </Grid>
         {/* Recent Purchases */}

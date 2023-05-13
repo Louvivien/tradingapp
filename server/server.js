@@ -94,7 +94,7 @@ setAlpaca().then(alpacaConfig => {
         });
 
         alpaca.data_stream_v2.onStockQuote((quote) => {
-          console.log(quote);
+          // console.log(quote);
           socket.emit('stockData', quote);
         });
 

@@ -81,6 +81,7 @@ const PageTemplate = () => {
   const [currentPage, setCurrentPage] = useState("dashboard");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [purchasedStocks, setPurchasedStocks] = useState([]);
+  const [accountBalance, setAccountBalance] = useState([]);
   const [orderList, setOrderList] = useState([]);
 
   if (!userData.user) {
@@ -99,6 +100,7 @@ const PageTemplate = () => {
 
     if (response.data.status === "success") {
       setPurchasedStocks(response.data.stocks);
+      setAccountBalance(response.data.cash);
     }
   };
 
@@ -114,7 +116,7 @@ const PageTemplate = () => {
 
     if (response.data.status === "success") {
       setOrderList(response.data.orders);
-      console.log("response.data.orders ", response.data.orders);
+      // console.log("response.data.orders ", response.data.orders);
       
     }
   };
@@ -126,8 +128,6 @@ const PageTemplate = () => {
   useEffect(() => {
  
     getPurchasedStocks();
-  
-  
     getOrderList();
   }, []);
   
@@ -216,6 +216,7 @@ const PageTemplate = () => {
         {currentPage === "dashboard" && (
           <Dashboard
             purchasedStocks={purchasedStocks}
+            accountBalance={accountBalance}
             orderList={orderList}
           />
         )}

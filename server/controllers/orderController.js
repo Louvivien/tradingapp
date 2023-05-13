@@ -10,7 +10,7 @@ const Axios = require("axios");
 exports.purchaseStock = async (req, res) => {    
   try {
     const { userId, ticker, quantity, price } = req.body;
-    console.log(req.body);
+    // console.log(req.body);
     
     if (req.user !== userId) {
       return res.status(200).json({
@@ -20,7 +20,7 @@ exports.purchaseStock = async (req, res) => {
     }
 
     const user = await User.findById(userId);
-    console.log(user);
+    // console.log(user);
 
 
     if (!user) {
@@ -82,7 +82,7 @@ exports.purchaseStock = async (req, res) => {
 exports.sellStock = async (req, res) => {
   try {
     const { userId, stockId, quantity, price } = req.body;
-    console.log(req.body);
+    // console.log(req.body);
 
 
     if (req.user !== userId) {
@@ -93,7 +93,7 @@ exports.sellStock = async (req, res) => {
     }
 
     const stock = await Stock.findOne({ticker: stockId});
-    console.log(stock);
+    // console.log(stock);
 
 
     if (!stock) {
@@ -104,7 +104,7 @@ exports.sellStock = async (req, res) => {
     }
 
     const user = await User.findById(userId);
-    console.log(user);
+    // console.log(user);
 
 
     if (!user) {

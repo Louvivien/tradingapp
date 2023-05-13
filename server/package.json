@@ -35,5 +35,10 @@
     "mongoose": "^7.0.3",
     "path": "^0.12.7",
     "socket.io": "^4.6.1"
+  },
+  "devDependencies": {
+    "jest": "^29.5.0",
+    "jest-mock": "^29.5.0",
+    "nock": "^13.3.1"
   }
 }

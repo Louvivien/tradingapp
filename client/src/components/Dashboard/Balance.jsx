@@ -4,7 +4,7 @@ import { Typography } from "@mui/material/";
 import Title from "../Template/Title.jsx";
 import styles from "./Dashboard.module.css";
 
-const Balance = ({ purchasedStocks }) => {
+const Balance = ({ purchasedStocks, accountBalance }) => {
   const { userData } = useContext(UserContext);
   const [portfolioBalance, setPortfolioBalance] = useState(0);
 
@@ -31,7 +31,7 @@ const Balance = ({ purchasedStocks }) => {
         </Typography>
 
         <Typography component="p" variant="h6" align="center">
-          ${userData ? userData.user.balance.toLocaleString() : "$---"}
+          ${accountBalance ? (+accountBalance).toLocaleString() : "$---"}
         </Typography>
         <Typography color="textSecondary" align="center">
           Portfolio Balance:
@@ -50,16 +50,15 @@ const Balance = ({ purchasedStocks }) => {
             variant="h4"
             align="center"
             className={
-              Number(userData.user.balance + portfolioBalance) >= 100000
+              +(accountBalance + portfolioBalance) >= 100000
                 ? styles.positive
                 : styles.negative
             }
           >
-            $
-            {userData
-              ? (userData.user.balance + portfolioBalance).toLocaleString()
-              : "---"}
+            ${accountBalance ? (+(accountBalance/1 + portfolioBalance)).toLocaleString() : "---"}
           </Typography>
+
+
         </div>
       </div>
       <div>

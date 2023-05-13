@@ -1,11 +1,13 @@
-# Trading App
+# AI Trading App
 
 
 
 ## About
-Welcome to my Trading App!
+Welcome to the AI Trading App!
 
-It can connect to Alpaca to get positions and orders, sell and buy stocks.
+It can connect to Alpaca to get positions and orders, sell and buy stocks with trailing orders.
+It will implement AI strategies to trade.
+
 
 Credit for UI: [OktarianTB](https://github.com/OktarianTB/stock-trading-simulator) 
 
@@ -33,6 +35,13 @@ cd client
 npm run start
 ```
 
+Then you have to set up the .env files for the server and the client:
+
+here  /tradingapp/server/config/ you have an example file. Rename it .env and change the keys with yours
+
+there /tradingapp/client/  you have an example file. Rename it .env and change the keys with yours
+
+
 ## Deployement
 The front is optimized to be deployed on Vercel
 
@@ -40,13 +49,9 @@ The back is optimized to be deployed on Render
 
 
 ## To do
-Delete const data = require("../config/stocksData") from stockController.
+Fix bugs
 
-Add loading on the PageTemplate
-
-Manage API limit for tiingo
-
-Optimize live data websocket connection
+Implement AI trading strategies
 
 
 

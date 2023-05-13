@@ -2,102 +2,124 @@ const User = require("../models/userModel");
 const Stock = require("../models/stockModel");
 const setAlpaca = require('../config/alpaca');
 const data = require("../config/stocksData");
-const Alpaca = require('@alpacahq/alpaca-trade-api');
+// const Alpaca = require('@alpacahq/alpaca-trade-api');
 const Axios = require("axios");
 const moment = require('moment');
 
-
-
+// // Mock the Alpaca client when market is closed:
+// const Mock = require('jest-mock');
+// const Alpaca = Mock.fn(() => ({
+//   getClock: Mock.fn(() => Promise.resolve({ is_open: true, next_open: '2023-05-14T13:30:00Z' })),
+//   createOrder: Mock.fn(({ symbol, qty, side, type, time_in_force }, { price = 999 } = {}) => {
+//     return Promise.resolve({ id: 'mock_order_id', status: 'accepted', price });
+//   }),  
+//   getPositions: Mock.fn(() => Promise.resolve([])),
+// }));
 
 
 exports.purchaseStock = async (req, res) => {
   try {
-    const { userId, ticker, quantity, price} = req.body;
-    console.log(req.body);
+    const { userId, ticker, quantity, price } = req.body;
+    // console.log(req.body);
     const trail_percent = parseFloat(req.body.trail_percent);
+    // console.log('req.body:', req.body);
 
+    const parsedPrice = price === null ? 999 : price;
 
-    if (req.user !== userId) {
-      return res.status(200).json({
-        status: "fail",
-        message: "Credentials couldn't be validated.",
-      });
-    }
+if (req.user !== userId) {
+  return res.status(200).json({
+    status: "fail",
+    message: "Credentials couldn't be validated.",
+  });
+}
 
-    const user = await User.findById(userId);
-    console.log(user);
+const user = await User.findById(userId);
 
-    if (!user) {
-      return res.status(200).json({
-        status: "fail",
-        message: "Credentials couldn't be validated.",
-      });
-    }
+if (!user) {
+  return res.status(200).json({
+    status: "fail",
+    message: "Credentials couldn't be validated.",
+  });
+}
 
-    const totalPrice = quantity * price;
-    if (user.balance - totalPrice < 0) {
-      return res.status(200).json({
-        status: "fail",
-        message: `You don't have enough cash to purchase this stock.`,
-      });
-    }
+const totalPrice = quantity * parsedPrice;
+if (user.balance - totalPrice < 0) {
+  return res.status(200).json({
+    status: "fail",
+    message: `You don't have enough cash to purchase this stock.`,
+  });
+}
 
-    const alpacaConfig = await setAlpaca(userId);
-    console.log("config key done");
+console.log('Old balance:', user.balance);
+console.log('Total price:', totalPrice);
 
-    const alpacaApi = new Alpaca(alpacaConfig);
-    console.log("connected to alpaca");
+const newBalance = Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100;
+console.log('New balance:', newBalance);
 
-    const order = await alpacaApi.createOrder({
-      symbol: ticker,
-      qty: quantity,
-      side: 'buy',
-      type: 'market',
-      time_in_force: 'gtc',
-    });
-    console.log("order sent");
+try {
+  const updatedUser = await User.findByIdAndUpdate(userId, { balance: newBalance }, { new: true });
+  console.log('Updated user:', updatedUser);
+} catch (error) {
+  console.log('Error updating balance:', error);
+}
 
-    // Create a trailing stop order
-    await alpacaApi.createOrder({
-      symbol: ticker,
-      qty: quantity,
-      side: 'sell',
-      type: 'trailing_stop',
-      trail_percent: trail_percent,
-      time_in_force: 'gtc',
-    });
-    console.log("trailing stop order sent");
+const alpacaConfig = await setAlpaca(userId);
+console.log("config key done");
 
-    const updatedUser = await User.findByIdAndUpdate(userId, {
-      balance:
-        Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100,
-    });
+const alpacaApi = new Alpaca(alpacaConfig);
+console.log("connected to alpaca");
 
-    return res.status(200).json({
-      status: "success",
-      stockId: ticker,
-      user: {
-        username: updatedUser.username,
-        id: updatedUser._id,
-        balance:
-          Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100,
-      },
-    });
+const order = await alpacaApi.createOrder({
+  symbol: ticker,
+  qty: quantity,
+  side: 'buy',
+  type: 'market',
+  time_in_force: 'gtc',
+});
+console.log("order sent");
 
-  } catch (error) {
-    console.error('Error:', error); // Add this line to print the error message
-    return res.status(200).json({
-      status: "fail",
-      message: "Something unexpected happened.",
-    });
+// Create a trailing stop order
+await alpacaApi.createOrder({
+  symbol: ticker,
+  qty: quantity,
+  side: 'sell',
+  type: 'trailing_stop',
+  trail_percent: trail_percent,
+  time_in_force: 'gtc',
+});
+console.log("trailing stop order sent");
+
+const updatedUser = await User.findByIdAndUpdate(userId, {
+  balance:
+    Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100,
+});
+
+return res.status(200).json({
+  status: "success",
+  stockId: ticker,
+  user: {
+    username: updatedUser.username,
+    id: updatedUser._id,
+    balance:
+      Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100,
+  },
+});
+} catch (error) {
+  console.error('Error:', error);
+  return res.status(200).json({
+  status: "fail",
+  message: "Something unexpected happened.",
+  });
   }
-};
+  
+  }
 
+   
 
 exports.sellStock = async (req, res) => {
   try {
     const { userId, stockId, quantity, price } = req.body;
-    console.log(req.body);
+    // console.log(req.body);
 
 
     if (req.user !== userId) {
@@ -108,7 +130,7 @@ exports.sellStock = async (req, res) => {
     }
 
     const stock = await Stock.findOne({ticker: stockId});
-    console.log(stock);
+    // console.log(stock);
 
 
     if (!stock) {
@@ -119,7 +141,7 @@ exports.sellStock = async (req, res) => {
     }
 
     const user = await User.findById(userId);
-    console.log(user);
+    // console.log(user);
 
 
     if (!user) {
@@ -190,7 +212,6 @@ exports.sellStock = async (req, res) => {
 
 
 exports.getMarketStatus = async (req, res) => {
-  console.log(`getMarketStatus`);
   try {
     const userId = req.params.userId;
     const alpacaConfig = await setAlpaca(userId);
@@ -253,6 +274,8 @@ const isMarketOpen = async (userId) => {
   }
 };
 
+
+
 const getPricesData = async (stocks, marketOpen, userId) => {
   try {
     const alpacaConfig = await setAlpaca(userId);
@@ -304,6 +327,19 @@ exports.getStockForUser = async (req, res) => {
     const alpacaConfig = await setAlpaca(req.params.userId);
     const apiUrl = alpacaConfig.apiURL;
 
+
+    // Fetch account information and get cash balance
+    const accountInfo = await Axios.get(`${apiUrl}/v2/account`, {
+      headers: {
+        'APCA-API-KEY-ID': alpacaConfig.keyId,
+        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+      },
+    });
+    const cashBalance = accountInfo.data.cash;
+
+
+
+
     const positionsResponse = await Axios.get(`${apiUrl}/v2/positions`, {
       headers: {
         'APCA-API-KEY-ID': alpacaConfig.keyId,
@@ -311,9 +347,9 @@ exports.getStockForUser = async (req, res) => {
       },
     });
 
-    
 
 
+    //how the order history is calculated
     const ordersResponse = await Axios.get(`${apiUrl}/v2/orders`, {
       headers: {
         'APCA-API-KEY-ID': alpacaConfig.keyId,
@@ -332,6 +368,7 @@ exports.getStockForUser = async (req, res) => {
       }
     });
 
+    //how the stocks prices are calculated
     const stocks = positionsResponse.data.map((position) => {
       const order = ordersBySymbol[position.symbol];
       const purchaseDate = order ? moment(order.filled_at).format('YYYY-MM-DD') : null;
@@ -345,9 +382,10 @@ exports.getStockForUser = async (req, res) => {
       };
     });
 
-    const marketOpen = await isMarketOpen(); // Check if the market is open
-    const stocksData = await getPricesData(stocks, marketOpen); // Pass the market status to getPricesData
+    const marketOpen = await isMarketOpen();
+    const stocksData = await getPricesData(stocks, marketOpen);
 
+    //how the stocks prices are calculated
     const modifiedStocks = stocks.map((stock) => {
       let name;
       let currentPrice;
@@ -381,7 +419,10 @@ exports.getStockForUser = async (req, res) => {
     return res.status(200).json({
       status: "success",
       stocks: modifiedStocks,
+      cash: cashBalance
     });
+
+
   } catch (error) {
     console.error(error);
     return res.status(200).json({
@@ -390,6 +431,8 @@ exports.getStockForUser = async (req, res) => {
     });
   }
 };
+
+
 
 
 
