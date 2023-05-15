@@ -21,7 +21,7 @@ exports.purchaseStock = async (req, res) => {
   try {
     const { userId, ticker, quantity, price } = req.body;
     // console.log(req.body);
-    const trail_percent = parseFloat(req.body.trail_percent);
+    // const trail_percent = parseFloat(req.body.trail_percent);
     // console.log('req.body:', req.body);
 
     const parsedPrice = price === null ? 999 : price;
@@ -78,16 +78,16 @@ const order = await alpacaApi.createOrder({
 });
 console.log("order sent");
 
-// Create a trailing stop order
-await alpacaApi.createOrder({
-  symbol: ticker,
-  qty: quantity,
-  side: 'sell',
-  type: 'trailing_stop',
-  trail_percent: trail_percent,
-  time_in_force: 'gtc',
-});
-console.log("trailing stop order sent");
+// // Create a trailing stop order
+// await alpacaApi.createOrder({
+//   symbol: ticker,
+//   qty: quantity,
+//   side: 'sell',
+//   type: 'trailing_stop',
+//   trail_percent: trail_percent,
+//   time_in_force: 'gtc',
+// });
+// console.log("trailing stop order sent");
 
 const updatedUser = await User.findByIdAndUpdate(userId, {
   balance:

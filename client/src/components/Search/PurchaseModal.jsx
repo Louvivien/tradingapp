@@ -60,7 +60,7 @@ const PurchaseModalContent = ({
   setPurchasedStocks,
   purchasedStocks,
 }) => {
-  const [trail_percent, setTrailPercent] = useState(1);
+  // const [trail_percent, setTrailPercent] = useState(1);
   const [stopPrice, setStopPrice] = useState(Math.round(
     Number(1) / 100 * Number(today.lastPrice)) );
   const [quantity, setQuantity] = useState(1);
@@ -119,7 +119,8 @@ const PurchaseModalContent = ({
         socket.off();
       };
     // }
-  }, [ticker, trail_percent]);
+  }, [ticker]);
+// }, [ticker, trail_percent]);
 // }, [ticker, marketOpen, trail_percent]);
 
   
@@ -145,10 +146,10 @@ const PurchaseModalContent = ({
     }
   };
 
-  const handleTrailPercentChange = (e, newValue) => {
-    setTrailPercent(newValue);
-    setStopPrice(Number(stockData) * (1 - (Number(newValue) / 100)));
-  };
+  // const handleTrailPercentChange = (e, newValue) => {
+  //   setTrailPercent(newValue);
+  //   setStopPrice(Number(stockData) * (1 - (Number(newValue) / 100)));
+  // };
 
   const handleClick = (e) => {
     setSelected(false);
@@ -167,14 +168,14 @@ const PurchaseModalContent = ({
       "x-auth-token": userData.token,
     };
 
-    const trail_percent_value = parseFloat(trail_percent);
+    // const trail_percent_value = parseFloat(trail_percent);
 
     const purchase = {
       userId: userData.user.id,
       ticker: stockInfo.ticker,
       quantity: Number(quantity),
       price: stockData,
-      trail_percent: trail_percent_value,
+      // trail_percent: trail_percent_value,
 
     };
 
@@ -214,7 +215,7 @@ const PurchaseModalContent = ({
     direction="column"
     alignItems="center"
     justify="center"
-    style={{ minHeight: "100vh", marginTop: "95px" }} // Add marginTop: "64px" or any desired value
+    style={{ minHeight: "100vh", marginTop: "95px" }} 
   >
       <Box width="60vh" boxShadow={1}>
         <Card className={styles.paper}>
@@ -271,7 +272,7 @@ const PurchaseModalContent = ({
                       value={quantity}
                       onChange={handleQuantityChange}
                     />
-                    <Typography id="trail-percent-slider" gutterBottom>
+                    {/* <Typography id="trail-percent-slider" gutterBottom>
                         Trail Percent
                       </Typography>
                       <Slider
@@ -282,8 +283,8 @@ const PurchaseModalContent = ({
                         onChange={handleTrailPercentChange}
                         valueLabelDisplay="auto"
                         aria-labelledby="trail-percent-slider"
-                      />
-                    <TextField
+                      /> */}
+                    {/* <TextField
                       variant="outlined"
                       margin="normal"
                       fullWidth
@@ -293,7 +294,7 @@ const PurchaseModalContent = ({
                       name="stopPrice"
                       autoComplete="stopPrice"
                       value={stopPrice}
-                    />
+                    /> */}
                     <Typography
                       variant="body2"
                       align="center"
