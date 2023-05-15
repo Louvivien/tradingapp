@@ -3,8 +3,8 @@ const router = express.Router();
 const auth = require("../controllers/authMiddleware");
 const { purchaseStock, sellStock, getStockForUser, editAccount, getMarketStatus, searchStocks } = require("../controllers/stockController");
 
-router.route("/").post(auth, purchaseStock);
-router.route("/").patch(auth, sellStock)
+router.route("/buy").post(auth, purchaseStock);
+router.route("/sell").post(auth, sellStock)
 // router.route("/market-status/:userId").get(auth, getMarketStatus);
 router.route("/search/:userId/:value").get(auth, searchStocks);
 router.route("/:userId").get(auth, getStockForUser);

@@ -78,8 +78,8 @@ exports.loginUser = async (req, res) => {
     }
 
 
-    const ALPACA_API_KEY_ID = User.ALPACA_API_KEY_ID;
-    const ALPACA_API_SECRET_KEY = User.ALPACA_API_SECRET_KEY;
+    const ALPACA_API_KEY_ID = user.ALPACA_API_KEY_ID;
+    const ALPACA_API_SECRET_KEY = user.ALPACA_API_SECRET_KEY;
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
 

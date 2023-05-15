@@ -84,11 +84,9 @@ const PageTemplate = () => {
   const [purchasedStocks, setPurchasedStocks] = useState([]);
   const [accountBalance, setAccountBalance] = useState([]);
   const [orderList, setOrderList] = useState([]);
+  
 
-  if (!userData.user) {
-    navigate("/login");
-  }
-
+ 
   const getPurchasedStocks = async () => {
     const url = config.base_url + `/api/stock/${userData.user.id}`;
     const headers = {
@@ -101,6 +99,7 @@ const PageTemplate = () => {
 
     if (response.data.status === "success") {
       setPurchasedStocks(response.data.stocks);
+      // console.log("response.data.stocks ", response.data.stocks);
       setAccountBalance(response.data.cash);
     }
   };
@@ -117,17 +116,11 @@ const PageTemplate = () => {
 
     if (response.data.status === "success") {
       setOrderList(response.data.orders);
-      // console.log("response.data.orders ", response.data.orders);
       
     }
   };
 
-
-
-
-
   useEffect(() => {
- 
     getPurchasedStocks();
     getOrderList();
   }, []);
@@ -142,6 +135,7 @@ const PageTemplate = () => {
     navigate("/login");
   };
 
+  
   const handleDrawerOpen = () => {
     setOpen(true);
   };
@@ -153,6 +147,14 @@ const PageTemplate = () => {
   const openSettings = () => {
     setSettingsOpen(true);
   };
+
+  // console.log("userData.user ", userData.user);
+
+  if (!userData.user) {
+    navigate("/login");
+  }
+
+
 
   return (
     <div className={styles.root}>

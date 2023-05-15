@@ -119,7 +119,7 @@ return res.status(200).json({
 exports.sellStock = async (req, res) => {
   try {
     const { userId, stockId, quantity, price } = req.body;
-    // console.log(req.body);
+    console.log("req.body:", req.body);
 
 
     if (req.user !== userId) {
@@ -129,34 +129,29 @@ exports.sellStock = async (req, res) => {
       });
     }
 
-    const stock = await Stock.findOne({ticker: stockId});
-    // console.log(stock);
+    const stock = stockId;
 
 
-    if (!stock) {
-      return res.status(200).json({
-        status: "fail",
-        message: "Credentials couldn't be validated.",
-      });
-    }
+    // const stock = await Stock.findOne({ticker: stockId});
+    console.log("stock:", stock);
 
     const user = await User.findById(userId);
-    // console.log(user);
+    console.log("user:", user);
 
 
-    if (!user) {
-      return res.status(200).json({
-        status: "fail",
-        message: "Credentials couldn't be validated.",
-      });
-    }
+    // if (!user) {
+    //   return res.status(200).json({
+    //     status: "fail",
+    //     message: "Credentials couldn't be validated.",
+    //   });
+    // }
 
-    if (quantity > stock.quantity) {
-      return res.status(200).json({
-        status: "fail",
-        message: "Invalid quantity.",
-      });
-    }
+    // if (quantity > stock.quantity) {
+    //   return res.status(200).json({
+    //     status: "fail",
+    //     message: "Invalid quantity.",
+    //   });
+    // }
 
     const alpacaConfig = await setAlpaca(userId);
     console.log("config key done");
@@ -167,13 +162,14 @@ exports.sellStock = async (req, res) => {
 
 
     const order = await alpacaApi.createOrder({
-      symbol: stock.ticker,
+      symbol: stock,
+      // symbol: stock.ticker,
       qty: quantity,
       side: 'sell',
       type: 'market',
       time_in_force: 'gtc',
     });
-    console.log("order sent");
+    console.log("sell order sent");
 
 
     const saleProfit = order.filled_avg_price * order.filled_qty;
@@ -183,14 +179,14 @@ exports.sellStock = async (req, res) => {
         Math.round((user.balance + saleProfit + Number.EPSILON) * 100) / 100,
     });
 
-    if (quantity === stock.quantity) {
-      await Stock.findOneAndDelete({ ticker: stockId });
-    } else {
-      await Stock.findOneAndUpdate(
-        { ticker: stockId },
-        { quantity: stock.quantity - quantity }
-      );
-    }
+    // if (quantity === stock.quantity) {
+    //   await Stock.findOneAndDelete({ ticker: stockId });
+    // } else {
+    //   await Stock.findOneAndUpdate(
+    //     { ticker: stockId },
+    //     { quantity: stock.quantity - quantity }
+    //   );
+    // }
 
     return res.status(200).json({
       status: "success",
@@ -299,10 +295,19 @@ const getPricesData = async (stocks, marketOpen, userId) => {
       const currentPrice = marketOpen ? response.data.quote.ap : response.data.trade.p;
       const date = marketOpen ? response.data.quote.t : response.data.trade.t;
 
+
+      const alpacaApi = new Alpaca(alpacaConfig);
+
+      const asset = await alpacaApi.getAsset(stock.ticker);
+      const assetName = asset.name;
+      
+
       return {
         ticker: stock.ticker,
         date: date,
         adjClose: currentPrice,
+        name: assetName, 
+
       };
     });
 
@@ -388,11 +393,11 @@ exports.getStockForUser = async (req, res) => {
 
     //how the stocks prices are calculated
     const modifiedStocks = stocks.map((stock) => {
-      let name;
       let currentPrice;
       let currentDate;
 
-      data.stockData.forEach((stockData) => {
+      let name;
+      stocksData.forEach((stockData) => {
         if (stockData.ticker.toLowerCase() === stock.ticker.toLowerCase()) {
           name = stockData.name;
         }

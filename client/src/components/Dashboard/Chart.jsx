@@ -22,11 +22,11 @@ const Chart = () => {
           { headers }
         );
         const portfolioData = response.data;
-        console.log("Chartdata:", portfolioData);
+        // console.log("Chartdata:", portfolioData);
 
         setChartData(portfolioData);
       } catch (error) {
-        console.error("Error fetching portfolio history:", error);
+        // console.error("Error fetching portfolio history:", error);
       }
     };
 

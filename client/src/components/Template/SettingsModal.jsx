@@ -1,6 +1,8 @@
 import React, { useState, useContext } from "react";
 import UserContext from "../../context/UserContext";
 import styles from "./PageTemplate.module.css";
+import CryptoJS from "crypto-js";
+
 import {
   Typography,
   IconButton,
@@ -44,14 +46,18 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
   
 
   
+
+  
   const handleApiKeyChange = (event) => {
-    console.log(event.target.value);
-    setApiKeyId(event.target.value);
+    // console.log(event.target.value);
+    const ciphertext = CryptoJS.AES.encrypt(event.target.value, process.env.REACT_APP_CryptoJS_secret_key).toString();
+    setApiKeyId(ciphertext);
   }  
 
   const handleApiSecretKeyChange = (event) => {
-    console.log(event.target.value);
-    setApiSecretKey(event.target.value);
+    // console.log(event.target.value);
+    const ciphertext2 = CryptoJS.AES.encrypt(event.target.value, process.env.REACT_APP_CryptoJS_secret_key).toString();
+    setApiSecretKey(ciphertext2);
 };
 
   const handleClick = () => {
@@ -99,7 +105,7 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
       direction="column"
       alignItems="center"
       justify="center"
-      style={{ minHeight: "100vh", marginTop: "95px" }} // Add marginTop: "64px" or any desired value
+      style={{ minHeight: "100vh", marginTop: "95px" }} 
       >
       <Box width="60vh" boxShadow={1}>
         <Card>

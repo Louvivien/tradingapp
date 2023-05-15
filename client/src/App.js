@@ -8,14 +8,13 @@ import config from "./config/Config";
 
 function App() {
   const [userData, setUserData] = useState({
-    token: undefined,
-    user: undefined,
+    token: localStorage.getItem("auth-token") || undefined,
+    user: JSON.parse(localStorage.getItem("user")) || undefined,
     ALPACA_API_KEY_ID: undefined,
     ALPACA_API_SECRET_KEY: undefined,
   });
 
   useEffect(() => {
-
     const checkLoggedIn = async () => {
       let token = localStorage.getItem("auth-token");
       if (token == null) {
@@ -46,6 +45,9 @@ function App() {
           token,
           user: userRes.data,
         });
+
+        // Store user data in local storage
+        localStorage.setItem("user", JSON.stringify(userRes.data));
       } else {
         setUserData({ token: undefined, user: undefined, ALPACA_API_KEY_ID: undefined, ALPACA_API_SECRET_KEY: undefined });
       }

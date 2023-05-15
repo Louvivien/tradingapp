@@ -107,7 +107,7 @@ const PurchaseModalContent = ({
   
       // emit event to subscribe to real-time data for specific ticker
       socket.emit("subscribe", { ticker });
-      console.log(ticker);
+      // console.log(ticker);
   
       // listen for real-time data from server
       socket.on("stockData", (data) => {
@@ -183,7 +183,7 @@ const PurchaseModalContent = ({
 
     };
 
-    const url = config.base_url + "/api/stock";
+    const url = config.base_url + "/api/stock/buy";
     const response = await Axios.post(url, purchase, {
       headers,
     });
