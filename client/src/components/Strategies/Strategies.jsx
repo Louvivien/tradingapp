@@ -18,6 +18,8 @@ import Skeleton from "@mui/lab/Skeleton";
 import Axios from "axios";
 import config from "../../config/Config";
 import Title from "../Template/Title.jsx";
+import styles from "./Strategies.module.css";
+
 
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -93,7 +95,7 @@ const Strategies = () => {
               fullWidth
               margin="normal"
             />
-            <Button variant="contained" color="primary" onClick={handleComposerSubmit}>
+            <Button variant="contained" color="primary" className={styles.submit} onClick={handleComposerSubmit}>
               Create this strategy
             </Button>
           </>

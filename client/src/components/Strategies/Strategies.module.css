@@ -13,3 +13,9 @@
 .addMargin {
   margin-top: 20px;
 }
+
+.submit {
+  margin-top: 20px !important;
+  margin-bottom: 20px !important;
+  background-color: rgba(0, 0, 255, 0.5) !important;
+}
