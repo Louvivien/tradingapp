@@ -23,7 +23,7 @@ const FixedHeightPaper = styled(StyledPaper)({
 const Dashboard = ({ accountBalance, purchasedStocks, orderList }) => {
   return (
     <Container maxWidth="lg" className={styles.container}>
-      <Grid container spacing={3}>
+      <Grid container spacing={3} marginTop="15px">
         {/* Chart */}
         <Grid item xs={12} md={8} lg={9}>
           <FixedHeightPaper>

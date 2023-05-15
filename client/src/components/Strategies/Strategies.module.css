@@ -1,0 +1,15 @@
+.positive {
+  color: #10ac84 !important;
+}
+
+.negative {
+  color: #ff6b6b !important;
+}
+
+.depositContext {
+  flex: 1;
+}
+
+.addMargin {
+  margin-top: 20px;
+}
