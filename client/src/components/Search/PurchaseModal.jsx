@@ -61,8 +61,8 @@ const PurchaseModalContent = ({
   purchasedStocks,
 }) => {
   // const [trail_percent, setTrailPercent] = useState(1);
-  const [stopPrice, setStopPrice] = useState(Math.round(
-    Number(1) / 100 * Number(today.lastPrice)) );
+  // const [stopPrice, setStopPrice] = useState(Math.round(
+  //   Number(1) / 100 * Number(today.lastPrice)) );
   const [quantity, setQuantity] = useState(1);
   const [total, setTotal] = useState(Number(today.lastPrice));
   const { userData, setUserData } = useContext(UserContext);
@@ -108,9 +108,9 @@ const PurchaseModalContent = ({
       // listen for real-time data from server
       socket.on("stockData", (data) => {
         setStockData(data.BidPrice);
-        setStopPrice(
-          Number(data.BidPrice) * (1 - (Number(trail_percent) / 100))
-        );
+        // setStopPrice(
+        //   Number(data.BidPrice) * (1 - (Number(trail_percent) / 100))
+        // );
       });
   
       return () => {
