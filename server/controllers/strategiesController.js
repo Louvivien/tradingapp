@@ -5,7 +5,6 @@ const data = require("../config/stocksData");
 // const Alpaca = require('@alpacahq/alpaca-trade-api');
 const Axios = require("axios");
 const moment = require('moment');
-const { Configuration, OpenAIApi } = require("openai");
 
 
 // // Mock the Alpaca client when market is closed:

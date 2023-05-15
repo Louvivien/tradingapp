@@ -50,7 +50,7 @@ const Balance = ({ purchasedStocks, accountBalance }) => {
             variant="h4"
             align="center"
             className={
-              +(accountBalance + portfolioBalance) >= 100000
+              +(accountBalance/1 + portfolioBalance) >= 100000
                 ? styles.positive
                 : styles.negative
             }
