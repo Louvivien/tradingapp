@@ -68,37 +68,37 @@ const PurchaseModalContent = ({
   const { userData, setUserData } = useContext(UserContext);
   const [stockData, setStockData] = useState(null);
   const { ticker } = stockInfo;
-  const [marketOpen, setMarketOpen] = useState(null);
-  const [hoursUntilOpen, setHoursUntilOpen] = useState(null);
+  // const [marketOpen, setMarketOpen] = useState(null);
+  // const [hoursUntilOpen, setHoursUntilOpen] = useState(null);
 
 
 
+  // useEffect(() => {
+  //   const headers = {
+  //     "x-auth-token": userData.token,
+  //   };
+  
+  //   Axios.get(config.base_url + `/api/stock/market-status/${userData.user.id}`, {
+  //     headers
+  //   })
+  //   .then((response) => {
+  //     const { is_open, next_open } = response.data;
+  //     setMarketOpen(is_open);
+  //     if (!is_open) {
+  //       const now = new Date();
+  //       const marketOpenTime = new Date(now.toISOString().split("T")[0] + "T" + next_open.substring(11));
+  //       const diff = marketOpenTime - now;
+  //       setHoursUntilOpen(Math.ceil(diff / (1000 * 60 * 60)));
+  //     }
+  //   })
+  //   .catch((error) => {
+  //     console.error("Error fetching market status:", error);
+  //   });
+  // }, []);
+  
+  
   useEffect(() => {
-    const headers = {
-      "x-auth-token": userData.token,
-    };
-  
-    Axios.get(config.base_url + `/api/stock/market-status/${userData.user.id}`, {
-      headers
-    })
-    .then((response) => {
-      const { is_open, next_open } = response.data;
-      setMarketOpen(is_open);
-      if (!is_open) {
-        const now = new Date();
-        const marketOpenTime = new Date(now.toISOString().split("T")[0] + "T" + next_open.substring(11));
-        const diff = marketOpenTime - now;
-        setHoursUntilOpen(Math.ceil(diff / (1000 * 60 * 60)));
-      }
-    })
-    .catch((error) => {
-      console.error("Error fetching market status:", error);
-    });
-  }, []);
-  
-  
-  useEffect(() => {
-    if (marketOpen) {
+    // if (marketOpen) {
       const socket = io(config.base_url, { transports: ["websocket"] });
   
       // emit event to subscribe to real-time data for specific ticker
@@ -118,8 +118,10 @@ const PurchaseModalContent = ({
         socket.disconnect();
         socket.off();
       };
-    }
-  }, [ticker, marketOpen, trail_percent]);
+    // }
+  }, [ticker, trail_percent]);
+// }, [ticker, marketOpen, trail_percent]);
+
   
 
 
@@ -225,7 +227,7 @@ const PurchaseModalContent = ({
           />
 
         <CardContent>
-          {marketOpen ? (
+          {/* {marketOpen ? ( */}
             <>
               
 
@@ -324,11 +326,11 @@ const PurchaseModalContent = ({
 
               
             </>
-          ) : (
+          {/* ) : (
             <Typography variant="h6" align="center">
               Market is closed now. It will open in {hoursUntilOpen} hours.
             </Typography>
-          )}
+          )} */}
         </CardContent>
 
 

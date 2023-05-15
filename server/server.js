@@ -123,12 +123,16 @@ const dataRouter = require("./routes/dataRoutes");
 const newsRouter = require("./routes/newsRoutes");
 const stockRouter = require("./routes/stockRoutes");
 const orderRouter = require("./routes/orderRoutes");
+const strategiesRouter = require("./routes/strategiesRoutes");
+
 
 app.use("/api/auth", authRouter);
 app.use("/api/data", dataRouter);
 app.use("/api/news", newsRouter);
 app.use("/api/stock", stockRouter);
 app.use("/api/order", orderRouter);
+app.use("/api/strategies", strategiesRouter);
+
 
 
 // Start the server

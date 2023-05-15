@@ -2,7 +2,7 @@ const User = require("../models/userModel");
 const Stock = require("../models/stockModel");
 const setAlpaca = require('../config/alpaca');
 const data = require("../config/stocksData");
-// const Alpaca = require('@alpacahq/alpaca-trade-api');
+const Alpaca = require('@alpacahq/alpaca-trade-api');
 const Axios = require("axios");
 const moment = require('moment');
 
@@ -211,18 +211,19 @@ exports.sellStock = async (req, res) => {
 };
 
 
-exports.getMarketStatus = async (req, res) => {
-  try {
-    const userId = req.params.userId;
-    const alpacaConfig = await setAlpaca(userId);
-    const alpacaApi = new Alpaca(alpacaConfig);
+// exports.getMarketStatus = async (req, res) => {
+//   console.log("getMarketStatus");
+//   try {
+//     const userId = req.params.userId;
+//     const alpacaConfig = await setAlpaca(userId);
+//     const alpacaApi = new Alpaca(alpacaConfig);
 
-    const clock = await alpacaApi.getClock();
-    res.json({ is_open: clock.is_open, next_open: clock.next_open });
-  } catch (error) {
-    res.status(500).json({ message: "Error fetching market status" });
-  }
-};
+//     const clock = await alpacaApi.getClock();
+//     res.json({ is_open: clock.is_open, next_open: clock.next_open });
+//   } catch (error) {
+//     res.status(500).json({ message: "Error fetching market status" });
+//   }
+// };
 
 
 exports.searchStocks = async (req, res) => {

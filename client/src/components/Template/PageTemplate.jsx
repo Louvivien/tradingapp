@@ -222,6 +222,7 @@ const PageTemplate = () => {
             orderList={orderList}
           />
         )}
+
         {currentPage === "news" && <News />}
         {currentPage === "strategies" && <Strategies />}
         {currentPage === "search" && (

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useContext, useEffect } from "react";
+import UserContext from "../../context/UserContext";
 import {
   Typography,
   Container,
@@ -36,24 +37,33 @@ const FixedHeightPaper = styled(StyledPaper)({
 const Strategies = () => {
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState("Loading...");
-  const [strategy, setStrategy] = useState("");
+  const [composer, setComposer] = useState("");
   const [responseReceived, setResponseReceived] = useState(false);
+  const { userData, setUserData } = useContext(UserContext);
+  const [output, setOutput] = useState(""); 
 
-  useEffect(() => {
-    const getCards = async () => {
-      // your existing code here
+
+
+
+  const handleComposerSubmit = async (e) => {
+
+    const headers = {
+      "x-auth-token": userData.token,
     };
 
-    getCards();
-  }, []);
+    const prompt = {composer};
+    const url = config.base_url + "/api/strategies/composer/";
+    const response = await Axios.post(url, prompt, {
+      headers,
+    });
 
-  const handleStrategySubmit = async () => {
-    // make your POST request here
-    // on successful response, set responseReceived to true
-    // const response = await Axios.post(url, { strategy });
-    // if (response.status === 200) {
-    //   setResponseReceived(true);
-    // }
+
+    if (response.status === 200) {
+      setResponseReceived(true);
+      setOutput(response.data); 
+      console.log(response);
+    }
+
   };
 
   return (
@@ -78,17 +88,17 @@ const Strategies = () => {
               multiline
               rows={4}
               variant="outlined"
-              value={strategy}
-              onChange={(e) => setStrategy(e.target.value)}
+              value={composer}
+              onChange={(e) => setComposer(e.target.value)}
               fullWidth
               margin="normal"
             />
-            <Button variant="contained" color="primary" onClick={handleStrategySubmit}>
+            <Button variant="contained" color="primary" onClick={handleComposerSubmit}>
               Create this strategy
             </Button>
           </>
         ) : (
-          <Typography variant="h6">Strategy successfully added</Typography>
+          <Typography variant="h6">Strategy successfully added:  {output}</Typography>
         )}
       </Box>
       </FixedHeightPaper>
