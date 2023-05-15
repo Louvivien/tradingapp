@@ -5,6 +5,8 @@ import ListItemText from "@mui/material/ListItemText";
 import DashboardIcon from "@mui/icons-material/Dashboard";
 import SearchIcon from "@mui/icons-material/Search";
 import InfoIcon from "@mui/icons-material/Info";
+import PsychologyIcon from '@mui/icons-material/Psychology';
+
 
 const Navbar = ({ currentPage, setCurrentPage }) => {
   const onNewsButtonClick = (e) => {
@@ -15,6 +17,11 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
   const onDashboardButtonClick = (e) => {
     e.preventDefault();
     setCurrentPage("dashboard");
+  };
+
+  const onStrategiesButtonClick = (e) => {
+    e.preventDefault();
+    setCurrentPage("strategies");
   };
 
   const onSearchButtonClick = (e) => {
@@ -34,6 +41,8 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
         </ListItemIcon>
         <ListItemText primary="Dashboard" />
       </ListItem>
+
+
       <ListItem
         button
         selected={currentPage === "search"}
@@ -44,6 +53,20 @@ const Navbar = ({ currentPage, setCurrentPage }) => {
         </ListItemIcon>
         <ListItemText primary="Search" />
       </ListItem>
+
+
+      <ListItem
+        button
+        selected={currentPage === "strategies"}
+        onClick={onStrategiesButtonClick}
+      >
+        <ListItemIcon>
+          <PsychologyIcon />
+        </ListItemIcon>
+        <ListItemText primary="Strategies" />
+      </ListItem>
+
+
       <ListItem
         button
         selected={currentPage === "news"}

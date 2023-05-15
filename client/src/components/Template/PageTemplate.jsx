@@ -18,6 +18,7 @@ import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
 import Navbar from "../Template/Navbar";
 import SecondNavbar from "../Template/SecondNavbar";
 import Dashboard from "../Dashboard/Dashboard";
+import Strategies from "../Strategies/Strategies";
 import News from "../News/News";
 import Search from "../Search/Search";
 import SettingsModal from "./SettingsModal";
@@ -184,6 +185,7 @@ const PageTemplate = () => {
             {currentPage === "dashboard" && "Dashboard"}
             {currentPage === "news" && "Market News"}
             {currentPage === "search" && "Search"}
+            {currentPage === "strategies" && "Strategies"}
           </Typography>
           <Typography color="inherit">
             Hello,{" "}
@@ -221,6 +223,7 @@ const PageTemplate = () => {
           />
         )}
         {currentPage === "news" && <News />}
+        {currentPage === "strategies" && <Strategies />}
         {currentPage === "search" && (
           <Search
             setPurchasedStocks={setPurchasedStocks}
