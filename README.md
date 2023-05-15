@@ -5,11 +5,14 @@
 ## About
 Welcome to the AI Trading App!
 
-It can connect to Alpaca to get positions and orders, sell and buy stocks with trailing orders.
+It can connect to Alpaca to get positions and orders, sell and buy stocks.
 It will implement AI strategies to trade.
 
 
 Credit for UI: [OktarianTB](https://github.com/OktarianTB/stock-trading-simulator) 
+
+
+Update: trailing orders removed
 
 
 ## Installation

@@ -28,6 +28,7 @@ const PurchaseModal = ({
   today,
   setPurchasedStocks,
   purchasedStocks,
+  accountBalance 
 }) => {
   return (
     <motion.div
@@ -45,6 +46,7 @@ const PurchaseModal = ({
             setSelected={setSelected}
             setPurchasedStocks={setPurchasedStocks}
             purchasedStocks={purchasedStocks}
+            accountBalance={accountBalance}
           />
         </motion.div>
       </Container>
@@ -59,6 +61,8 @@ const PurchaseModalContent = ({
   today,
   setPurchasedStocks,
   purchasedStocks,
+  accountBalance
+
 }) => {
   // const [trail_percent, setTrailPercent] = useState(1);
   // const [stopPrice, setStopPrice] = useState(Math.round(
@@ -129,7 +133,7 @@ const PurchaseModalContent = ({
   const handleQuantityChange = (e) => {
     if (!isNaN(e.target.value)) {
       if (
-        userData.user.balance -
+        accountBalance -
           Number(stockData) * Number(e.target.value) <
         0
       ) {
@@ -304,8 +308,8 @@ const PurchaseModalContent = ({
                     </Typography>
                     <Typography variant="body2" align="center">
                       Cash Balance after purchase:{" "}
-                      {userData
-                        ? "$" + (userData.user.balance - total).toLocaleString()
+                      {accountBalance
+                        ? "$" + (accountBalance - total).toLocaleString()
                         : "Balance Unavailable"}
                     </Typography>
                     <Box display="flex" justifyContent="center">

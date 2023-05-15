@@ -229,6 +229,7 @@ const PageTemplate = () => {
           <Search
             setPurchasedStocks={setPurchasedStocks}
             purchasedStocks={purchasedStocks}
+            accountBalance={accountBalance}
           />
         )}
         {settingsOpen && <SettingsModal setSettingsOpen={setSettingsOpen} />}

@@ -2,7 +2,7 @@ import React from "react";
 import { Grid, Typography, Card, Box, Button } from "@mui/material/";
 import styles from "./Search.module.css";
 
-const PurchaseCard = ({ setSelected, balance }) => {
+const PurchaseCard = ({ setSelected, accountBalance }) => {
   return (
     <Grid item xs={12} sm component={Card} className={styles.card}>
       <br />
@@ -15,7 +15,7 @@ const PurchaseCard = ({ setSelected, balance }) => {
         Your Cash Balance:
       </Typography>
       <Typography variant="h6" align="center">
-        {balance ? "$" + balance.toLocaleString() : "Balance Unavailable"}
+        {accountBalance/1 ? "$" + accountBalance/1 : "Balance Unavailable"}
       </Typography>
       <br />
       <br />

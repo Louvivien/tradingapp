@@ -39,7 +39,7 @@ const Dashboard = ({ accountBalance, purchasedStocks, orderList }) => {
         {/* Recent Purchases */}
         <Grid item xs={12}>
           <StyledPaper>
-            <Purchases purchasedStocks={purchasedStocks} />
+            <Purchases accountBalance={accountBalance} purchasedStocks={purchasedStocks} />
           </StyledPaper>
         </Grid>
         {/* Orders History */}

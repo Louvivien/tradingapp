@@ -59,7 +59,7 @@ const BarChartCard = ({ sixMonthAverages, stockInfo }) => {
   );
 };
 
-const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
+const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock, accountBalance }) => {
   const { userData } = useContext(UserContext);
   const [selected, setSelected] = useState(false);
   const [stockInfo, setStockInfo] = useState(undefined);
@@ -122,7 +122,7 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
           <Grid container spacing={3}>
             <PurchaseCard
               setSelected={setSelected}
-              balance={userData.user.balance}
+              accountBalance={accountBalance}
             />
             <LineChartCard
               pastDataPeriod={pastMonth}
@@ -141,6 +141,9 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
               setSelected={setSelected}
               setPurchasedStocks={setPurchasedStocks}
               purchasedStocks={purchasedStocks}
+              accountBalance={accountBalance}
+
+
             />
           )}
         </div>
@@ -149,7 +152,7 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock }) => {
   );
 };
 
-const Search = ({ setPurchasedStocks, purchasedStocks }) => {
+const Search = ({ setPurchasedStocks, purchasedStocks, accountBalance }) => {
   const classes = useStyles();
   const { userData } = useContext(UserContext);
   const [value, setValue] = useState(null);
@@ -195,7 +198,6 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
     <Container className={`${classes.container} ${classes.addMargin}`}> 
 
       <Autocomplete
-        style={{ maxHeight: 200 }}
         value={value}
         onChange={onSearchChange}
         onInputChange={onInputChange}
@@ -225,6 +227,7 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
           maxWidth: "700px",
           margin: "30px auto",
           marginBottom: "60px",
+          maxHeight: 200
         }}
         renderInput={(params) => (
           <TextField
@@ -243,6 +246,9 @@ const Search = ({ setPurchasedStocks, purchasedStocks }) => {
           setPurchasedStocks={setPurchasedStocks}
           purchasedStocks={purchasedStocks}
           currentStock={currentStock}
+          accountBalance={accountBalance}
+
+
         />
       )}
       <br />
