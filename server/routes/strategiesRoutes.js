@@ -1,10 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const auth = require("../controllers/authMiddleware");
-const { createComposer} = require("../controllers/strategiesController");
+const { createCollaborative} = require("../controllers/strategiesController");
 
 
-router.route("/collaborative/").post(auth, createComposer);
+router.route("/collaborative/").post(auth, createCollaborative);
 
 // router.route("/").post(auth, purchaseStock);
 // router.route("/").patch(auth, sellStock)
