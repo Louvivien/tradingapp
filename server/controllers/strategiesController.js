@@ -24,9 +24,10 @@ exports.createCollaborative = (req, res) => {
     try {
       console.log('req.body', req.body);
       let input = req.body.Collaborative;
-      if (input.includes("Below is a trading strategy written in a programming language called Collaborative. Can you explain what this strategy does?")) {
-        input = input.replace("Below is a trading strategy written in a programming language called Collaborative. Can you explain what this strategy does?", "");
-      }  
+      if (input.startsWith("Below is a trading") && input.endsWith("strategy does?")) {
+        input = input.replace(/Below is a trading[\s\S]*strategy does\?/, "");
+    }
+    
 
       const { spawn } = require('child_process');
       let process = spawn('python3', ['scripts/test.py']);
