@@ -39,7 +39,7 @@ const FixedHeightPaper = styled(StyledPaper)({
 const Strategies = () => {
   const [cards, setCards] = useState([]);
   const [loading, setLoading] = useState("Loading...");
-  const [composer, setComposer] = useState("");
+  const [collaborative, setcollaborative] = useState("");
   const [responseReceived, setResponseReceived] = useState(false);
   const { userData, setUserData } = useContext(UserContext);
   const [output, setOutput] = useState(""); 
@@ -47,14 +47,14 @@ const Strategies = () => {
 
 
 
-  const handleComposerSubmit = async (e) => {
+  const handlecollaborativeSubmit = async (e) => {
 
     const headers = {
       "x-auth-token": userData.token,
     };
 
-    const prompt = {composer};
-    const url = config.base_url + "/api/strategies/composer/";
+    const prompt = {collaborative};
+    const url = config.base_url + "/api/strategies/collaborative/";
     const response = await Axios.post(url, prompt, {
       headers,
     });
@@ -78,10 +78,10 @@ const Strategies = () => {
 
       <FixedHeightPaper>
       <Box>
-        <Title>Composer strategy</Title>
-                <Typography color="textSecondary" align="left">Add a Composer symphony</Typography>
+        <Title>Collaborative strategy</Title>
+                <Typography color="textSecondary" align="left">Add a collaborative strategy</Typography>
         <Typography variant="body1" size="small">
-          Here you can copy paste a strategy from Composer. Open a symphony in Composer, edit it, under the Saved button, click on Copy ChatGPT prompt and copy past it in the below field
+          Here you can copy paste a strategy from a collaborative source
         </Typography>
 
         {!responseReceived ? (
@@ -90,12 +90,12 @@ const Strategies = () => {
               multiline
               rows={4}
               variant="outlined"
-              value={composer}
-              onChange={(e) => setComposer(e.target.value)}
+              value={collaborative}
+              onChange={(e) => setcollaborative(e.target.value)}
               fullWidth
               margin="normal"
             />
-            <Button variant="contained" color="primary" className={styles.submit} onClick={handleComposerSubmit}>
+            <Button variant="contained" color="primary" className={styles.submit} onClick={handlecollaborativeSubmit}>
               Create this strategy
             </Button>
           </>

@@ -19,13 +19,13 @@ const moment = require('moment');
 
 
 
-exports.createComposer = (req, res) => {
+exports.createCollaborative = (req, res) => {
   return new Promise((resolve, reject) => {
     try {
       console.log('req.body', req.body);
-      let input = req.body.composer;
-      if (input.includes("Below is a trading strategy written in a programming language called Composer. Can you explain what this strategy does?")) {
-        input = input.replace("Below is a trading strategy written in a programming language called Composer. Can you explain what this strategy does?", "");
+      let input = req.body.Collaborative;
+      if (input.includes("Below is a trading strategy written in a programming language called Collaborative. Can you explain what this strategy does?")) {
+        input = input.replace("Below is a trading strategy written in a programming language called Collaborative. Can you explain what this strategy does?", "");
       }  
 
       const { spawn } = require('child_process');

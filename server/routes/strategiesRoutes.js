@@ -4,7 +4,7 @@ const auth = require("../controllers/authMiddleware");
 const { createComposer} = require("../controllers/strategiesController");
 
 
-router.route("/composer/").post(auth, createComposer);
+router.route("/collaborative/").post(auth, createComposer);
 
 // router.route("/").post(auth, purchaseStock);
 // router.route("/").patch(auth, sellStock)
