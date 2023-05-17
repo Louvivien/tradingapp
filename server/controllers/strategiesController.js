@@ -31,8 +31,8 @@ exports.createCollaborative = (req, res) => {
     //run python script
     const { spawn } = require('child_process');
     let prompt = input;
-    let login = process.env.LOGIN;
-    let password = process.env.PASSWORD;
+    let login = process.env.OPENAI_API_LOGIN;
+    let password = process.env.OPENAI_API_PASSWORD;
     
     let python_process = spawn('python3', ['scripts/chatgpt.py', prompt, login, password]);
     let python_output = "";
