@@ -1,4 +1,4 @@
-from chatgpt_automation import ChatGPT_Client
+from chatgpt_utils import ChatGPT_Client
 import sys
 
 if len(sys.argv) > 1:
