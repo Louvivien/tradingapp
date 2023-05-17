@@ -23,7 +23,7 @@ exports.createCollaborative = (req, res) => {
   return new Promise((resolve, reject) => {
     try {
       console.log('req.body', req.body);
-      let input = req.body.Collaborative;
+      let input = req.body.collaborative;
       if (input.startsWith("Below is a trading") && input.endsWith("strategy does?")) {
         input = input.replace(/Below is a trading[\s\S]*strategy does\?/, "");
     }
