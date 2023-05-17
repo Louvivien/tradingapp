@@ -28,31 +28,37 @@ exports.createCollaborative = (req, res) => {
         input = input.replace(/Below is a trading[\s\S]*strategy does\?/, "");
     }
     
-
-      const { spawn } = require('child_process');
-      let process = spawn('python3', ['scripts/test.py']);
-      let scriptOutput = "";
-
-      process.stdout.on('data', (data) => {
-        console.log(`stdout: ${data}`);
-        scriptOutput += data.toString();
-      });
-
-      process.stderr.on('data', (data) => {
-        console.error(`stderr: ${data}`);
-      });
-
-      process.on('close', (code) => {
-        console.log(`child process exited with code ${code}`);
-        console.log(`Script output: ${scriptOutput}`);
-        resolve(scriptOutput);
-      });
+    //run python script
+    const { spawn } = require('child_process');
+    let prompt = input;
+    let login = process.env.LOGIN;
+    let password = process.env.PASSWORD;
+    
+    let python_process = spawn('python3', ['scripts/chatgpt.py', prompt, login, password]);
+    let python_output = "";
+    
+    python_process.stdout.on('data', (data) => {
+      console.log(`stdout: ${data}`);
+      python_output += data.toString();
+    });
+    
+    python_process.stderr.on('data', (data) => {
+      console.error(`stderr: ${data}`);
+    });
+    
+    python_process.on('close', (code) => {
+      console.log(`child process exited with code ${code}`);
+      console.log(`Script output: ${python_output}`);
+      resolve(python_output);
+    });
+            
     } catch (error) {
       console.error(`Error: ${error}`);
       reject(error);
     }
   });
 }
+
 
 
 // exports.sellStock = async (req, res) => {
