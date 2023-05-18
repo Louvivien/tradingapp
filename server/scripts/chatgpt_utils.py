@@ -33,7 +33,9 @@ class ChatGPT_Client:
     # next_xq     = '//button[//div[text()='Next']]'
     done_xq     = '//button[//div[text()="Done"]]'
     plugin_xq    = '(//button[//span[text()="No plugins enabled"]])[5]'
-    savy_xq    = '//*[contains(text(), "Savvy Trader AI")]'
+    plugin1_xq    = '//*[contains(text(), "Options Pro")]'
+    plugin2_xq    = '//*[contains(text(), "Polygon")]'
+    plugin3_xq    = '//*[contains(text(), "Public")]'
 
 
 
@@ -49,7 +51,7 @@ class ChatGPT_Client:
         self,
         username :str,
         password :str,
-        headless :bool = True,
+        headless :bool = False,
         cold_start :bool = False,
         verbose :bool = False
     ):
@@ -76,6 +78,8 @@ class ChatGPT_Client:
             self.pass_verification()
             self.login(username, password)
         logging.info('ChatGPT is ready to interact')
+        time.sleep(2)
+
 
     def pass_verification(self):
         '''
@@ -168,13 +172,41 @@ class ChatGPT_Client:
             logging.info('Info screen passed')
             url = 'https://chat.openai.com/?model=gpt-4-plugins'
             self.browser.get(url)
+            time.sleep(1)
             logging.info(f'Navigated to URL: {url}')
-            plugin_button = self.browser.find_element(By.XPATH, self.plugin_xq)
-            plugin_button.click()
-            logging.info(f'Clicked plugin button')
-            plugin_enabled = self.browser.find_element(By.XPATH, self.savy_xq)
+
+            for _ in range(5):  # try 5 times
+                try:
+                    plugin_button = self.browser.find_element(By.XPATH, self.plugin_xq)
+                    plugin_button.click()
+                    logging.info(f'Clicked plugin button')
+                    break  # if successful, break the loop
+                except Exception as e:
+                    logging.error(f'Failed to click plugin button')
+                    time.sleep(1)  # wait before trying again
+
+            time.sleep(2)
+
+            for _ in range(5):  # try 5 times
+                try:
+                    plugin_enabled = self.browser.find_element(By.XPATH, self.plugin1_xq)
+                    plugin_enabled.click()
+                    logging.info(f'Enabled plugin1')
+                    break  # if successful, break the loop
+                except Exception as e:
+                    logging.error(f'Failed to enable plugin1')
+                    time.sleep(1)  # wait before trying again
+
+
+            plugin_enabled = self.browser.find_element(By.XPATH, self.plugin2_xq)
             plugin_enabled.click()
-            logging.info(f'Enabled plugin') 
+            logging.info(f'Enabled plugin2') 
+            time.sleep(1)
+            plugin_enabled = self.browser.find_element(By.XPATH, self.plugin3_xq)
+            plugin_enabled.click()
+            logging.info(f'Enabled plugin3') 
+            time.sleep(1)
+
 
         except Exceptions.NoSuchElementException:
             logging.info('Info screen skipped')
@@ -257,9 +289,10 @@ class ChatGPT_Client:
         self.wait_to_disappear(By.CLASS_NAME, self.wait_cq)
         answer = self.browser.find_elements(By.CLASS_NAME, self.chatbox_cq)[-1]
         logging.info('Answer is ready')
-        delete_button = self.browser.find_element(By.XPATH, '(//button[@class="p-1 hover:text-white"])[1]')
-        delete_button.click()
-        logging.info('Clicked delete conversation')
+        print(answer.text)
+        # delete_button = self.browser.find_element(By.XPATH, '(//button[@class="p-1 hover:text-white"])[1]')
+        # delete_button.click()
+        # logging.info('Clicked delete conversation')
         return answer.text
 
     def reset_thread(self):

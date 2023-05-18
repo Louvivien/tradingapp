@@ -37,36 +37,51 @@ const FixedHeightPaper = styled(StyledPaper)({
 
 
 const Strategies = () => {
-  const [cards, setCards] = useState([]);
-  const [loading, setLoading] = useState("Loading...");
   const [collaborative, setcollaborative] = useState("");
   const [responseReceived, setResponseReceived] = useState(false);
   const { userData, setUserData } = useContext(UserContext);
   const [output, setOutput] = useState(""); 
-
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
 
 
 
   const handlecollaborativeSubmit = async (e) => {
+    setLoading(true);
+
 
     const headers = {
       "x-auth-token": userData.token,
     };
 
     const prompt = {collaborative};
+    const userID = userData.user.id;
     const url = config.base_url + "/api/strategies/collaborative/";
-    const response = await Axios.post(url, prompt, {
-      headers,
-    });
 
-
-    if (response.status === 200) {
-      setResponseReceived(true);
-      setOutput(response.data); 
-      console.log(response);
+    try {
+      const response = await Axios.post(url, {collaborative, userID}, {headers});
+    
+      if (response.status === 200) {
+        if (response.data.status === "success") {
+          setResponseReceived(true);
+          setOutput(response.data.orders); 
+          console.log(response);
+        } else {
+          setError(response.data.message);
+        }
+      }
+      
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
     }
+    
 
-  };
+
+
+};
+
 
   return (
     <Container sx={{ pt: 8, pb: 8 }}>
@@ -80,12 +95,44 @@ const Strategies = () => {
       <Box>
         <Title>Collaborative strategy</Title>
                 <Typography color="textSecondary" align="left">Add a collaborative strategy</Typography>
-        <Typography variant="body1" size="small">
-          Here you can copy paste a strategy from a collaborative source
-        </Typography>
 
-        {!responseReceived ? (
-          <>
+
+
+
+
+          {loading ? (
+            <div> 
+            <br />
+            <br />
+              <div>Loading...</div>
+            </div>  
+          ) : responseReceived ? (
+            <div>
+            <br />
+            <br />
+              <Typography variant="h6">Strategy successfully added. Here are the orders:</Typography>
+              {output.map((order, index) => (
+                <Typography key={index} variant="body2">
+                  Quantity: {order.qty}, Symbol: {order.symbol}
+                </Typography>
+              ))}
+            </div>
+          ) : error ? (
+            <div> 
+          <br />
+          <br />
+            <div style={{color: 'red'}}>Error: {error}</div>
+
+            </div>  
+
+          ) : (
+
+          <div>
+            <Typography variant="body1" size="small">
+            Here you can copy paste a strategy from a collaborative source
+          </Typography>
+            
+            <>
             <TextField
               multiline
               rows={4}
@@ -99,9 +146,10 @@ const Strategies = () => {
               Create this strategy
             </Button>
           </>
-        ) : (
-          <Typography variant="h6">Strategy successfully added:  {output}</Typography>
-        )}
+          </div>
+
+          )}
+
       </Box>
       </FixedHeightPaper>
 
