@@ -73,7 +73,7 @@ exports.createCollaborative = async (req, res) => {
       }
       
       //extract json
-      let parsedJson = await extractGPT().then(python_output => {
+      let parsedJson = await extractGPT().then(python_output => { 
         let jsonStart = python_output.indexOf('[');
         let jsonEnd = python_output.lastIndexOf(']') + 1;
         let json1 = python_output.slice(jsonStart, jsonEnd);
@@ -102,6 +102,7 @@ exports.createCollaborative = async (req, res) => {
         }
       }).catch(error => {
         console.error('Error in extractGPT:', error);
+        return [];
       });
       
 
