@@ -15,9 +15,18 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 options = uc.ChromeOptions()
 options.binary_location = '/opt/render/project/.render/chrome/opt/google/chrome/google-chrome'
-driver = uc.Chrome(options=options)
 
-
+options.add_argument('--disable-extensions')
+options.add_argument('--disable-gpu')
+options.add_argument('--no-sandbox') # Bypass OS security model
+options.add_argument('start-maximized')
+options.add_argument('disable-infobars')
+options.add_argument('--headless=new')
+options.add_argument('--disable-dev-shm-usage')
+options.add_argument('--remote-debugging-port=9222')
+options.add_argument('--disable-browser-side-navigation')
+options.add_argument('--disable-features=VizDisplayCompositor')
+options.add_argument('--disable-blink-features=AutomationControlled')
 
 
 logging.basicConfig(
@@ -67,7 +76,7 @@ class ChatGPT_Client:
 
         logging.info('Loading undetected Chrome')
         self.browser = uc.Chrome(
-            options=options,
+            options=options,  
             headless=headless,
             version_main=112
         )
