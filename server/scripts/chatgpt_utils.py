@@ -11,6 +11,11 @@ import selenium.common.exceptions as Exceptions
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+
+
+
 
 
 
@@ -59,10 +64,10 @@ class ChatGPT_Client:
         options = uc.ChromeOptions()
         # options.add_argument('--incognito')
 
-        options.binary_location = '/opt/render/.local/share/undetected_chromedriver/undetected_chromedriver'
+        # options.binary_location = '/opt/render/.local/share/undetected_chromedriver/undetected_chromedriver'
 
         
-
+        service = Service(ChromeDriverManager().install())
     
         # options.add_argument('--disable-extensions')
         # options.add_argument('--disable-gpu')
@@ -82,6 +87,7 @@ class ChatGPT_Client:
         logging.info('Loading undetected Chrome')
         self.browser = uc.Chrome(
             # use_subprocess=True,
+            service=service,
             options=options,  
             headless=headless,
             version_main=112
