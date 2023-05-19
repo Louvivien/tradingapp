@@ -2,7 +2,6 @@
 
 import logging
 import time
-import os
 import undetected_chromedriver as uc
 
 # from selenium import webdriver
@@ -18,13 +17,8 @@ from selenium.webdriver.common.proxy import Proxy, ProxyType
 import socket
 import requests
 
-
-from dotenv import load_dotenv
 import os
-
-load_dotenv()
-
-OPENAI_API_PUID = os.getenv("OPENAI_API_PUID")
+OPENAI_API_PUID = os.environ.get("OPENAI_API_PUID")
 
 
 
