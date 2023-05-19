@@ -53,7 +53,7 @@ class ChatGPT_Client:
         self,
         username :str,
         password :str,
-        headless :bool = False,
+        headless :bool = True,
         cold_start :bool = False,
         verbose :bool = False
     ):
