@@ -77,6 +77,12 @@ class ChatGPT_Client:
             try:
                 self.browser.get('https://chat.openai.com/auth/login?next=/chat')
 
+                time.sleep(1)
+
+                # Print the page content for debugging
+                print(self.browser.page_source)
+
+
                 # Wait for the login button to appear
                 WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
                 logging.info('Successfully opened ChatGPT')
@@ -187,7 +193,7 @@ class ChatGPT_Client:
                 logging.info('Logged in')
                 break  # If successful, break the loop
             except Exception as e:
-                logging.error(f'Failed to login on attempt {i+1}: {e}')
+                logging.error(f'Failed to login on attempt {i+1}')
                 if i == 2:  # If this was the last attempt, return
                     return
                 time.sleep(5)  # Wait before trying again
