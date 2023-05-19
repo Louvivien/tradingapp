@@ -60,6 +60,8 @@ else:
 
 
 
+
+
 class ChatGPT_Client:
     '''ChatGPT_Client class to interact with ChatGPT'''
 
@@ -125,11 +127,6 @@ class ChatGPT_Client:
 
                 time.sleep(1)
 
-                # Print the page content for debugging
-                print("Page content:")
-                print(self.browser.page_source)
-
-
                 # Wait for the login button to appear
                 WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
                 logging.info('Successfully opened ChatGPT')
@@ -138,7 +135,10 @@ class ChatGPT_Client:
 
                 break  # If successful, break the loop
             except Exception as e:
+                # Print the page content for debugging
                 logging.error(f'Failed to open ChatGPT on attempt {i+1}')
+                logging.info("Page content:")
+                logging.info(self.browser.page_source)
                 if i == 2:  # If this was the last attempt, return
                     return
                 time.sleep(5)  # Wait before trying again
@@ -149,7 +149,40 @@ class ChatGPT_Client:
         logging.info('ChatGPT is ready to interact')
         time.sleep(2)
 
+    def switch_proxy(self):
+        '''
+        Switches to a different proxy.
 
+        This function iterates over the list of proxies and tries to connect to each one.
+        If a connection is successful, it sets the working proxy to the current one and breaks the loop.
+        If no working proxy is found, it raises an exception.
+
+        Returns:
+            None
+        '''
+        global working_proxy
+        for proxy in proxies:
+            if proxy != working_proxy and is_proxy_working(proxy["ip"], proxy["port"]):
+                working_proxy = proxy
+                break
+
+        if working_proxy is None:
+            raise Exception("No working proxy found.")
+        else:
+            logging.info(f"Switched to a new working proxy: {working_proxy['ip']}:{working_proxy['port']}")
+
+        # Update the browser's proxy settings
+        proxy = Proxy()
+        proxy.proxy_type = ProxyType.MANUAL
+        proxy.http_proxy = f"{working_proxy['ip']}:{working_proxy['port']}"
+        proxy.ssl_proxy = f"{working_proxy['ip']}:{working_proxy['port']}"
+        self.browser.quit()  # Close the current browser instance
+        options = uc.ChromeOptions()
+        options.add_argument('--incognito')
+        options.proxy = proxy
+        logging.info('Using new proxy: %s', working_proxy)
+        self.browser = uc.Chrome(options=options, headless=True, version_main=112)
+        self.browser.set_page_load_timeout(30)
 
 
 
@@ -203,9 +236,11 @@ class ChatGPT_Client:
         '''
         for i in range(3):  # Try 3 times
             try:
-                # Wait for the login button to appear
-                print("Page content:")
-                print(self.browser.page_source)
+                # Check if "Sorry, you have been blocked" is present in the page source
+                if "Sorry, you have been blocked" in self.browser.page_source:
+                    logging.info("Blocked by the server, switching proxy and retrying...")
+                    self.switch_proxy()
+                    continue
 
                 WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
 
@@ -242,6 +277,7 @@ class ChatGPT_Client:
                 time.sleep(3)
                 logging.info('Logged in')
                 break  # If successful, break the loop
+
             except Exception as e:
                 logging.error(f'Failed to login on attempt {i+1}')
                 if i == 2:  # If this was the last attempt, return
@@ -373,6 +409,12 @@ class ChatGPT_Client:
         Returns:
             str: The generated answer.
         '''
+        # # Check if "Sorry, you have been blocked" is present in the page source
+        # if "Sorry, you have been blocked" in self.browser.page_source:
+        #     logging.info("Blocked by the server, switching proxy and retrying...")
+        #     self.switch_proxy()
+        #     time.sleep(1)
+
         WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.TAG_NAME, 'textarea')))
         text_area = self.browser.find_element(By.TAG_NAME, 'textarea')
         for each_line in question.split('\n'):
