@@ -12,6 +12,33 @@ from selenium.webdriver.support import expected_conditions as EC
 
 from selenium.webdriver.support.ui import WebDriverWait
 
+from selenium.webdriver.common.proxy import Proxy, ProxyType
+import socket
+
+def is_proxy_working(proxy_ip, proxy_port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(5)
+    try:
+        sock.connect((proxy_ip, int(proxy_port)))
+        sock.close()
+        return True
+    except Exception as e:
+        print(f"Proxy {proxy_ip}:{proxy_port} is not working.")
+        return False
+    
+proxies = [
+    {"ip": "5.135.170.126", "port": "8080"},
+    {"ip": "178.33.3.163", "port": "8080"},
+    {"ip": "78.138.98.115", "port": "3128"},
+    {"ip": "46.105.35.193", "port": "8080"},
+    {"ip": "51.15.242.202", "port": "8888"},
+]
+
+for proxy in proxies:
+    if is_proxy_working(proxy["ip"], proxy["port"]):
+        working_proxy = proxy
+        break
+
 
 
 
@@ -45,14 +72,13 @@ class ChatGPT_Client:
     reset_xq    = '//a[text()="New chat"]'
     regen_xq    = '//div[text()="Regenerate response"]'
 
-
     def __init__(
         self,
-        username :str,
-        password :str,
-        headless :bool = True,
-        cold_start :bool = False,
-        verbose :bool = False
+        username: str,
+        password: str,
+        headless: bool = True,
+        cold_start: bool = False,
+        verbose: bool = False,
     ):
         if verbose:
             logging.getLogger().setLevel(logging.INFO)
@@ -61,6 +87,17 @@ class ChatGPT_Client:
         options.add_argument('--incognito')
         if headless:
             options.add_argument('--headless')
+
+        # Set up the proxy
+        if working_proxy:
+            proxy = Proxy()
+            proxy.proxy_type = ProxyType.MANUAL
+            proxy.http_proxy = f"{working_proxy['ip']}:{working_proxy['port']}"
+            proxy.ssl_proxy = f"{working_proxy['ip']}:{working_proxy['port']}"
+            options.proxy = proxy
+            logging.info('Using proxy: %s', working_proxy)
+
+
 
         logging.info('Loading undetected Chrome')
         self.browser = uc.Chrome(
@@ -80,7 +117,7 @@ class ChatGPT_Client:
                 time.sleep(1)
 
                 # Print the page content for debugging
-                print(self.browser.page_source)
+                # print(self.browser.page_source)
 
 
                 # Wait for the login button to appear
@@ -157,7 +194,7 @@ class ChatGPT_Client:
         for i in range(3):  # Try 3 times
             try:
                 # Wait for the login button to appear
-                print(self.browser.page_source)
+                # print(self.browser.page_source)
 
                 WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
 

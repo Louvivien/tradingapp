@@ -90,6 +90,19 @@ exports.createCollaborative = async (req, res) => {
             return json1;
           } catch (e) {
             console.error('Error parsing JSON:', e);
+            // If the JSON is not properly formatted, add a closing bracket and try again
+            if (json1[json1.length - 1] !== ']') {
+              console.warn('JSON string does not end with a closing bracket. Adding a closing bracket and trying again.');
+              json1 += ']';
+              try {
+                JSON.parse(json1);
+                console.log('JSON is OK');
+                return json1;
+              } catch (e) {
+                console.error('Error parsing JSON:', e);
+                return null;
+              }
+            }
             return null;
           }
         }
@@ -104,6 +117,7 @@ exports.createCollaborative = async (req, res) => {
         console.error('Error in extractGPT:', error);
         return [];
       });
+      
       
 
 
