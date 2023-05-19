@@ -65,20 +65,25 @@ class ChatGPT_Client:
 
         logging.info('Loading undetected Chrome')
         self.browser = uc.Chrome(
-            # driver_executable_path='/usr/bin/google-chrome',
             options=options,
             headless=headless,
             version_main=112
         )
-        self.browser.set_page_load_timeout(15)
+        # Increase the page load timeout
+        self.browser.set_page_load_timeout(30)
         logging.info('Loaded Undetected chrome')
         logging.info('Opening chatgpt')
-        self.browser.get('https://chat.openai.com/auth/login?next=/chat')
+        try:
+            self.browser.get('https://chat.openai.com/auth/login?next=/chat')
+        except Exception as e:
+            logging.error(f'Failed to open ChatGPT: {e}')
+            return
         if not cold_start:
             self.pass_verification()
             self.login(username, password)
         logging.info('ChatGPT is ready to interact')
         time.sleep(2)
+
 
 
     def pass_verification(self):
