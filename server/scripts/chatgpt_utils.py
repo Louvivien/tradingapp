@@ -10,8 +10,12 @@ from selenium.webdriver.common.keys import Keys
 import selenium.common.exceptions as Exceptions
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
-from selenium import webdriver
 
+
+
+options = uc.ChromeOptions()
+options.binary_location = '/opt/render/project/.render/chrome/opt/google/chrome/google-chrome'
+driver = uc.Chrome(options=options)
 
 
 
@@ -21,9 +25,6 @@ logging.basicConfig(
     datefmt='%Y/%m/%d %H:%M:%S',
     level=logging.INFO  
 )
-
-options = webdriver.ChromeOptions()
-options.binary_location = '/opt/render/project/.render/chrome/opt/google/chrome/google-chrome'
 
 
 class ChatGPT_Client:
