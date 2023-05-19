@@ -5,6 +5,9 @@ if len(sys.argv) > 1:
     input = sys.argv[1]
     login = sys.argv[2]
     password = sys.argv[3]
+    print('\n' + login + '\n')
+    print('\n' + password + '\n')
+
 else:
     print("No arguments passed")
 
@@ -16,6 +19,7 @@ def main():
     chatgpt = ChatGPT_Client(login, password)
     
     prompt = filter_to_bmp(input)
+    print('\n' + prompt + '\n')
     answer = chatgpt.interact(prompt)
 
     return answer
