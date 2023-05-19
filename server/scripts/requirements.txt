@@ -2,4 +2,3 @@ undetected_chromedriver
 selenium
 webdriver-manager
 requests
-dotenv
