@@ -157,6 +157,8 @@ class ChatGPT_Client:
         for i in range(3):  # Try 3 times
             try:
                 # Wait for the login button to appear
+                print(self.browser.page_source)
+
                 WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
 
                 # Find login button, click it
