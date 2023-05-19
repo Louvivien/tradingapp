@@ -13,31 +13,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
 from selenium.webdriver.common.proxy import Proxy, ProxyType
+
 import socket
-
-def is_proxy_working(proxy_ip, proxy_port):
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(5)
-    try:
-        sock.connect((proxy_ip, int(proxy_port)))
-        sock.close()
-        return True
-    except Exception as e:
-        print(f"Proxy {proxy_ip}:{proxy_port} is not working.")
-        return False
-    
-proxies = [
-    {"ip": "5.135.170.126", "port": "8080"},
-    {"ip": "178.33.3.163", "port": "8080"},
-    {"ip": "78.138.98.115", "port": "3128"},
-    {"ip": "46.105.35.193", "port": "8080"},
-    {"ip": "51.15.242.202", "port": "8888"},
-]
-
-for proxy in proxies:
-    if is_proxy_working(proxy["ip"], proxy["port"]):
-        working_proxy = proxy
-        break
 
 
 
@@ -48,6 +25,38 @@ logging.basicConfig(
     level=logging.INFO  
 )
 
+
+def is_proxy_working(proxy_ip, proxy_port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(5)  # Set a timeout for the connection attempt
+    try:
+        logging.info(f"Attempting to connect to proxy {proxy_ip}:{proxy_port}...")
+        sock.connect((proxy_ip, int(proxy_port)))
+        sock.close()
+        logging.info(f"Successfully connected to proxy {proxy_ip}:{proxy_port}")
+        return True
+    except Exception as e:
+        logging.info(f"Failed to connect to proxy {proxy_ip}:{proxy_port}")
+        return False
+
+proxies = [
+    {"ip": "5.135.170.126", "port": "8080"},
+    {"ip": "178.33.3.163", "port": "8080"},
+    {"ip": "78.138.98.115", "port": "3128"},
+    {"ip": "46.105.35.193", "port": "8080"},
+    {"ip": "51.15.242.202", "port": "8888"},
+]
+
+working_proxy = None
+for proxy in proxies:
+    if is_proxy_working(proxy["ip"], proxy["port"]):
+        working_proxy = proxy
+        break
+
+if working_proxy is None:
+    raise Exception("No working proxy found.")
+else:
+    logging.info(f"Working proxy found: {working_proxy['ip']}:{working_proxy['port']}")
 
 
 
@@ -372,10 +381,11 @@ class ChatGPT_Client:
         self.wait_to_disappear(By.CLASS_NAME, self.wait_cq)
         answer = self.browser.find_elements(By.CLASS_NAME, self.chatbox_cq)[-1]
         logging.info('Answer is ready')
-        print(answer.text)
+        # print(answer.text)
         # delete_button = self.browser.find_element(By.XPATH, '(//button[@class="p-1 hover:text-white"])[1]')
         # delete_button.click()
         # logging.info('Clicked delete conversation')
+        logging.info('Answer: '+'\n\n'+ answer.text)
         return answer.text
 
     def reset_thread(self):

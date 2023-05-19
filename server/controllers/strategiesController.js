@@ -45,7 +45,7 @@ async function runPythonScript(input) {
     
     python_process.on('close', (code) => {
       console.log(`child process exited with code ${code}`);
-      console.log(`Script output: ${python_output}`);
+      // console.log(`Script output: ${python_output}`);
       resolve(python_output);
     });
   });
@@ -68,7 +68,8 @@ exports.createCollaborative = async (req, res) => {
         let python_output = await runPythonScript (
           process.env.Collaborative_Prompt1+'\n\n'+input
         );
-        // console.log('python_output', python_output);
+
+        console.log('python_output:'+'\n\n'+python_output);
         return python_output.toString();
       }
       
@@ -117,6 +118,7 @@ exports.createCollaborative = async (req, res) => {
         console.error('Error in extractGPT:', error);
         return [];
       });
+      
       
       
 

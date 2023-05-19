@@ -17,10 +17,10 @@ def main():
     chatgpt = ChatGPT_Client(login, password)
     
     prompt = filter_to_bmp(input)
-    print('\n' + prompt + '\n')
+    # print('\n' + prompt + '\n')
     answer = chatgpt.interact(prompt)
 
-    return answer
+    print(answer)  
 
 if __name__ == "__main__":
     main()
