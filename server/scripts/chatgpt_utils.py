@@ -44,6 +44,7 @@ class ChatGPT_Client:
     reset_xq    = '//a[text()="New chat"]'
     regen_xq    = '//div[text()="Regenerate response"]'
 
+    
     def __init__(
         self,
         username :str,
