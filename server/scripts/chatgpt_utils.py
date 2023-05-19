@@ -2,6 +2,7 @@
 
 import logging
 import time
+import os
 import undetected_chromedriver as uc
 
 # from selenium import webdriver
@@ -16,6 +17,14 @@ from selenium.webdriver.common.proxy import Proxy, ProxyType
 
 import socket
 import requests
+
+
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
+
+OPENAI_API_PUID = os.getenv("OPENAI_API_PUID")
 
 
 
@@ -140,9 +149,16 @@ class ChatGPT_Client:
         logging.info('Opening chatgpt')
 
         # Retry mechanism for opening the ChatGPT page
-        for i in range(10):  # Try 3 times
+        for i in range(10):  # Try 10 times
             try:
                 self.browser.get('https://chat.openai.com/auth/login?next=/chat')
+                
+                # Then set the cookie
+                self.browser.add_cookie({
+                    'name': 'x-puid',
+                    'value': os.environ[OPENAI_API_PUID],
+                    'domain': '.openai.com'
+                })
 
                 time.sleep(1)
 
