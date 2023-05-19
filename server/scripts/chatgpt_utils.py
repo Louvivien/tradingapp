@@ -156,8 +156,8 @@ class ChatGPT_Client:
             except Exception as e:
                 # Print the page content for debugging
                 logging.error(f'Failed to open ChatGPT on attempt {i+1}')
-                logging.info("Page content:")
-                logging.info(self.browser.page_source)
+                # logging.info("Page content:")
+                # logging.info(self.browser.page_source)
                 # Check if "Sorry, you have been blocked" is present in the page source
                 if "Sorry, you have been blocked" in self.browser.page_source:
                     logging.info("Blocked by the server, switching proxy and retrying...")
@@ -166,7 +166,6 @@ class ChatGPT_Client:
 
                 if i == 9:  # If this was the last attempt, return
                     raise Exception("No working proxy found.")
-
                 time.sleep(5)  # Wait before trying again
 
         if not cold_start:
