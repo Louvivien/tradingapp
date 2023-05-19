@@ -104,15 +104,25 @@ class ChatGPT_Client:
         Returns:
             None
         '''
-        while self.check_login_page():
-            verify_button = self.browser.find_elements(By.ID, 'challenge-stage')
-            if len(verify_button):
-                try:
-                    verify_button[0].click()
-                    logging.info('Clicked verification button')
-                except Exceptions.ElementNotInteractableException:
-                    logging.info('Verification button is not present or clickable')
-            time.sleep(1)
+        for i in range(3):  # Try 3 times
+            try:
+                while self.check_login_page():
+                    verify_button = self.browser.find_elements(By.ID, 'challenge-stage')
+                    if len(verify_button):
+                        try:
+                            verify_button[0].click()
+                            logging.info('Clicked verification button')
+                            break  # If successful, break the loop
+                        except Exceptions.ElementNotInteractableException:
+                            logging.info('Verification button is not present or clickable')
+                    time.sleep(1)
+                logging.info('Successfully passed verification')
+                break
+            except Exception as e:
+                logging.error(f'Failed to pass verification on attempt {i+1}: {e}')
+                if i == 2:  # If this was the last attempt, return
+                    return
+                time.sleep(5)  # Wait before trying again
         return
 
     def check_login_page(self):
@@ -124,7 +134,7 @@ class ChatGPT_Client:
         '''
         login_button = self.browser.find_elements(By.XPATH, self.login_xq)
         return len(login_button) == 0
-
+    
     def login(self, username :str, password :str):
         '''
         Performs the login process with the provided username and password.
@@ -140,33 +150,41 @@ class ChatGPT_Client:
         Returns:
             None
         '''
+        for i in range(3):  # Try 3 times
+            try:
+                # Find login button, click it
+                login_button = self.sleepy_find_element(By.XPATH, self.login_xq)
+                login_button.click()
+                logging.info('Clicked login button')
+                time.sleep(1)
 
-        # Find login button, click it
-        login_button = self.sleepy_find_element(By.XPATH, self.login_xq)
-        login_button.click()
-        logging.info('Clicked login button')
-        time.sleep(1)
+                # Find email textbox, enter e-mail
+                email_box = self.sleepy_find_element(By.ID, 'username')
+                email_box.send_keys(username)
+                logging.info('Filled email box')
 
-        # Find email textbox, enter e-mail
-        email_box = self.sleepy_find_element(By.ID, 'username')
-        email_box.send_keys(username)
-        logging.info('Filled email box')
+                # Click continue
+                continue_button = self.sleepy_find_element(By.XPATH, self.continue_xq)
+                continue_button.click()
+                time.sleep(1)
+                logging.info('Clicked continue button')
 
-        # Click continue
-        continue_button = self.sleepy_find_element(By.XPATH, self.continue_xq)
-        continue_button.click()
-        time.sleep(1)
-        logging.info('Clicked continue button')
+                # Find password textbox, enter password
+                pass_box = self.sleepy_find_element(By.ID, 'password')
+                pass_box.send_keys(password)
+                logging.info('Filled password box')
+                # Click continue
+                continue_button = self.sleepy_find_element(By.XPATH, self.continue_xq)
+                continue_button.click()
+                time.sleep(3)
+                logging.info('Logged in')
+                break  # If successful, break the loop
+            except Exception as e:
+                logging.error(f'Failed to login on attempt {i+1}: {e}')
+                if i == 2:  # If this was the last attempt, return
+                    return
+                time.sleep(5)  # Wait before trying again
 
-        # Find password textbox, enter password
-        pass_box = self.sleepy_find_element(By.ID, 'password')
-        pass_box.send_keys(password)
-        logging.info('Filled password box')
-        # Click continue
-        continue_button = self.sleepy_find_element(By.XPATH, self.continue_xq)
-        continue_button.click()
-        time.sleep(3)
-        logging.info('Logged in')
 
         try:
             # Pass introduction
