@@ -13,20 +13,6 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 
 
-options = uc.ChromeOptions()
-options.binary_location = '/opt/render/project/.render/chrome/opt/google/chrome/google-chrome'
-
-options.add_argument('--disable-extensions')
-options.add_argument('--disable-gpu')
-options.add_argument('--no-sandbox') 
-options.add_argument('start-maximized')
-options.add_argument('disable-infobars')
-# options.add_argument('--headless=new')
-options.add_argument('--disable-dev-shm-usage')
-options.add_argument('--remote-debugging-port=9222')
-options.add_argument('--disable-browser-side-navigation')
-options.add_argument('--disable-features=VizDisplayCompositor')
-options.add_argument('--disable-blink-features=AutomationControlled')
 
 
 logging.basicConfig(
@@ -69,16 +55,33 @@ class ChatGPT_Client:
         if verbose:
             logging.getLogger().setLevel(logging.INFO)
             logging.info('Verbose mode active')
+        
         options = uc.ChromeOptions()
         options.add_argument('--incognito')
-        # if headless:
-        #     options.add_argument('--headless')
+
+        options.binary_location = '/opt/render/project/.render/chrome/opt/google/chrome/google-chrome'
+
+    
+        options.add_argument('--disable-extensions')
+        options.add_argument('--disable-gpu')
+        options.add_argument('--no-sandbox') 
+        options.add_argument('start-maximized')
+        options.add_argument('disable-infobars')
+        # options.add_argument('--headless=new')
+        options.add_argument('--disable-dev-shm-usage')
+        options.add_argument('--remote-debugging-port=9222')
+        options.add_argument('--disable-browser-side-navigation')
+        options.add_argument('--disable-features=VizDisplayCompositor')
+        options.add_argument('--disable-blink-features=AutomationControlled')
+
+        if headless:
+            options.add_argument('--headless')
 
         logging.info('Loading undetected Chrome')
         self.browser = uc.Chrome(
             use_subprocess=True,
             options=options,  
-            # headless=headless,
+            headless=headless,
             version_main=112
         )
         self.browser.set_page_load_timeout(30)
