@@ -46,7 +46,6 @@ class ChatGPT_Client:
 
     
 
-
     def __init__(
         self,
         username :str,
@@ -69,20 +68,28 @@ class ChatGPT_Client:
             headless=headless,
             version_main=112
         )
-        # Increase the page load timeout
         self.browser.set_page_load_timeout(30)
         logging.info('Loaded Undetected chrome')
         logging.info('Opening chatgpt')
-        try:
-            self.browser.get('https://chat.openai.com/auth/login?next=/chat')
-        except Exception as e:
-            logging.error(f'Failed to open ChatGPT: {e}')
-            return
+
+        # Retry mechanism for opening the ChatGPT page
+        for i in range(3):  # Try 3 times
+            try:
+                self.browser.get('https://chat.openai.com/auth/login?next=/chat')
+                logging.info('Successfully opened ChatGPT')
+                break  # If successful, break the loop
+            except Exception as e:
+                logging.error(f'Failed to open ChatGPT on attempt {i+1}: {e}')
+                if i == 2:  # If this was the last attempt, return
+                    return
+                time.sleep(5)  # Wait before trying again
+
         if not cold_start:
             self.pass_verification()
             self.login(username, password)
         logging.info('ChatGPT is ready to interact')
         time.sleep(2)
+
 
 
 
