@@ -53,7 +53,7 @@ class ChatGPT_Client:
         self,
         username :str,
         password :str,
-        headless :bool = False,
+        headless :bool = True,
         cold_start :bool = False,
         verbose :bool = False
     ):
@@ -93,7 +93,7 @@ class ChatGPT_Client:
             # version_main=112,
             
             # version_main=90,
-            patcher_force_close=True
+            # patcher_force_close=True
         )
 
 
