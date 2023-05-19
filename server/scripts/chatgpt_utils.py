@@ -185,6 +185,8 @@ class ChatGPT_Client:
         Returns:
             None
         '''
+        proxies = get_proxies()
+        
         global working_proxy
         for proxy in proxies:
             if proxy != working_proxy and is_proxy_working(proxy["ip"], proxy["port"]):
