@@ -131,6 +131,7 @@ class ChatGPT_Client:
         login_button = self.browser.find_elements(By.XPATH, self.login_xq)
         return len(login_button) == 0
     
+    
     def login(self, username :str, password :str):
         '''
         Performs the login process with the provided username and password.
@@ -148,11 +149,17 @@ class ChatGPT_Client:
         '''
         for i in range(3):  # Try 3 times
             try:
+                # Wait for the login button to appear
+                WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
+
                 # Find login button, click it
                 login_button = self.sleepy_find_element(By.XPATH, self.login_xq)
                 login_button.click()
                 logging.info('Clicked login button')
                 time.sleep(1)
+
+                # Wait for the email textbox to appear
+                WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.ID, 'username')))
 
                 # Find email textbox, enter e-mail
                 email_box = self.sleepy_find_element(By.ID, 'username')
@@ -164,6 +171,9 @@ class ChatGPT_Client:
                 continue_button.click()
                 time.sleep(1)
                 logging.info('Clicked continue button')
+
+                # Wait for the password textbox to appear
+                WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.ID, 'password')))
 
                 # Find password textbox, enter password
                 pass_box = self.sleepy_find_element(By.ID, 'password')
@@ -180,6 +190,7 @@ class ChatGPT_Client:
                 if i == 2:  # If this was the last attempt, return
                     return
                 time.sleep(5)  # Wait before trying again
+
 
         try:
             # Pass introduction
