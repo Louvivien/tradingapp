@@ -48,7 +48,7 @@ class ChatGPT_Client:
         self,
         username :str,
         password :str,
-        headless :bool = True,
+        headless :bool = False,
         cold_start :bool = False,
         verbose :bool = False
     ):
@@ -57,29 +57,29 @@ class ChatGPT_Client:
             logging.info('Verbose mode active')
         
         options = uc.ChromeOptions()
-        options.add_argument('--incognito')
+        # options.add_argument('--incognito')
 
-        options.binary_location = '/opt/render/project/.render/chrome/opt/google/chrome/google-chrome'
+        # options.binary_location = '/opt/render/project/.render/chrome/opt/google/chrome/google-chrome'
 
     
-        options.add_argument('--disable-extensions')
-        options.add_argument('--disable-gpu')
-        options.add_argument('--no-sandbox') 
-        options.add_argument('start-maximized')
-        options.add_argument('disable-infobars')
+        # options.add_argument('--disable-extensions')
+        # options.add_argument('--disable-gpu')
+        # options.add_argument('--no-sandbox') 
+        # options.add_argument('start-maximized')
+        # options.add_argument('disable-infobars')
         # options.add_argument('--headless=new')
-        options.add_argument('--disable-dev-shm-usage')
-        options.add_argument('--remote-debugging-port=9222')
-        options.add_argument('--disable-browser-side-navigation')
-        options.add_argument('--disable-features=VizDisplayCompositor')
-        options.add_argument('--disable-blink-features=AutomationControlled')
+        # options.add_argument('--disable-dev-shm-usage')
+        # options.add_argument('--remote-debugging-port=9222')
+        # options.add_argument('--disable-browser-side-navigation')
+        # options.add_argument('--disable-features=VizDisplayCompositor')
+        # options.add_argument('--disable-blink-features=AutomationControlled')
 
         if headless:
             options.add_argument('--headless')
 
         logging.info('Loading undetected Chrome')
         self.browser = uc.Chrome(
-            use_subprocess=True,
+            # use_subprocess=True,
             options=options,  
             headless=headless,
             version_main=112
