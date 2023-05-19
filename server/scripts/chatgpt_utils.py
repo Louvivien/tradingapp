@@ -18,7 +18,7 @@ options.binary_location = '/opt/render/project/.render/chrome/opt/google/chrome/
 
 options.add_argument('--disable-extensions')
 options.add_argument('--disable-gpu')
-options.add_argument('--no-sandbox') # Bypass OS security model
+options.add_argument('--no-sandbox') 
 options.add_argument('start-maximized')
 options.add_argument('disable-infobars')
 options.add_argument('--headless=new')
@@ -81,7 +81,6 @@ class ChatGPT_Client:
             version_main=112
         )
         self.browser.set_page_load_timeout(30)
-        logging.info('Loaded Undetected chrome')
         logging.info('Opening chatgpt')
 
         # Retry mechanism for opening the ChatGPT page
@@ -91,18 +90,21 @@ class ChatGPT_Client:
                 logging.info('Successfully opened ChatGPT')
 
                 # Wait for the login button to appear
+                self.pass_verification()
+
                 WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
                 logging.info('Login button is present')
 
                 break  # If successful, break the loop
+
             except Exception as e:
-                logging.error(f'Failed to open ChatGPT on attempt {i+1}: {e}')
+                logging.error(f'Failed to open ChatGPT on attempt {i+1}')
                 if i == 2:  # If this was the last attempt, return
                     return
                 time.sleep(5)  # Wait before trying again
 
         if not cold_start:
-            self.pass_verification()
+            # self.pass_verification()
             self.login(username, password)
         logging.info('ChatGPT is ready to interact')
         time.sleep(2)
