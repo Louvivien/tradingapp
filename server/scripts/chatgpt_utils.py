@@ -9,11 +9,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 import selenium.common.exceptions as Exceptions
 from selenium.webdriver.support import expected_conditions as EC
-from selenium import webdriver
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service
-
-
 
 
 
@@ -56,7 +51,7 @@ class ChatGPT_Client:
         self,
         username :str,
         password :str,
-        headless :bool = True,
+        headless :bool = False,
         cold_start :bool = False,
         verbose :bool = False
     ):
@@ -68,11 +63,12 @@ class ChatGPT_Client:
         if headless:
             options.add_argument('--headless')
 
-
         logging.info('Loading undetected Chrome')
-        # Use webdriver-manager to handle the driver installation
-        service = Service(ChromeDriverManager().install())
-        self.browser = webdriver.Chrome(service=service, options=options)
+        self.browser = uc.Chrome(
+            options=options,
+            headless=headless,
+            version_main=112
+        )
         # Increase the page load timeout
         self.browser.set_page_load_timeout(30)
         logging.info('Loaded Undetected chrome')
@@ -184,7 +180,7 @@ class ChatGPT_Client:
             time.sleep(1)
             logging.info(f'Navigated to URL: {url}')
 
-            for _ in range(5):  # try 5 times
+            for _ in range(10):  # try 5 times
                 try:
                     plugin_button = self.browser.find_element(By.XPATH, self.plugin_xq)
                     plugin_button.click()
