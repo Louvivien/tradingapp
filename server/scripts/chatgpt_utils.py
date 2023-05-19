@@ -44,8 +44,6 @@ class ChatGPT_Client:
     reset_xq    = '//a[text()="New chat"]'
     regen_xq    = '//div[text()="Regenerate response"]'
 
-    
-
     def __init__(
         self,
         username :str,
@@ -77,6 +75,13 @@ class ChatGPT_Client:
             try:
                 self.browser.get('https://chat.openai.com/auth/login?next=/chat')
                 logging.info('Successfully opened ChatGPT')
+
+                # Check if login page is present
+                if not self.check_login_page():
+                    logging.info('Login page is not present, refreshing...')
+                    self.browser.refresh()
+                    time.sleep(5)  # Wait for the page to load
+
                 break  # If successful, break the loop
             except Exception as e:
                 logging.error(f'Failed to open ChatGPT on attempt {i+1}: {e}')
