@@ -76,11 +76,12 @@ class ChatGPT_Client:
         for i in range(3):  # Try 3 times
             try:
                 self.browser.get('https://chat.openai.com/auth/login?next=/chat')
-                logging.info('Successfully opened ChatGPT')
 
                 # Wait for the login button to appear
                 WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
+                logging.info('Successfully opened ChatGPT')
                 logging.info('Login button is present')
+
 
                 break  # If successful, break the loop
             except Exception as e:
@@ -131,7 +132,7 @@ class ChatGPT_Client:
         login_button = self.browser.find_elements(By.XPATH, self.login_xq)
         return len(login_button) == 0
     
-    
+
     def login(self, username :str, password :str):
         '''
         Performs the login process with the provided username and password.
@@ -316,6 +317,7 @@ class ChatGPT_Client:
         Returns:
             str: The generated answer.
         '''
+        WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.TAG_NAME, 'textarea')))
         text_area = self.browser.find_element(By.TAG_NAME, 'textarea')
         for each_line in question.split('\n'):
             text_area.send_keys(each_line)
