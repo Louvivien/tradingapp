@@ -59,7 +59,9 @@ class ChatGPT_Client:
         options = uc.ChromeOptions()
         # options.add_argument('--incognito')
 
-        # options.binary_location = '/opt/render/project/.render/chrome/opt/google/chrome/google-chrome'
+        options.binary_location = '/opt/render/.local/share/undetected_chromedriver/undetected_chromedriver'
+
+        
 
     
         # options.add_argument('--disable-extensions')
