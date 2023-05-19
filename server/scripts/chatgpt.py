@@ -5,8 +5,6 @@ if len(sys.argv) > 1:
     input = sys.argv[1]
     login = sys.argv[2]
     password = sys.argv[3]
-    print('\n' + login + '\n')
-    print('\n' + password + '\n')
 
 else:
     print("No arguments passed")
