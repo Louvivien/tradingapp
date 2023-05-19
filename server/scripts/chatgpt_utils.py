@@ -53,7 +53,7 @@ class ChatGPT_Client:
         self,
         username :str,
         password :str,
-        headless :bool = True,
+        headless :bool = False,
         cold_start :bool = False,
         verbose :bool = False
     ):
@@ -64,7 +64,7 @@ class ChatGPT_Client:
         options = uc.ChromeOptions()
         # options.add_argument('--incognito')
 
-        options.binary_location = '/opt/render/.local/share/undetected_chromedriver/undetected_chromedriver'
+        # options.binary_location = '/opt/render/.local/share/undetected_chromedriver/undetected_chromedriver'
 
         
         service = Service(ChromeDriverManager().install())
