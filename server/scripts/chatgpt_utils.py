@@ -104,25 +104,15 @@ class ChatGPT_Client:
         Returns:
             None
         '''
-        for i in range(3):  # Try 3 times
-            try:
-                while self.check_login_page():
-                    verify_button = self.browser.find_elements(By.ID, 'challenge-stage')
-                    if len(verify_button):
-                        try:
-                            verify_button[0].click()
-                            logging.info('Clicked verification button')
-                            break  # If successful, break the loop
-                        except Exceptions.ElementNotInteractableException:
-                            logging.info('Verification button is not present or clickable')
-                    time.sleep(1)
-                logging.info('Successfully passed verification')
-                break
-            except Exception as e:
-                logging.error(f'Failed to pass verification on attempt {i+1}: {e}')
-                if i == 2:  # If this was the last attempt, return
-                    return
-                time.sleep(5)  # Wait before trying again
+        while self.check_login_page():
+            verify_button = self.browser.find_elements(By.ID, 'challenge-stage')
+            if len(verify_button):
+                try:
+                    verify_button[0].click()
+                    logging.info('Clicked verification button')
+                except Exceptions.ElementNotInteractableException:
+                    logging.info('Verification button is not present or clickable')
+            time.sleep(1)
         return
 
     def check_login_page(self):
@@ -184,7 +174,6 @@ class ChatGPT_Client:
                 if i == 2:  # If this was the last attempt, return
                     return
                 time.sleep(5)  # Wait before trying again
-
 
         try:
             # Pass introduction
