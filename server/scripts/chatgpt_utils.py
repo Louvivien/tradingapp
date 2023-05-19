@@ -138,7 +138,7 @@ class ChatGPT_Client:
 
                 break  # If successful, break the loop
             except Exception as e:
-                logging.error(f'Failed to open ChatGPT on attempt {i+1}: {e}')
+                logging.error(f'Failed to open ChatGPT on attempt {i+1}')
                 if i == 2:  # If this was the last attempt, return
                     return
                 time.sleep(5)  # Wait before trying again
