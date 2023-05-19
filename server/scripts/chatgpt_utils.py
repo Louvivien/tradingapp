@@ -15,6 +15,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.common.proxy import Proxy, ProxyType
 
 import socket
+import requests
+
 
 
 
@@ -39,13 +41,30 @@ def is_proxy_working(proxy_ip, proxy_port):
         logging.info(f"Failed to connect to proxy {proxy_ip}:{proxy_port}")
         return False
 
-proxies = [
-    {"ip": "5.135.170.126", "port": "8080"},
-    {"ip": "178.33.3.163", "port": "8080"},
-    {"ip": "78.138.98.115", "port": "3128"},
-    {"ip": "46.105.35.193", "port": "8080"},
-    {"ip": "51.15.242.202", "port": "8888"},
-]
+def get_proxies():
+    url = 'https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=FR&ssl=FR&anonymity=FR&_ga=2.134393777.1587810449.1684520809-1182041995.1684520809'
+    headers = {
+        'authority': 'api.proxyscrape.com',
+        'accept': 'text/plain, */*; q=0.01',
+        'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'cache-control': 'no-cache',
+        'origin': 'https://proxyscrape.com',
+        'pragma': 'no-cache',
+        'referer': 'https://proxyscrape.com',
+        'sec-ch-ua': '"Google Chrome";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"macOS"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-site',
+        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
+    }
+    response = requests.get(url, headers=headers)
+    proxies = [{'ip': line.split(':')[0], 'port': line.split(':')[1]} for line in response.text.split('\n') if line]
+    return proxies
+
+proxies = get_proxies()
+
 
 working_proxy = None
 for proxy in proxies:
