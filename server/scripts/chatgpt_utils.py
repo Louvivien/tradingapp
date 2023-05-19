@@ -65,10 +65,10 @@ class ChatGPT_Client:
 
         logging.info('Loading undetected Chrome')
         self.browser = uc.Chrome(
-            # driver_executable_path='/usr/bin/google-chrome',
+            driver_executable_path='/usr/bin/google-chrome',
             options=options,
             headless=headless,
-            # version_main=112
+            version_main=112
         )
         self.browser.set_page_load_timeout(15)
         logging.info('Loaded Undetected chrome')
