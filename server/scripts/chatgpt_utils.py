@@ -90,8 +90,13 @@ class ChatGPT_Client:
             service=service,
             options=options,  
             headless=headless,
-            version_main=112
+            # version_main=112,
+            
+            version_main=90,
+            patcher_force_close=True
         )
+
+
         self.browser.set_page_load_timeout(30)
         logging.info('Opening chatgpt')
 
