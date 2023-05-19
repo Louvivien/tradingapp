@@ -9,13 +9,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 import selenium.common.exceptions as Exceptions
 from selenium.webdriver.support import expected_conditions as EC
+
 from selenium.webdriver.support.ui import WebDriverWait
-
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-
-
-
 
 
 
@@ -25,6 +20,8 @@ logging.basicConfig(
     datefmt='%Y/%m/%d %H:%M:%S',
     level=logging.INFO  
 )
+
+
 
 
 class ChatGPT_Client:
@@ -60,44 +57,19 @@ class ChatGPT_Client:
         if verbose:
             logging.getLogger().setLevel(logging.INFO)
             logging.info('Verbose mode active')
-        
         options = uc.ChromeOptions()
-        # options.add_argument('--incognito')
-
-        options.binary_location = '/opt/render/.local/share/undetected_chromedriver/undetected_chromedriver'
-
-        
-        service = Service(ChromeDriverManager().install())
-    
-        # options.add_argument('--disable-extensions')
-        # options.add_argument('--disable-gpu')
-        # options.add_argument('--no-sandbox') 
-        # options.add_argument('start-maximized')
-        # options.add_argument('disable-infobars')
-        # options.add_argument('--headless=new')
-        # options.add_argument('--disable-dev-shm-usage')
-        # options.add_argument('--remote-debugging-port=9222')
-        # options.add_argument('--disable-browser-side-navigation')
-        # options.add_argument('--disable-features=VizDisplayCompositor')
-        # options.add_argument('--disable-blink-features=AutomationControlled')
-
+        options.add_argument('--incognito')
         if headless:
             options.add_argument('--headless')
 
         logging.info('Loading undetected Chrome')
         self.browser = uc.Chrome(
-            # use_subprocess=True,
-            service=service,
-            options=options,  
+            options=options,
             headless=headless,
-            # version_main=112,
-            
-            # version_main=90,
-            # patcher_force_close=True
+            version_main=112
         )
-
-
         self.browser.set_page_load_timeout(30)
+        logging.info('Loaded Undetected chrome')
         logging.info('Opening chatgpt')
 
         # Retry mechanism for opening the ChatGPT page
@@ -107,15 +79,12 @@ class ChatGPT_Client:
                 logging.info('Successfully opened ChatGPT')
 
                 # Wait for the login button to appear
-                # self.pass_verification()
-
                 WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
                 logging.info('Login button is present')
 
                 break  # If successful, break the loop
-
             except Exception as e:
-                logging.error(f'Failed to open ChatGPT on attempt {i+1}')
+                logging.error(f'Failed to open ChatGPT on attempt {i+1}: {e}')
                 if i == 2:  # If this was the last attempt, return
                     return
                 time.sleep(5)  # Wait before trying again
@@ -336,7 +305,6 @@ class ChatGPT_Client:
         Returns:
             str: The generated answer.
         '''
-        WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.TAG_NAME, 'textarea')))
         text_area = self.browser.find_element(By.TAG_NAME, 'textarea')
         for each_line in question.split('\n'):
             text_area.send_keys(each_line)
