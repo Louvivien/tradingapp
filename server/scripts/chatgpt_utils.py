@@ -90,7 +90,7 @@ class ChatGPT_Client:
                 logging.info('Successfully opened ChatGPT')
 
                 # Wait for the login button to appear
-                self.pass_verification()
+                # self.pass_verification()
 
                 WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
                 logging.info('Login button is present')
@@ -104,7 +104,7 @@ class ChatGPT_Client:
                 time.sleep(5)  # Wait before trying again
 
         if not cold_start:
-            # self.pass_verification()
+            self.pass_verification()
             self.login(username, password)
         logging.info('ChatGPT is ready to interact')
         time.sleep(2)
