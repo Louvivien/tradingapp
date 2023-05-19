@@ -10,6 +10,7 @@ from selenium.webdriver.common.keys import Keys
 import selenium.common.exceptions as Exceptions
 from selenium.webdriver.support import expected_conditions as EC
 
+from selenium.webdriver.support.ui import WebDriverWait
 
 
 
@@ -44,7 +45,7 @@ class ChatGPT_Client:
     reset_xq    = '//a[text()="New chat"]'
     regen_xq    = '//div[text()="Regenerate response"]'
 
-    
+
     def __init__(
         self,
         username :str,
@@ -77,11 +78,9 @@ class ChatGPT_Client:
                 self.browser.get('https://chat.openai.com/auth/login?next=/chat')
                 logging.info('Successfully opened ChatGPT')
 
-                # Check if login page is present
-                if not self.check_login_page():
-                    logging.info('Login page is not present, refreshing...')
-                    self.browser.refresh()
-                    time.sleep(5)  # Wait for the page to load
+                # Wait for the login button to appear
+                WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
+                logging.info('Login button is present')
 
                 break  # If successful, break the loop
             except Exception as e:
@@ -95,6 +94,7 @@ class ChatGPT_Client:
             self.login(username, password)
         logging.info('ChatGPT is ready to interact')
         time.sleep(2)
+
 
 
 
