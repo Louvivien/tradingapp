@@ -1,3 +1,5 @@
 undetected_chromedriver
 selenium
 webdriver-manager
+requests
+socket

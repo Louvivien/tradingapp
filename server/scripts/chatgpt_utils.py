@@ -30,7 +30,7 @@ logging.basicConfig(
 
 def is_proxy_working(proxy_ip, proxy_port):
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(5)  # Set a timeout for the connection attempt
+    sock.settimeout(5)  
     try:
         logging.info(f"Attempting to connect to proxy {proxy_ip}:{proxy_port}...")
         sock.connect((proxy_ip, int(proxy_port)))
@@ -158,6 +158,12 @@ class ChatGPT_Client:
                 logging.error(f'Failed to open ChatGPT on attempt {i+1}')
                 logging.info("Page content:")
                 logging.info(self.browser.page_source)
+                # Check if "Sorry, you have been blocked" is present in the page source
+                if "Sorry, you have been blocked" in self.browser.page_source:
+                    logging.info("Blocked by the server, switching proxy and retrying...")
+                    self.switch_proxy()
+                    continue
+
                 if i == 2:  # If this was the last attempt, return
                     return
                 time.sleep(5)  # Wait before trying again
@@ -255,11 +261,11 @@ class ChatGPT_Client:
         '''
         for i in range(3):  # Try 3 times
             try:
-                # Check if "Sorry, you have been blocked" is present in the page source
-                if "Sorry, you have been blocked" in self.browser.page_source:
-                    logging.info("Blocked by the server, switching proxy and retrying...")
-                    self.switch_proxy()
-                    continue
+                # # Check if "Sorry, you have been blocked" is present in the page source
+                # if "Sorry, you have been blocked" in self.browser.page_source:
+                #     logging.info("Blocked by the server, switching proxy and retrying...")
+                #     self.switch_proxy()
+                #     continue
 
                 WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
 
