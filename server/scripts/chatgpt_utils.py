@@ -126,7 +126,8 @@ class ChatGPT_Client:
                 time.sleep(1)
 
                 # Print the page content for debugging
-                # print(self.browser.page_source)
+                print("Page content:")
+                print(self.browser.page_source)
 
 
                 # Wait for the login button to appear
@@ -203,7 +204,8 @@ class ChatGPT_Client:
         for i in range(3):  # Try 3 times
             try:
                 # Wait for the login button to appear
-                # print(self.browser.page_source)
+                print("Page content:")
+                print(self.browser.page_source)
 
                 WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.XPATH, self.login_xq)))
 
