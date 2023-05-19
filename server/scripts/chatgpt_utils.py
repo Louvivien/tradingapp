@@ -64,7 +64,7 @@ class ChatGPT_Client:
         options = uc.ChromeOptions()
         # options.add_argument('--incognito')
 
-        # options.binary_location = '/opt/render/.local/share/undetected_chromedriver/undetected_chromedriver'
+        options.binary_location = '/opt/render/.local/share/undetected_chromedriver/undetected_chromedriver'
 
         
         service = Service(ChromeDriverManager().install())
@@ -92,7 +92,7 @@ class ChatGPT_Client:
             headless=headless,
             # version_main=112,
             
-            version_main=90,
+            # version_main=90,
             patcher_force_close=True
         )
 
