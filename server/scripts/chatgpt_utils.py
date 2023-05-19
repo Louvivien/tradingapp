@@ -9,7 +9,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 import selenium.common.exceptions as Exceptions
 from selenium.webdriver.support import expected_conditions as EC
-
 from selenium.webdriver.support.ui import WebDriverWait
 
 
@@ -50,7 +49,7 @@ class ChatGPT_Client:
         self,
         username :str,
         password :str,
-        headless :bool = True,
+        headless :bool = False,
         cold_start :bool = False,
         verbose :bool = False
     ):
@@ -305,6 +304,7 @@ class ChatGPT_Client:
         Returns:
             str: The generated answer.
         '''
+        WebDriverWait(self.browser, 10).until(EC.presence_of_element_located((By.TAG_NAME, 'textarea')))
         text_area = self.browser.find_element(By.TAG_NAME, 'textarea')
         for each_line in question.split('\n'):
             text_area.send_keys(each_line)
