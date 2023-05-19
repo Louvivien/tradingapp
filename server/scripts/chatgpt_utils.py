@@ -166,7 +166,7 @@ class ChatGPT_Client:
 
                 if i == 9:  # If this was the last attempt, return
                     raise Exception("No working proxy found.")
-                time.sleep(5)  # Wait before trying again
+                break
 
         if not cold_start:
             self.pass_verification()
