@@ -140,7 +140,7 @@ class ChatGPT_Client:
         logging.info('Opening chatgpt')
 
         # Retry mechanism for opening the ChatGPT page
-        for i in range(3):  # Try 3 times
+        for i in range(10):  # Try 3 times
             try:
                 self.browser.get('https://chat.openai.com/auth/login?next=/chat')
 
@@ -164,8 +164,9 @@ class ChatGPT_Client:
                     self.switch_proxy()
                     continue
 
-                if i == 2:  # If this was the last attempt, return
-                    return
+                if i == 9:  # If this was the last attempt, return
+                    raise Exception("No working proxy found.")
+
                 time.sleep(5)  # Wait before trying again
 
         if not cold_start:
@@ -186,7 +187,7 @@ class ChatGPT_Client:
             None
         '''
         proxies = get_proxies()
-        
+
         global working_proxy
         for proxy in proxies:
             if proxy != working_proxy and is_proxy_working(proxy["ip"], proxy["port"]):
