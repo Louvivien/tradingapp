@@ -147,24 +147,36 @@ exports.createCollaborative = async (req, res) => {
               fullMessage += message;
             }).on('end', () => {
 
+
               let lines = fullMessage.split('\n');
               let doneIndex = lines.findIndex(line => line.trim() === 'data: [DONE]');
-              // console.log('doneIndex', doneIndex);
+              console.log('doneIndex', doneIndex);
+              
+              let dataLine;
+              
               if (doneIndex !== -1 && doneIndex > 0) {
-                let dataLine = lines[doneIndex - 2];
-                // console.log('dataLine', dataLine);
-                fullMessage = dataLine.replace('data: ', '');
-                const contentStartIndex = fullMessage.indexOf('"content"');
-                const contentEndIndex = fullMessage.indexOf('"status"');
-                const content = fullMessage.substring(contentStartIndex, contentEndIndex);
-                // console.log('content', content);
-                const partsStartIndex = content.indexOf('"parts":');
-                const partsEndIndex = content.indexOf(']}');
-                const partsArray = content.substring(partsStartIndex, partsEndIndex);
-                // console.log('partsArray', partsArray);
-                const result = partsArray.replace(/\\"/g, '"').replace(/\\n/g, '\n');
-                fullMessage = result;
+                dataLine = lines[doneIndex - 2];
+              } else {
+                dataLine = lines[lines.length - 2]; // get second-to-last line if 'data: [DONE]' not found
               }
+              
+              console.log('dataLine', dataLine);
+              
+              fullMessage = dataLine.replace('data: ', '');
+              const contentStartIndex = fullMessage.indexOf('"content"');
+              const contentEndIndex = fullMessage.indexOf('"status"');
+              const content = fullMessage.substring(contentStartIndex, contentEndIndex);
+              
+              const partsStartIndex = content.indexOf('"parts":');
+              const partsEndIndex = content.indexOf(']}');
+              const partsArray = content.substring(partsStartIndex, partsEndIndex);
+              
+              const result = partsArray.replace(/\\"/g, '"').replace(/\\n/g, '\n');
+              fullMessage = result;
+              
+
+
+
               console.log('fullMessage', '\n'+fullMessage);
               resolve(fullMessage);
             }).on('error', reject);
@@ -292,46 +304,43 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID) => {
     console.log('numberOfOrders', numberOfOrders);
 
     const alpacaConfig = await setAlpaca(UserID);
-    const apiUrl = alpacaConfig.apiURL;
+    const alpacaApi = new Alpaca(alpacaConfig);
 
     // Function to get the orders
     const getOrders = async () => {
-      const ordersResponse = await axios.get(`${apiUrl}/v2/orders`, {
-        headers: {
-          'APCA-API-KEY-ID': alpacaConfig.keyId,
-          'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-        },
-        params: {
-          limit: numberOfOrders,
-        },
-      });
-      return ordersResponse;
+      const ordersResponse = alpacaApi.getOrders({
+        limit: numberOfOrders,
+        nested: true  
+       });
+    
+      console.log('ordersResponse', ordersResponse.data);
+
+    
+      // Check if all orders are closed
+      const filledOrders = ordersResponse.data.filter(order => order.filled_qty !== '0');
+    
+      if (!filledOrders || filledOrders.length !== numberOfOrders) {
+        // If not all orders are closed or not all orders have been filled, throw an error to trigger a retry
+        throw new Error("Not all orders are closed or filled yet.");
+      }
+    
+      return filledOrders;
     };
+    
 
     let ordersResponse;
     try {
-      ordersResponse = await retry(getOrders, 3, 2000);
+      ordersResponse = await retry(getOrders, 10, 4000);
     } catch (error) {
       console.error(`Error: ${error}`);
       throw error;
     }
 
-    const lastOrders = ordersResponse.data.slice(-numberOfOrders);
-    console.log('lastOrders', lastOrders);
+
 
     const orderSymbols = orders.map(order => order.symbol);
     console.log('orderSymbols:', orderSymbols);
 
-    const checkOrders = () => {
-      for (const order of lastOrders) {
-        if (order.status !== 'closed' || !orderSymbols.includes(order.symbol)) {
-          throw new Error("order not filled yet or symbol not found");
-        }
-      }
-    };
-
-    // Retry the checkOrders function 3 times if it throws an error
-    await retry(checkOrders, 3, 2000);
 
     // Create an object to store orders by symbol
     const ordersBySymbol = {};
@@ -339,6 +348,8 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID) => {
     ordersResponse.data.forEach((order) => {
       if (order.side === 'buy' && !ordersBySymbol[order.symbol]) {
         ordersBySymbol[order.symbol] = order;
+        ordersBySymbol[order.avgCost] = order.filled_avg_price;
+        ordersBySymbol[order.filled_qty] = order.filled_avg_price;
       }
     });
 
