@@ -123,13 +123,22 @@ exports.createCollaborative = async (req, res) => {
 
               let lines = fullMessage.split('\n');
               let doneIndex = lines.findIndex(line => line.trim() === 'data: [DONE]');
+              // console.log('doneIndex', doneIndex);
               if (doneIndex !== -1 && doneIndex > 0) {
                 let dataLine = lines[doneIndex - 2];
-                let dataObj = JSON.parse(dataLine.replace('data: ', ''));
-                fullMessage = dataObj.message.content.parts[0];
+                // console.log('dataLine', dataLine);
+                fullMessage = dataLine.replace('data: ', '');
+                const contentStartIndex = fullMessage.indexOf('"content"');
+                const contentEndIndex = fullMessage.indexOf('"status"');
+                const content = fullMessage.substring(contentStartIndex, contentEndIndex);
+                // console.log('content', content);
+                const partsStartIndex = content.indexOf('"parts":');
+                const partsEndIndex = content.indexOf(']}');
+                const partsArray = content.substring(partsStartIndex, partsEndIndex);
+                // console.log('partsArray', partsArray);
+                const result = partsArray.replace(/\\"/g, '"').replace(/\\n/g, '\n');
+                fullMessage = result;
               }
-              
-
               console.log('fullMessage', '\n'+fullMessage);
               resolve(fullMessage);
             }).on('error', reject);
