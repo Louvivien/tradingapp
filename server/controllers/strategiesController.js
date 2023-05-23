@@ -292,7 +292,7 @@ exports.createCollaborative = async (req, res) => {
         // Filter out any null values
         orders = orders.filter(order => order !== null);
         //add to DB
-        this.addPortfolio(strategy, strategyName, orders, UserID);
+        // this.addPortfolio(strategy, strategyName, orders, UserID);
         // Once all orders have been processed, send the response
         return res.status(200).json({
           status: "success",
