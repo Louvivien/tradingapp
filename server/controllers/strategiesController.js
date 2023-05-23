@@ -80,9 +80,10 @@ exports.createCollaborative = async (req, res) => {
   return new Promise(async (resolve, reject) => {
     try {
 
-      // console.log('req.body', req.body);
+      // console.log ('req.body', req.body);
       let input = req.body.collaborative;
-      let UserID = req.body.UserID;
+      let UserID = req.body.userID;
+      // console.log ('UserID', UserID);
       let strategyName = req.body.strategyName;
 
 
@@ -287,24 +288,34 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID) => {
   console.log('orders', orders);
   console.log('UserID', UserID);
   try {
-    // Get the number of different orders placed by the strategy
     const numberOfOrders = orders.length;
     console.log('numberOfOrders', numberOfOrders);
 
-    // Call the Alpaca API to get the last X orders filled
     const alpacaConfig = await setAlpaca(UserID);
     const apiUrl = alpacaConfig.apiURL;
-    const ordersResponse = await axios.get(`${apiUrl}/v2/orders`, {
-      headers: {
-        'APCA-API-KEY-ID': alpacaConfig.keyId,
-        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-      },
-      params: {
-        limit: numberOfOrders,
-      },
-    });
 
-    // Check if all orders are filled
+    // Function to get the orders
+    const getOrders = async () => {
+      const ordersResponse = await axios.get(`${apiUrl}/v2/orders`, {
+        headers: {
+          'APCA-API-KEY-ID': alpacaConfig.keyId,
+          'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+        },
+        params: {
+          limit: numberOfOrders,
+        },
+      });
+      return ordersResponse;
+    };
+
+    let ordersResponse;
+    try {
+      ordersResponse = await retry(getOrders, 3, 2000);
+    } catch (error) {
+      console.error(`Error: ${error}`);
+      throw error;
+    }
+
     const lastOrders = ordersResponse.data.slice(-numberOfOrders);
     console.log('lastOrders', lastOrders);
 
@@ -320,7 +331,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID) => {
     };
 
     // Retry the checkOrders function 3 times if it throws an error
-    await retry(checkOrders, 3);
+    await retry(checkOrders, 3, 2000);
 
     // Create an object to store orders by symbol
     const ordersBySymbol = {};
