@@ -1,3 +1,7 @@
+# I was trying to us this: https://github.com/Louvivien/ChatGPT_Automation
+# but i get blocked
+
+
 '''Class definition for ChatGPT_Client'''
 
 import logging

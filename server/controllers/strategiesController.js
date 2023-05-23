@@ -3,13 +3,16 @@ const Stock = require("../models/stockModel");
 const setAlpaca = require('../config/alpaca');
 const data = require("../config/stocksData");
 const Alpaca = require('@alpacahq/alpaca-trade-api');
-const Axios = require("axios");
+const axios = require("axios");
 const moment = require('moment');
 const { spawn } = require('child_process');
+const { Transform } = require('stream');
+
 
 
 
 // // Mock the Alpaca client when market is closed:
+
 // const Mock = require('jest-mock');
 // const Alpaca = Mock.fn(() => ({
 //   getClock: Mock.fn(() => Promise.resolve({ is_open: true, next_open: '2023-05-14T13:30:00Z' })),
@@ -20,36 +23,35 @@ const { spawn } = require('child_process');
 // }));
 
 
+// Call a Python script
 
+// async function runPythonScript(input) {
+//   return new Promise((resolve, reject) => {
+//     let prompt = input;
+//     // console.log('prompt', prompt);
 
+//     let login = process.env.OPENAI_API_LOGIN;
+//     let password = process.env.OPENAI_API_PASSWORD;
 
-async function runPythonScript(input) {
-  return new Promise((resolve, reject) => {
-    let prompt = input;
-    // console.log('prompt', prompt);
+//     let python_process = spawn('python3', ['scripts/chatgpt.py', prompt, login, password]);
+//     let python_output = "";
 
-    let login = process.env.OPENAI_API_LOGIN;
-    let password = process.env.OPENAI_API_PASSWORD;
-    
-    let python_process = spawn('python3', ['scripts/chatgpt.py', prompt, login, password]);
-    let python_output = "";
-    
-    python_process.stdout.on('data', (data) => {
-      console.log(`stdout: ${data}`);
-      python_output += data.toString();
-    });
-    
-    python_process.stderr.on('data', (data) => {
-      console.error(`stderr: ${data}`);
-    });
-    
-    python_process.on('close', (code) => {
-      console.log(`child process exited with code ${code}`);
-      // console.log(`Script output: ${python_output}`);
-      resolve(python_output);
-    });
-  });
-}
+//     python_process.stdout.on('data', (data) => {
+//       console.log(`stdout: ${data}`);
+//       python_output += data.toString();
+//     });
+
+//     python_process.stderr.on('data', (data) => {
+//       console.error(`stderr: ${data}`);
+//     });
+
+//     python_process.on('close', (code) => {
+//       console.log(`child process exited with code ${code}`);
+//       // console.log(`Script output: ${python_output}`);
+//       resolve(python_output);
+//     });
+//   });
+// }
 
 
 
@@ -64,63 +66,116 @@ exports.createCollaborative = async (req, res) => {
       if (/Below is a trading[\s\S]*strategy does\?/.test(input)) {
         input = input.replace(/Below is a trading[\s\S]*strategy does\?/, "");
       }
-      async function extractGPT() {
-        let python_output = await runPythonScript (
-          process.env.Collaborative_Prompt1+'\n\n'+input
-        );
 
-        console.log('python_output:'+'\n\n'+python_output);
-        return python_output.toString();
-      }
-      
-      //extract json
-      let parsedJson = await extractGPT().then(python_output => { 
-        let jsonStart = python_output.indexOf('[');
-        let jsonEnd = python_output.lastIndexOf(']') + 1;
-        let json1 = python_output.slice(jsonStart, jsonEnd);
-      
-        //clean json
-        function fixUnfinishedJson(json1) {
-          if (json1.trim() === '') {
-            console.error('JSON string is empty');
-            return null;
+
+
+      //Function to call ChatGPT
+      const extractGPT = async () => {
+        const stream = new Transform({
+          transform(chunk, encoding, callback) {
+            this.push(chunk);
+            callback();
           }
-          try {
-            JSON.parse(json1);
-            console.log('JSON is OK');
-            return json1;
-          } catch (e) {
-            console.error('Error parsing JSON:', e);
-            // If the JSON is not properly formatted, add a closing bracket and try again
-            if (json1[json1.length - 1] !== ']') {
-              console.warn('JSON string does not end with a closing bracket. Adding a closing bracket and trying again.');
-              json1 += ']';
-              try {
-                JSON.parse(json1);
-                console.log('JSON is OK');
-                return json1;
-              } catch (e) {
-                console.error('Error parsing JSON:', e);
-                return null;
+        });
+      
+        try {
+          console.log('prompt:', '\n'+process.env.Collaborative_Prompt1+'\n\n'+input);
+          const response = await axios({
+            method: 'post',
+            url: 'https://gptrouter-2yszjm3tda-od.a.run.app/api/conversation',
+            headers: {
+              'Authorization': process.env.OPENAI_API_AUTHORIZATION,
+              'Content-Type': 'application/json'
+            },
+            data: {
+              "action": "next",
+              "messages": [
+                {
+                  "id": "cd465ab7-3ee4-40e7-8e48-ade9926ad68e",
+                  "role": "user",
+                  "content": {
+                    "content_type": "text",
+                    "parts": [
+                      process.env.Collaborative_Prompt1+'\n\n'+input
+                    ]
+                  }
+                }
+              ],
+              "parent_message_id": "572aca1b-59e5-4262-85b6-b258fa5a38b8",
+              "model": "gpt-4-plugins",
+              "temperature": 0,
+              "stream": "false",
+              "plugin_ids": [
+                "plugin-8701f253-5910-4d4c-8057-8265b1ec587e",
+                "plugin-f4c74dea-7bee-4f77-9717-34668bbd05b9",
+                "plugin-ec68cb54-acee-4330-8d94-f97b8347d525"
+              ]
+            },
+            responseType: 'stream'
+          });
+      
+          let fullMessage = '';
+          return new Promise((resolve, reject) => {
+            response.data.pipe(stream).on('data', chunk => {
+              const message = chunk.toString();
+              fullMessage += message;
+            }).on('end', () => {
+
+              let lines = fullMessage.split('\n');
+              let doneIndex = lines.findIndex(line => line.trim() === 'data: [DONE]');
+              if (doneIndex !== -1 && doneIndex > 0) {
+                let dataLine = lines[doneIndex - 2];
+                let dataObj = JSON.parse(dataLine.replace('data: ', ''));
+                fullMessage = dataObj.message.content.parts[0];
               }
-            }
-            return null;
-          }
+              
+
+              console.log('fullMessage', '\n'+fullMessage);
+              resolve(fullMessage);
+            }).on('error', reject);
+          });
+        } catch (error) {
+          console.error(error);
         }
+      };
       
-        let fixedJson = fixUnfinishedJson(json1);
-        if (fixedJson) {
-          let parsedJson = JSON.parse(fixedJson);
-          console.log('parsedJson', parsedJson);
-          return parsedJson;
-        }
-      }).catch(error => {
+      // Function to parse the JSON data
+      const parseJsonData = (fullMessage) => {
+
+      let jsonStart = fullMessage.indexOf('```json\n') + 8;
+      let jsonEnd = fullMessage.indexOf('\n```', jsonStart);
+      if (jsonStart !== -1 && jsonEnd !== -1) {
+        let jsonString = fullMessage.substring(jsonStart, jsonEnd);
+        let jsonData = JSON.parse(jsonString);
+        return jsonData;
+      } else {      
+        console.error('No JSON in the response')
+      }
+            };
+
+      // async function extractGPT() {
+      //   let python_output = await runPythonScript (
+      //     process.env.Collaborative_Prompt1+'\n\n'+input
+      //   );
+
+      //   console.log('python_output:'+'\n\n'+python_output);
+      //   return python_output.toString();
+      // }
+      
+
+      // Call ChatGPT and parse the data
+      let parsedJson;
+      try {
+        parsedJson = await extractGPT().then(fullMessage => {
+          return parseJsonData(fullMessage);
+        });
+      } catch (error) {
         console.error('Error in extractGPT:', error);
-        return [];
-      });
-      
-      
-      
+        return res.status(400).json({
+          status: "fail",
+          message: error.message,
+        });
+      }
 
 
       //send it to trading platform
@@ -136,7 +191,7 @@ exports.createCollaborative = async (req, res) => {
       let orderPromises = parsedJson.map(asset => {
         let symbol = asset['Asset ticker']
         let qty = asset['Quantity']
-        
+
         if (qty > 0) {
           return alpacaApi.createOrder({
             symbol: symbol,
@@ -156,7 +211,7 @@ exports.createCollaborative = async (req, res) => {
           return null;
         }
       })
-      
+
       Promise.all(orderPromises).then(orders => {
         // Filter out any null values
         orders = orders.filter(order => order !== null);
@@ -172,17 +227,17 @@ exports.createCollaborative = async (req, res) => {
           message: `Something unexpected happened: ${error.message}`,
         });
       });
-      
 
 
 
-} catch (error) {
-  console.error(`Error: ${error}`);
-  return res.status(200).json({
-    status: "fail",
-    message: `Something unexpected happened: ${error.message}`,
-  });
-}
+
+    } catch (error) {
+      console.error(`Error: ${error}`);
+      return res.status(200).json({
+        status: "fail",
+        message: `Something unexpected happened: ${error.message}`,
+      });
+    }
 
   });
 }
