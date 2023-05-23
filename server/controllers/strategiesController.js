@@ -11,7 +11,6 @@ const { Transform } = require('stream');
 
 
 
-
 // // Mock the Alpaca client when market is closed:
 
 // const Mock = require('jest-mock');
@@ -56,23 +55,38 @@ const { Transform } = require('stream');
 
 
 
-      // Function to retry a promise-based function
-      const retry = (fn, retriesLeft = 5, interval = 1000) => {
-        return new Promise((resolve, reject) => {
-          fn().then(resolve)
-            .catch((error) => {
-              setTimeout(() => {
-                if (retriesLeft === 1) {
-                  // reject('maximum retries exceeded');
-                  reject(error);
-                } else {
-                  // Try again with one less retry attempt left
-                  retry(fn, retriesLeft - 1, interval).then(resolve, reject);
-                }
-              }, interval);
-            });
-        });
-      };
+axios.interceptors.request.use((request) => {
+  let data = request.data ? JSON.stringify(request.data) : '';
+  let headers = '';
+  for (let header in request.headers) {
+    headers += `-H '${header}: ${request.headers[header]}' `;
+  }
+  console.log(`curl -X ${request.method.toUpperCase()} '${request.url}' ${headers}${data ? ` -d '${data}'` : ''}`+'\n');
+  return request;
+});
+
+
+
+
+// Function to retry a promise-based function
+const retry = (fn, retriesLeft = 5, interval = 1000) => {
+  return new Promise((resolve, reject) => {
+    fn().then(resolve)
+      .catch((error) => {
+        setTimeout(() => {
+          if (retriesLeft === 1) {
+            // reject('maximum retries exceeded');
+            reject(error);
+          } else {
+            console.log(`Retrying... attempts left: ${retriesLeft - 1}`); // Log message at each retry
+            // Try again with one less retry attempt left
+            retry(fn, retriesLeft - 1, interval).then(resolve, reject);
+          }
+        }, interval);
+      });
+  });
+};
+
 
 
 
@@ -105,7 +119,7 @@ exports.createCollaborative = async (req, res) => {
         });
       
         try {
-          console.log('prompt:', '\n'+process.env.Collaborative_Prompt1+'\n\n'+input);
+          // console.log('prompt:', '\n'+process.env.Collaborative_Prompt1+'\n\n'+input);
           const response = await axios({
             method: 'post',
             url: process.env.GPTPROXYSERVER+"/api/conversation",
@@ -234,7 +248,6 @@ exports.createCollaborative = async (req, res) => {
       const alpacaApi = new Alpaca(alpacaConfig);
       console.log("connected to alpaca");
 
-
       let orderPromises = parsedJson.map(asset => {
         let symbol = asset['Asset ticker'];
         if (!/^[A-Za-z]+$/.test(symbol)) {
@@ -244,17 +257,25 @@ exports.createCollaborative = async (req, res) => {
       
         if (qty > 0) {
           return retry(() => {
-            return alpacaApi.createOrder({
-              symbol: symbol,
-              qty: qty,
-              side: 'buy',
-              type: 'market',
-              time_in_force: 'gtc'
+            return axios({
+              method: 'post',
+              url: alpacaConfig.apiURL+'/v2/orders',
+              headers: {
+                'APCA-API-KEY-ID': alpacaConfig.keyId,
+                'APCA-API-SECRET-KEY': alpacaConfig.secretKey
+              },
+              data: {
+                symbol: symbol,
+                qty: qty,
+                side: 'buy',
+                type: 'market',
+                time_in_force: 'gtc'
+              }
             }).then((response) => {
               console.log(`Order of ${qty} shares for ${symbol} has been placed.`)
               return { qty: qty, symbol: symbol };
             });
-          }).catch((error) => {
+          }, 5, 2000).catch((error) => { // Retry up to 5 times, with a delay of 2 seconds between attempts
             console.error(`Failed to place order for ${symbol}: ${error}`)
             return null; 
           })
@@ -263,17 +284,21 @@ exports.createCollaborative = async (req, res) => {
           return null;
         }
       })
+      
+     
+      
 
       Promise.all(orderPromises).then(orders => {
         // Filter out any null values
         orders = orders.filter(order => order !== null);
         //add to DB
-        // this.addPortfolio(strategy, strategyName, orders, UserID);
+        this.addPortfolio(strategy, strategyName, orders, UserID);
         // Once all orders have been processed, send the response
         return res.status(200).json({
           status: "success",
           orders: orders, 
         });
+
       }).catch(error => {
         console.error(`Error: ${error}`);
         return res.status(200).json({
@@ -308,15 +333,24 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID) => {
 
     // Function to get the orders
     const getOrders = async () => {
-      const ordersResponse = alpacaApi.getOrders({
-        limit: numberOfOrders,
-        nested: true  
-       });
+      const ordersResponse = await axios({
+        method: 'get',
+        url: alpacaConfig.apiURL+'/v2/orders',
+        headers: {
+          'APCA-API-KEY-ID': alpacaConfig.keyId,
+          'APCA-API-SECRET-KEY': alpacaConfig.secretKey
+        },
+        params: {
+          limit: numberOfOrders,
+          status: 'all',
+          nested: true  
+        }
+      });
     
-      console.log('ordersResponse', ordersResponse.data);
+      // console.log('ordersResponse', ordersResponse.data);
 
     
-      // Check if all orders are closed
+      // Check if all orders are filled
       const filledOrders = ordersResponse.data.filter(order => order.filled_qty !== '0');
     
       if (!filledOrders || filledOrders.length !== numberOfOrders) {
