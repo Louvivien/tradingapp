@@ -82,7 +82,7 @@ exports.createCollaborative = async (req, res) => {
           console.log('prompt:', '\n'+process.env.Collaborative_Prompt1+'\n\n'+input);
           const response = await axios({
             method: 'post',
-            url: 'https://gptrouter-2yszjm3tda-od.a.run.app/api/conversation',
+            url: process.env.GPTPROXYSERVER+"/api/conversation",
             headers: {
               'Authorization': process.env.OPENAI_API_AUTHORIZATION,
               'Content-Type': 'application/json'
@@ -135,7 +135,7 @@ exports.createCollaborative = async (req, res) => {
             }).on('error', reject);
           });
         } catch (error) {
-          console.error(error);
+          console.error('Request Error: check keys and cookies');
         }
       };
       
