@@ -223,7 +223,7 @@ exports.createCollaborative = async (req, res) => {
 
 
       let orderPromises = parsedJson.map(asset => {
-        let symbol = asset['Asset ticker'].substring(0, 3)
+        let symbol = asset['Asset ticker'].match(/^[A-Za-z]+/)[0];
         let qty = asset['Quantity']
       
         if (qty > 0) {
