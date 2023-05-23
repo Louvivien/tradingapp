@@ -32,12 +32,13 @@ const StyledPaper = styled(Paper)(({ theme }) => ({
 
 
 const FixedHeightPaper = styled(StyledPaper)({
-  height: 350,
+  height: 450,
 });
 
 
 const Strategies = () => {
   const [collaborative, setcollaborative] = useState("");
+  const [strategyName, setstrategyName] = useState("");
   const [responseReceived, setResponseReceived] = useState(false);
   const { userData, setUserData } = useContext(UserContext);
   const [output, setOutput] = useState(""); 
@@ -54,12 +55,12 @@ const Strategies = () => {
       "x-auth-token": userData.token,
     };
 
-    const prompt = {collaborative};
     const userID = userData.user.id;
     const url = config.base_url + "/api/strategies/collaborative/";
 
     try {
-      const response = await Axios.post(url, {collaborative, userID}, {headers});
+      console.log("About to send request:", url, {collaborative, userID, strategyName}, {headers});
+      const response = await Axios.post(url, {collaborative, userID, strategyName}, {headers});
     
       if (response.status === 200) {
         if (response.data.status === "success") {
@@ -90,16 +91,10 @@ const Strategies = () => {
       <br />
       <br />
 
-
       <FixedHeightPaper>
       <Box>
         <Title>Collaborative strategy</Title>
                 <Typography color="textSecondary" align="left">Add a collaborative strategy</Typography>
-
-
-
-
-
           {loading ? (
             <div> 
             <br />
@@ -137,11 +132,26 @@ const Strategies = () => {
               multiline
               rows={4}
               variant="outlined"
+              label="Paste your strategy here"
               value={collaborative}
               onChange={(e) => setcollaborative(e.target.value)}
               fullWidth
               margin="normal"
             />
+          <br />
+
+          <TextField
+                variant="outlined"
+                id="strategyName"
+                label="Give a name to your strategy"
+                name="strategyName"
+                value={strategyName}
+                onChange={(e) => setstrategyName(e.target.value)}
+
+                />
+          <br />
+          <br />
+
             <Button variant="contained" color="primary" className={styles.submit} onClick={handlecollaborativeSubmit}>
               Create this strategy
             </Button>

@@ -1,5 +1,6 @@
 const User = require("../models/userModel");
-const Stock = require("../models/stockModel");
+const Strategy = require("../models/strategyModel");
+const Portfolio = require("../models/portfolioModel");
 const setAlpaca = require('../config/alpaca');
 const data = require("../config/stocksData");
 const Alpaca = require('@alpacahq/alpaca-trade-api');
@@ -55,6 +56,26 @@ const { Transform } = require('stream');
 
 
 
+      // Function to retry a promise-based function
+      const retry = (fn, retriesLeft = 5, interval = 1000) => {
+        return new Promise((resolve, reject) => {
+          fn().then(resolve)
+            .catch((error) => {
+              setTimeout(() => {
+                if (retriesLeft === 1) {
+                  // reject('maximum retries exceeded');
+                  reject(error);
+                } else {
+                  // Try again with one less retry attempt left
+                  retry(fn, retriesLeft - 1, interval).then(resolve, reject);
+                }
+              }, interval);
+            });
+        });
+      };
+
+
+
 exports.createCollaborative = async (req, res) => {
   return new Promise(async (resolve, reject) => {
     try {
@@ -62,10 +83,14 @@ exports.createCollaborative = async (req, res) => {
       // console.log('req.body', req.body);
       let input = req.body.collaborative;
       let UserID = req.body.UserID;
+      let strategyName = req.body.strategyName;
+
 
       if (/Below is a trading[\s\S]*strategy does\?/.test(input)) {
         input = input.replace(/Below is a trading[\s\S]*strategy does\?/, "");
       }
+
+      let strategy = input;
 
 
 
@@ -198,22 +223,24 @@ exports.createCollaborative = async (req, res) => {
 
 
       let orderPromises = parsedJson.map(asset => {
-        let symbol = asset['Asset ticker']
+        let symbol = asset['Asset ticker'].substring(0, 3)
         let qty = asset['Quantity']
-
+      
         if (qty > 0) {
-          return alpacaApi.createOrder({
-            symbol: symbol,
-            qty: qty,
-            side: 'buy',
-            type: 'market',
-            time_in_force: 'gtc'
-          }).then((response) => {
-            console.log(`Order of ${qty} shares for ${symbol} has been placed.`)
-            // Return the quantity and symbol for the order
-            return { qty: qty, symbol: symbol };
+          return retry(() => {
+            return alpacaApi.createOrder({
+              symbol: symbol,
+              qty: qty,
+              side: 'buy',
+              type: 'market',
+              time_in_force: 'gtc'
+            }).then((response) => {
+              console.log(`Order of ${qty} shares for ${symbol} has been placed.`)
+              return { qty: qty, symbol: symbol };
+            });
           }).catch((error) => {
             console.error(`Failed to place order for ${symbol}: ${error}`)
+            return null; 
           })
         } else {
           console.log(`Quantity for ${symbol} is ${qty}. Order not placed.`);
@@ -224,10 +251,12 @@ exports.createCollaborative = async (req, res) => {
       Promise.all(orderPromises).then(orders => {
         // Filter out any null values
         orders = orders.filter(order => order !== null);
+        //add to DB
+        // this.addPortfolio(strategy, strategyName, orders, UserID);
         // Once all orders have been processed, send the response
         return res.status(200).json({
           status: "success",
-          orders: orders, // This will return the array of orders
+          orders: orders, 
         });
       }).catch(error => {
         console.error(`Error: ${error}`);
@@ -236,7 +265,6 @@ exports.createCollaborative = async (req, res) => {
           message: `Something unexpected happened: ${error.message}`,
         });
       });
-
 
 
 
@@ -249,4 +277,84 @@ exports.createCollaborative = async (req, res) => {
     }
 
   });
+}
+
+exports.addPortfolio = async (strategyinput, strategyName, orders, UserID) => {
+  console.log('strategyName', strategyName);
+  console.log('orders', orders);
+  console.log('UserID', UserID);
+  try {
+    // Get the number of different orders placed by the strategy
+    const numberOfOrders = orders.length;
+    console.log('numberOfOrders', numberOfOrders);
+
+    // Call the Alpaca API to get the last X orders filled
+    const alpacaConfig = await setAlpaca(UserID);
+    const apiUrl = alpacaConfig.apiURL;
+    const ordersResponse = await axios.get(`${apiUrl}/v2/orders`, {
+      headers: {
+        'APCA-API-KEY-ID': alpacaConfig.keyId,
+        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+      },
+      params: {
+        limit: numberOfOrders,
+      },
+    });
+
+    // Check if all orders are filled
+    const lastOrders = ordersResponse.data.slice(-numberOfOrders);
+    console.log('lastOrders', lastOrders);
+
+    const orderSymbols = orders.map(order => order.symbol);
+    console.log('orderSymbols:', orderSymbols);
+
+    const checkOrders = () => {
+      for (const order of lastOrders) {
+        if (order.status !== 'closed' || !orderSymbols.includes(order.symbol)) {
+          throw new Error("order not filled yet or symbol not found");
+        }
+      }
+    };
+
+    // Retry the checkOrders function 3 times if it throws an error
+    await retry(checkOrders, 3);
+
+    // Create an object to store orders by symbol
+    const ordersBySymbol = {};
+
+    ordersResponse.data.forEach((order) => {
+      if (order.side === 'buy' && !ordersBySymbol[order.symbol]) {
+        ordersBySymbol[order.symbol] = order;
+      }
+    });
+
+    console.log('ordersBySymbol:', ordersBySymbol);
+
+    // Create a new strategy
+    const strategy = new Strategy({
+      name: strategyName,
+      strategy: strategyinput, // Convert the strategy object to a string
+    });
+
+    // Save the strategy
+    await strategy.save();
+
+    // Create a new portfolio
+    const portfolio = new Portfolio({
+      name: strategyName,
+      strategy: strategy._id,
+      stocks: Object.values(ordersBySymbol).map(order => ({
+        symbol: order.symbol,
+        avgCost: order.filled_avg_price,
+        quantity: order.filled_qty,
+      })),
+    });
+
+    // Save the portfolio
+    await portfolio.save();
+
+    console.log(`Portfolio for strategy ${strategyName} has been created.`);
+  } catch (error) {
+    console.error(`Error: ${error}`);
+  }
 }

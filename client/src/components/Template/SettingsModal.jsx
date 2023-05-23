@@ -132,7 +132,7 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
                 autoComplete="Username"
                 value={userData.user.username}
               />
-              <TextField
+              {/* <TextField
                 variant="outlined"
                 margin="normal"
                 fullWidth
@@ -142,7 +142,7 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
                 name="balance"
                 autoComplete="balance"
                 value={userData.user.balance}
-              />
+              /> */}
                <TextField
                 variant="outlined"
                 margin="normal"
