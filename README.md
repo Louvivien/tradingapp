@@ -25,7 +25,7 @@ Devops: Github, Vercel, Render, Google Cloud Build
 
 Product Management: Productboard, Notion
 
-Project Managemen: Jira
+Project Management: Jira
 
 
 ## Installation
