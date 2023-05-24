@@ -71,7 +71,7 @@ exports.createCollaborative = async (req, res) => {
           // console.log('prompt:', '\n'+process.env.Collaborative_Prompt1+'\n\n'+input);
           const response = await axios({
             method: 'post',
-            url: process.env.GPTPROXYSERVER + "/api/conversation",
+            url: process.env.GPTSERVER + "/api/conversation",
             headers: {
               'Authorization': process.env.OPENAI_API_AUTHORIZATION,
               'Content-Type': 'application/json'
