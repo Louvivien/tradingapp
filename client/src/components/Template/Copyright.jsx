@@ -6,8 +6,8 @@ const Copyright = () => {
     <div>
       <Typography variant="body2" color="textSecondary" align="center">
         {"Copyright © "}
-        <Link color="inherit" href="https://github.com/Louvivien">
-          Louvivien
+        <Link color="inherit" href="https://github.com/Louvivien/tradingapp">
+          AI Trading App
         </Link>{" "}
         {new Date().getFullYear()}
         {"."}
