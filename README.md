@@ -45,7 +45,7 @@ here  /tradingapp/server/config/ you have an example file. Rename it .env and ch
 there /tradingapp/client/  you have an example file. Rename it .env and change the keys with yours
 
 
-## Deployement
+## Deployment
 The front is optimized to be deployed on Vercel. Don't forget to add env variables.
 
 The back is optimized to be deployed on Render. Don't forget to add env variables.
