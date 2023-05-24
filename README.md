@@ -55,14 +55,16 @@ export PATH="${PATH}:/opt/render/project/.render/chrome/opt/google/chrome" && ya
 
 ## To do
 
-Roadmap: [Productboard](https://roadmap.productboard.com/21c090eb-9351-42c4-a248-b59747aa299f) 
 
 Fix bugs
 
 Implement AI trading strategies
 
 
+## Links
 
+
+Roadmap: [Productboard](https://roadmap.productboard.com/21c090eb-9351-42c4-a248-b59747aa299f) 
 
 Discord: [Discord](https://discord.gg/Neu7KBrhV3) 
 
