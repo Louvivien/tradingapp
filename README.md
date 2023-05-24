@@ -5,7 +5,7 @@
 ## About
 Welcome to the AI Trading App!
 
-It can connect to Alpaca to get positions and orders, sell and buy stocks.
+It can connect to Alpaca to get positions and orders, sell and buy stocks.s
 It will implement AI strategies to trade.
 
 
@@ -16,6 +16,7 @@ Update: trailing orders removed
 
 ## Stack
 Backend: NodeJS with Python Scripts, Material 5
+
 Frontend: React
 
 Data: MongoDB
@@ -23,6 +24,7 @@ Data: MongoDB
 Devops: Github, Vercel, Render, Google Cloud Build
 
 Product Management: Productboard
+
 Project Managemen: Jira
 
 
