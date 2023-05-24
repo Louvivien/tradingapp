@@ -14,6 +14,17 @@ Credit for UI: [OktarianTB](https://github.com/OktarianTB/stock-trading-simulato
 
 Update: trailing orders removed
 
+## Stack
+Backend: NodeJS with Python Scripts, Material 5
+Frontend: React
+
+Data: MongoDB
+
+Devops: Github, Vercel, Render, Google Cloud Build
+
+Product Management: Productboard
+Project Managemen: Jira
+
 
 ## Installation
 Make sure you have NodeJS installed. Then install the required packages for the server with:
@@ -54,16 +65,12 @@ export PATH="${PATH}:/opt/render/project/.render/chrome/opt/google/chrome" && ya
 
 
 ## To do
-
-
 Fix bugs
 
 Implement AI trading strategies
 
 
 ## Links
-
-
 Roadmap: [Productboard](https://roadmap.productboard.com/21c090eb-9351-42c4-a248-b59747aa299f) 
 
 Discord: [Discord](https://discord.gg/Neu7KBrhV3) 
