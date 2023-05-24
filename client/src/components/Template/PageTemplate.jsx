@@ -84,9 +84,11 @@ const PageTemplate = () => {
   const [purchasedStocks, setPurchasedStocks] = useState([]);
   const [accountBalance, setAccountBalance] = useState([]);
   const [orderList, setOrderList] = useState([]);
+  const [portfolios, setPortfolios] = useState([]);
+
   
 
- 
+ //Function to get the list of purchased stocks from the server using Alpacas API
   const getPurchasedStocks = async () => {
     const url = config.base_url + `/api/stock/${userData.user.id}`;
     const headers = {
@@ -104,6 +106,7 @@ const PageTemplate = () => {
     }
   };
 
+   //Function to get the list of orders from the server using Alpacas API
   const getOrderList = async () => {
     const url = config.base_url + `/api/order/${userData.user.id}`;
     const headers = {
@@ -120,9 +123,30 @@ const PageTemplate = () => {
     }
   };
 
+
+  //Function to get the Strategy Portfolios from the server using MangoDB
+  // const getPortfolio  = async () => {
+  //   const url = config.base_url + `/api/strategies/portfolios/${userData.user.id}`;
+  //   const headers = {
+  //     "x-auth-token": userData.token,
+  //   };
+
+  //   const response = await Axios.get(url, {
+  //     headers,
+  //   });
+
+  //   if (response.data.status === "success") {
+  //     setPortfolios(response.data.orders);
+      
+  //   }
+  // };
+
+
+
   useEffect(() => {
     getPurchasedStocks();
     getOrderList();
+    // getPortfolio();
   }, []);
   
 
@@ -218,21 +242,31 @@ const PageTemplate = () => {
       <main className={styles.content}>
         <div className={styles.appBarSpacer} />
         {currentPage === "dashboard" && (
+
+            //we pass the data to the Dashboard component
           <Dashboard
             purchasedStocks={purchasedStocks}
             accountBalance={accountBalance}
             orderList={orderList}
+            // portfolios={portfolios}
           />
+
+
+
         )}
 
         {currentPage === "news" && <News />}
         {currentPage === "strategies" && <Strategies />}
         {currentPage === "search" && (
+
+
           <Search
             setPurchasedStocks={setPurchasedStocks}
             purchasedStocks={purchasedStocks}
             accountBalance={accountBalance}
           />
+
+
         )}
         {settingsOpen && <SettingsModal setSettingsOpen={setSettingsOpen} />}
       </main>

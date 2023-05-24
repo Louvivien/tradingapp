@@ -6,10 +6,10 @@ import TableCell from "@mui/material/TableCell";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Title from "../Template/Title.jsx";
-import SaleModal from "./SaleModal";
+import SaleModal from "./SaleModal.jsx";
 import styles from "./Dashboard.module.css";
 
-const Purchases = ({ purchasedStocks }) => {
+const Portfolios = ({ portfolios }) => {
   const [saleOpen, setSaleOpen] = useState(false);
   const [stock, setStock] = useState(undefined);
   
@@ -25,8 +25,21 @@ const Purchases = ({ purchasedStocks }) => {
 
   return (
     <React.Fragment>
+
       <div style={{ minHeight: "200px" }}>
-        <Title>Stocks in Your Portfolio</Title>
+        <Title>Strategies Portfolios</Title>
+
+        {/* get the portfolios data
+        for each strategy create a Table with :
+          <TableCell>Company Ticker</TableCell>
+              <TableCell>Name</TableCell>
+              <TableCell>Quantity</TableCell>
+              <TableCell>Price of Purchase</TableCell>
+              <TableCell>Purchase Total</TableCell>
+              <TableCell align="right">Current Price</TableCell>
+              <TableCell align="right">Current Total</TableCell>
+              <TableCell align="right">Difference</TableCell>  */}
+
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -40,15 +53,16 @@ const Purchases = ({ purchasedStocks }) => {
               <TableCell align="right">Difference</TableCell>
             </TableRow>
           </TableHead>
-          
           <TableBody>
-            {purchasedStocks.map((row) => {
+
+            {/* {purchasedStocks.map((row) => {
               const difference =
                 (row.currentPrice - row.purchasePrice) / row.currentPrice;
               const purchaseTotal =
                 Number(row.quantity) * Number(row.purchasePrice);
               const currentTotal =
                 Number(row.quantity) * Number(row.currentPrice);
+
               return (
                 <TableRow key={row.id}>
                   <TableCell>
@@ -93,16 +107,22 @@ const Purchases = ({ purchasedStocks }) => {
                   </TableCell>
                 </TableRow>
               );
-            })}
+            })} */}
+
           </TableBody>
+          
         </Table>
         {saleOpen && stock && (
           <SaleModal setSaleOpen={setSaleOpen} stock={stock} />
         )}
+
+
+
       </div>
+
     </React.Fragment>
   );
 };
 
-export default Purchases;
+export default Portfolios;
 

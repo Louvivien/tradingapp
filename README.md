@@ -52,6 +52,10 @@ The back is optimized to be deployed on Render
 
 
 ## To do
+
+Roadmap: [Productbard](https://roadmap.productboard.com/21c090eb-9351-42c4-a248-b59747aa299f) 
+
+
 Fix bugs
 
 Implement AI trading strategies

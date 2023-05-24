@@ -18,7 +18,7 @@ const portfolioSchema = new Schema({
     },
     avgCost: {
       type: Number,
-      required: true,
+      required: false,
     },
     quantity: {
       type: Number,
