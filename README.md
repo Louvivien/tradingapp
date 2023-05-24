@@ -5,7 +5,7 @@
 ## About
 Welcome to the AI Trading App!
 
-It can connect to Alpaca to get positions and orders, sell and buy stocks.s
+It can connect to Alpaca to get positions and orders, sell and buy stocks.
 It will implement AI strategies to trade.
 
 
