@@ -23,7 +23,7 @@ Data: MongoDB
 
 Devops: Github, Vercel, Render, Google Cloud Build
 
-Product Management: Productboard
+Product Management: Productboard, Notion
 
 Project Managemen: Jira
 
