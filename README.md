@@ -46,19 +46,26 @@ there /tradingapp/client/  you have an example file. Rename it .env and change t
 
 
 ## Deployement
-The front is optimized to be deployed on Vercel
+The front is optimized to be deployed on Vercel. Don't forget to add env variables.
 
-The back is optimized to be deployed on Render
+The back is optimized to be deployed on Render. Don't forget to add env variables.
+Web service → Python → Root Directory: ./server → Build Command: ./install_dependencies.sh → Start Command:
+export PATH="${PATH}:/opt/render/project/.render/chrome/opt/google/chrome" && yarn start
 
 
 ## To do
 
 Roadmap: [Productbard](https://roadmap.productboard.com/21c090eb-9351-42c4-a248-b59747aa299f) 
 
-
 Fix bugs
 
 Implement AI trading strategies
+
+
+
+
+Discord: [Discord](https://discord.gg/Neu7KBrhV3) 
+
 
 
 
