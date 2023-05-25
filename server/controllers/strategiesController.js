@@ -12,24 +12,24 @@ const crypto = require('crypto');
 
 
 
-// Debugging function to log all axios requests as curl commands
-axios.interceptors.request.use((request) => {
-  let data = request.data ? JSON.stringify(request.data) : '';
-  let headers = '';
-  for (let header in request.headers) {
-    headers += `-H '${header}: ${request.headers[header]}' `;
-  }
+// // Debugging function to log all axios requests as curl commands
+// axios.interceptors.request.use((request) => {
+//   let data = request.data ? JSON.stringify(request.data) : '';
+//   let headers = '';
+//   for (let header in request.headers) {
+//     headers += `-H '${header}: ${request.headers[header]}' `;
+//   }
 
-  let params = '';
-  if (request.params) {
-    params = Object.keys(request.params)
-      .map(key => `${key}=${encodeURIComponent(request.params[key])}`)
-      .join('&');
-  }
+//   let params = '';
+//   if (request.params) {
+//     params = Object.keys(request.params)
+//       .map(key => `${key}=${encodeURIComponent(request.params[key])}`)
+//       .join('&');
+//   }
 
-  console.log(`curl -X ${request.method.toUpperCase()} '${request.url}${params ? `?${params}` : ''}' ${headers}${data ? ` -d '${data}'` : ''}` + '\n');
-  return request;
-});
+//   console.log(`curl -X ${request.method.toUpperCase()} '${request.url}${params ? `?${params}` : ''}' ${headers}${data ? ` -d '${data}'` : ''}` + '\n');
+//   return request;
+// });
 
 
 
@@ -80,6 +80,8 @@ exports.createCollaborative = async (req, res) => {
 
         try {
           // console.log('prompt:', '\n'+process.env.Collaborative_Prompt1+'\n\n'+input);
+          console.log('Sending request to ChatGPT...');
+
           const response = await axios({
             method: 'post',
             url: process.env.GPTSERVER + "/api/conversation",
@@ -284,54 +286,122 @@ exports.createCollaborative = async (req, res) => {
 
   });
 
-
-
-}
-
-exports.deleteCollaborative = async (req, res) => {
-  try {
-    // Get the strategy ID from the request parameters
-    const strategyId = req.params.strategy;
-
-    // Find the strategy in the database
-    const strategy = await Strategy.findById(strategyId);
-
-    if (!strategy) {
-      return res.status(404).json({
-        status: "fail",
-        message: "Strategy not found",
-      });
-    }
-
-    // Find the portfolio in the database
-    const portfolio = await Portfolio.findOne({ strategy: strategy._id });
-
-    if (!portfolio) {
-      return res.status(404).json({
-        status: "fail",
-        message: "Portfolio not found",
-      });
-    }
-
-    // Delete the strategy
-    await Strategy.deleteOne({ _id: strategy._id });
-
-    // Delete the portfolio
-    await Portfolio.deleteOne({ strategy: strategy._id });
-
-    return res.status(200).json({
-      status: "success",
-      message: "Strategy and portfolio deleted successfully",
-    });
-  } catch (error) {
-    console.error(`Error deleting strategy and portfolio: ${error}`);
-    return res.status(500).json({
-      status: "fail",
-      message: "An error occurred while deleting the strategy and portfolio",
-    });
   }
-};
 
+
+  exports.deleteCollaborative = async (req, res) => {
+    console.log('deleting strategy');
+    try {
+      // Get the strategy ID from the request parameters
+      const strategyId = req.params.strategyId;
+      const UserID = req.params.userId;
+  
+      console.log('strategyId', strategyId);
+  
+      // Find the strategy in the database
+      const strategy = await Strategy.findOne({ strategy_id: strategyId });
+  
+      if (!strategy) {
+        return res.status(404).json({
+          status: "fail",
+          message: "Strategy not found",
+        });
+      }
+  
+      // Find the portfolio in the database
+      const portfolio = await Portfolio.findOne({ strategy_id: strategyId });
+  
+      if (!portfolio) {
+        return res.status(404).json({
+          status: "fail",
+          message: "Portfolio not found",
+        });
+      }
+  
+      // Delete the strategy
+      await Strategy.deleteOne({ strategy_id: strategyId })
+      .catch(error => {
+        console.error(`Error deleting strategy: ${error}`);
+        return res.status(500).json({
+          status: "fail",
+          message: "An error occurred while deleting the strategy",
+        });
+      });
+  
+      // Delete the portfolio
+      await Portfolio.deleteOne({ strategy_id: strategyId })
+      .catch(error => {
+        console.error(`Error deleting portfolio: ${error}`);
+        return res.status(500).json({
+          status: "fail",
+          message: "An error occurred while deleting the portfolio",
+        });
+      });
+  
+      // Send a sell order for all the stocks in the portfolio
+      const alpacaConfig = await setAlpaca(UserID);
+      const alpacaApi = new Alpaca(alpacaConfig);
+  
+      let sellOrderPromises = portfolio.stocks.map(stock => {
+        return alpacaApi.createOrder({
+          symbol: stock.symbol,
+          qty: stock.quantity,
+          side: 'sell',
+          type: 'market',
+          time_in_force: 'gtc'
+        }).then((response) => {
+          console.log(`Sell order of ${stock.quantity} shares for ${stock.symbol} has been placed. Order ID: ${response.client_order_id}`);
+          return { qty: stock.quantity, symbol: stock.symbol, orderID: response.client_order_id};
+        }).catch((error) => {
+          console.error(`Failed to place sell order for ${stock.symbol}: ${error}`)
+          return null;
+        });
+      });
+  
+      Promise.all(sellOrderPromises).then(sellOrders => {
+        // Filter out any null values
+        sellOrders = sellOrders.filter(order => order !== null);
+  
+        // If all sell orders failed, return an error message
+        if (sellOrders.length === 0) {
+          console.error('Failed to place all sell orders.');
+          return res.status(400).json({
+            status: "fail",
+            message: "Failed to place sell orders. Try again.",
+          });
+        }
+  
+        // If some sell orders were successful, return a success message
+        return res.status(200).json({
+          status: "success",
+          message: "Strategy and portfolio deleted successfully, and sell orders placed.",
+          sellOrders: sellOrders,
+        });
+
+
+
+
+
+        
+      }).catch(error => {
+        console.error(`Error: ${error}`);
+        return res.status(400).json({
+          status: "fail",
+          message: `Something unexpected happened: ${error.message}`,
+        });
+      });
+  
+    } catch (error) {
+      console.error(`Error deleting strategy and portfolio: ${error}`);
+      return res.status(500).json({
+        status: "fail",
+        message: "An error occurred while deleting the strategy and portfolio",
+      });
+    }
+  };
+ 
+
+  
 
 
 
@@ -352,10 +422,14 @@ const clock = await alpacaApi.getClock();
 if (!clock.is_open) {
             console.log('Market is closed.');
 
+            const strategy_id = crypto.randomBytes(16).toString("hex");
+            console.log('strategy_id:', strategy_id);
+
             // Create a new strategy
             const strategy = new Strategy({
               name: strategyName,
-              strategy: strategyinput, // Convert the strategy object to a string
+              strategy: strategyinput, 
+              strategy_id: strategy_id, 
             });
 
             // Save the strategy
@@ -366,10 +440,10 @@ if (!clock.is_open) {
             // Create a new portfolio
             const portfolio = new Portfolio({
               name: strategyName,
-              strategy: strategy._id,
+              strategy_id: strategy_id,
               stocks: orders.map(order => ({
                 symbol: order.symbol,
-                avgCost: null, // Set the average cost to null
+                avgCost: null, 
                 quantity: order.qty,
                 orderID: order.orderID,
               })),
@@ -440,6 +514,7 @@ else {
 
               console.log('ordersBySymbol:', ordersBySymbol);
               const strategy_id = crypto.randomBytes(16).toString("hex");
+              console.log('strategy_id:', strategy_id);
             
 
               // Create a new strategy
@@ -460,11 +535,12 @@ else {
                 strategy_id: strategy_id,
                 stocks: Object.values(ordersBySymbol).map(order => ({
                   symbol: order.symbol,
-                  avgCost: order.filled_avg_price || 'null', 
+                  avgCost: order.filled_avg_price ? Number(order.filled_avg_price) : null, // Convert the avgCost to a number or set it to null
                   quantity: order.filled_qty,
-                  orderID: order.client_order_id,
+                  orderID: order.orderID || null, // Set the orderID to null if it's not provided
                 })),
               });
+
 
               // Save the portfolio
               await portfolio.save();
@@ -545,7 +621,6 @@ const getPricesData = async (stocks, marketOpen, userId) => {
 };
 
 
-
 exports.getPortfolios = async (req, res) => {
   try {
     if (req.user !== req.params.userId) {
@@ -557,12 +632,13 @@ exports.getPortfolios = async (req, res) => {
 
     let UserID = req.params.userId;    
 
-    const portfolios = await Portfolio.find().populate('strategy');
+    const portfolios = await Portfolio.find(); // Removed .populate('strategy_id')
     console.log('portfolios:', portfolios);
 
     const marketOpen = await isMarketOpen(UserID);
 
     const portfoliosData = await Promise.all(portfolios.map(async (portfolio) => {
+      const strategy = await Strategy.findOne({ strategy_id: portfolio.strategy_id });    
       const stocksData = await getPricesData(portfolio.stocks, marketOpen, UserID);
 
       const modifiedStocks = portfolio.stocks.map(async (stock) => {
@@ -626,7 +702,6 @@ exports.getPortfolios = async (req, res) => {
           }
         }
 
-
         return {
           symbol: stock.symbol,
           name,
@@ -639,10 +714,13 @@ exports.getPortfolios = async (req, res) => {
 
       return {
         name: portfolio.name,
-        strategy: portfolio.strategy.name,
+        strategy: strategy ? strategy.strategy : null, 
+        strategy_id: portfolio.strategy_id, 
         stocks: await Promise.all(modifiedStocks),
       };
-    }));
+
+
+    }))
 
     // Send the response
     return res.status(200).json({

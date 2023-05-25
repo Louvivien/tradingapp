@@ -50,11 +50,13 @@ const Dashboard = ({ accountBalance, purchasedStocks, orderList, portfolios }) =
 
 
         {/* Strategy Portfolio */}
-        <Grid item xs={12}>
-          <StyledPaper>
-            <Portfolios accountBalance={accountBalance} portfolios={portfolios} />
-          </StyledPaper>
-        </Grid>
+        {portfolios && portfolios.length > 0 && (
+          <Grid item xs={12}>
+            <StyledPaper>
+              <Portfolios accountBalance={accountBalance} portfolios={portfolios} />
+            </StyledPaper>
+          </Grid>
+        )}
 
           
 

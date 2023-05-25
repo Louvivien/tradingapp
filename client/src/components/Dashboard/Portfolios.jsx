@@ -51,15 +51,10 @@ const Portfolios = ({ portfolios }) => {
 
 
   const openDeleteModal = (strategyId) => {
-    console.log('strategyId:', strategyId);
-    openDeleteModal(strategyId.strategy_id);
-    setStrategyToDelete(strategyId.strategy_id);
+    // console.log('strategyId:', strategyId);
+    setStrategyToDelete(strategyId);
     setDeleteOpen(true);
-  };
-
-
-
-
+};
 
 
 
@@ -78,7 +73,7 @@ const Portfolios = ({ portfolios }) => {
       const response = await Axios.delete(url, { headers });
 
       if (response.data.status === "success") {
-        console.log("Strategy deleted successfully");
+        // console.log("Strategy deleted successfully");
         // You might want to update the state or redirect the user here
       } else {
         console.error('Error deleting strategy:', response.data.message);
@@ -107,7 +102,7 @@ const Portfolios = ({ portfolios }) => {
 
       <Collapse in={openStrategies}>
         {portfolios.map((portfolio) => {
-          console.log('Portfolio:', portfolio);
+          // console.log('Portfolio:', portfolio);
           return (
             <div style={{ minHeight: "2px", margin: "2px 0" }} key={portfolio.name}>
 
@@ -130,25 +125,30 @@ const Portfolios = ({ portfolios }) => {
 
               </h5>
 
-              <Modal
-                open={deleteOpen}
-                onClose={closeDeleteModal}
-                aria-labelledby="delete-strategy-modal-title"
-                aria-describedby="delete-strategy-modal-description"
-              >
-                <div style={{ padding: '20px', backgroundColor: 'white', margin: 'auto', marginTop: '20%', width: '50%' }}>
-                  <h2 id="delete-strategy-modal-title">Delete Strategy</h2>
-                  <p id="delete-strategy-modal-description">
-                    Are you sure that you want to delete this strategy? This will liquidate the assets.
-                  </p>
-                  <Button variant="contained" color="primary" onClick={closeDeleteModal}>
-                    Cancel
-                  </Button>
-                  <Button variant="contained" color="secondary" onClick={() => deleteStrategy(strategyToDelete)}>
-                    Proceed
-                  </Button>
-                </div>
-              </Modal>
+                  <Modal
+                    open={deleteOpen}
+                    onClose={closeDeleteModal}
+                    aria-labelledby="delete-strategy-modal-title"
+                    aria-describedby="delete-strategy-modal-description"
+                  >
+                    <div style={{ padding: '20px', backgroundColor: 'white', margin: 'auto', marginTop: '20%', width: '50%' }}>
+                      <h2 id="delete-strategy-modal-title">Delete Strategy</h2>
+                      <p id="delete-strategy-modal-description">
+                        Are you sure that you want to delete this strategy? This will liquidate the assets.
+                      </p>
+                      <Button variant="contained" color="primary" onClick={closeDeleteModal} style={{ marginRight: '20px' }}>
+                        Cancel
+                      </Button>
+                      <Button variant="contained" color="secondary" onClick={async () => {
+                        await deleteStrategy(strategyToDelete);
+                        closeDeleteModal();
+                        window.location.reload();
+                      }}>
+                        Proceed
+                      </Button>
+                    </div>
+                  </Modal>
+
 
 
               <Collapse in={openPortfolio[portfolio.name]}>

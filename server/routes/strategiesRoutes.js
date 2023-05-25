@@ -13,8 +13,4 @@ router.route("/delete/:userId/:strategyId").delete(auth, deleteCollaborative);
 
 
 
-
-
-
-
 module.exports = router;

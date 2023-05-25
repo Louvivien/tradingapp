@@ -66,7 +66,7 @@ const Strategies = () => {
         if (response.data.status === "success") {
           setResponseReceived(true);
           setOutput(response.data.orders); 
-          console.log(response);
+          // console.log(response);
         } else {
           setError(response.data.message);
         }
