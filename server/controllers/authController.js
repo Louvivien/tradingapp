@@ -9,7 +9,6 @@ const setAlpaca = require('../config/alpaca');
 const errorMessage = (res, error) => {
   return res.status(400).json({ status: "fail", message: error.message });
 };
-
 exports.registerUser = async (req, res) => {
   console.log("registering user");
   try {

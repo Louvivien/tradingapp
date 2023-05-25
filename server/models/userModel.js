@@ -22,12 +22,12 @@ const userSchema = new Schema(
     },
     ALPACA_API_KEY_ID:{
       type: String,
-      required: true,
+      required: false,
       default: process.env.ALPACA_API_KEY_ID
     },
     ALPACA_API_SECRET_KEY:{
       type: String,
-      required: true,
+      required: false,
       default: process.env.ALPACA_API_SECRET_KEY
     },
   },
