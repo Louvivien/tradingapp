@@ -5,7 +5,7 @@ const { createCollaborative, getPortfolios} = require("../controllers/strategies
 
 
 router.route("/collaborative/").post(auth, createCollaborative);
-router.route("/portfolios").get(auth, getPortfolios);
+router.route("/portfolios/:userId").get(auth, getPortfolios);
 
 
 

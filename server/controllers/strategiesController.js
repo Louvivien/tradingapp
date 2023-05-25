@@ -374,7 +374,8 @@ else {
                 if (order.side === 'buy' && !ordersBySymbol[order.symbol]) {
                   ordersBySymbol[order.symbol] = order;
                   ordersBySymbol[order.avgCost] = order.filled_avg_price;
-                  ordersBySymbol[order.filled_qty] = order.filled_avg_price;
+                  ordersBySymbol[order.filled_qty] = order.filled_avg_qty;
+                  // ordersBySymbol[order.filled_qty] = order.filled_avg_price; //orginally like this
                 }
               });
 
@@ -416,15 +417,167 @@ else {
 }
 
 
-exports.getPortfolios = async (UserID) => {
-//get the portfolios for the user from the MongoDB
 
 
-}
+const isMarketOpen = async (userId) => {
+  try {
+    const alpacaConfig = await setAlpaca(userId);
+    const response = await axios.get(alpacaConfig.apiURL+'/v2/clock', {
+      headers: {
+        'APCA-API-KEY-ID': alpacaConfig.keyId,
+        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+      },
+    });
+    return response.data.is_open;
+  } catch (error) {
+    console.error('Error fetching market status:', error);
+    return false;
+  }
+};
 
 
 
+const getPricesData = async (stocks, marketOpen, userId) => {
+  try {
+    const alpacaConfig = await setAlpaca(userId);
 
+    const promises = stocks.map(async (stock) => {
+      let url;
+      if (marketOpen) {
+        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/quotes/latest`;
+      } else {
+        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/trades/latest`;
+      }
+
+      const response = await axios.get(url, {
+        headers: {
+          'APCA-API-KEY-ID': alpacaConfig.keyId,
+          'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+        },
+      });
+
+      const currentPrice = marketOpen ? response.data.quote.ap : response.data.trade.p;
+      const date = marketOpen ? response.data.quote.t : response.data.trade.t;
+
+
+      const alpacaApi = new Alpaca(alpacaConfig);
+
+      const asset = await alpacaApi.getAsset(stock.symbol);
+      const assetName = asset.name;
+      
+
+      return {
+        ticker: stock.symbol,
+        date: date,
+        adjClose: currentPrice,
+        name: assetName, 
+
+      };
+    });
+
+    return Promise.all(promises);
+  } catch (error) {
+    return [];
+  }
+};
+
+
+
+exports.getPortfolios = async (req, res) => {
+  try {
+    if (req.user !== req.params.userId) {
+      return res.status(200).json({
+        status: "fail",
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    let UserID = req.params.userId;    
+
+    const portfolios = await Portfolio.find().populate('strategy');
+    console.log('portfolios:', portfolios);
+
+    const marketOpen = await isMarketOpen(UserID);
+
+    const portfoliosData = await Promise.all(portfolios.map(async (portfolio) => {
+      const stocksData = await getPricesData(portfolio.stocks, marketOpen, UserID);
+
+      const modifiedStocks = portfolio.stocks.map(async (stock) => {
+        let currentPrice;
+        let currentDate;
+        let name;
+        let avgCost = stock.avgCost;
+
+        stocksData.forEach((stockData) => {
+          if (stockData.ticker.toLowerCase() === stock.symbol.toLowerCase()) {
+            currentDate = stockData.date;
+            currentPrice = stockData.adjClose;
+            name = stockData.name;
+          }
+        });
+
+        // If avgCost is null and market is open, get the filled orders and update avgCost
+        if (avgCost === null && marketOpen) {
+          console.log('Updating portfolio to check if orders are filled');
+          const alpacaConfig = await setAlpaca(UserID);
+          const alpacaApi = new Alpaca(alpacaConfig);
+
+          const orders = await alpacaApi.getOrders({
+            status: 'filled',
+            symbols: [stock.symbol],
+            limit: 50, 
+            direction: 'desc'
+          });
+
+          if (orders && orders.length > 0) {
+            // Find the order that matches the quantity
+            const matchingOrder = orders.find(order => order.filled_qty === stock.quantity);
+
+            if (matchingOrder) {
+              avgCost = matchingOrder.filled_avg_price;
+
+              // Update the avgCost in the database
+              await Portfolio.updateOne(
+                { _id: portfolio._id, 'stocks.symbol': stock.symbol },
+                { $set: { 'stocks.$.avgCost': avgCost } }
+              );
+              console.log('Portfolio updated with cost for orders');
+            }
+          }
+        }
+
+
+        return {
+          symbol: stock.symbol,
+          name,
+          avgCost,
+          quantity: stock.quantity,
+          currentDate,
+          currentPrice,
+        };
+      });
+
+      return {
+        name: portfolio.name,
+        strategy: portfolio.strategy.name,
+        stocks: await Promise.all(modifiedStocks),
+      };
+    }));
+
+    // Send the response
+    return res.status(200).json({
+      status: "success",
+      portfolios: portfoliosData
+    });
+
+  } catch (error) {
+    console.error('Error fetching portfolios:', error);
+    return res.status(200).json({
+      status: "fail",
+      message: "Something unexpected happened.",
+    });
+  }
+};
 
 
 // // Mock the Alpaca client when market is closed:

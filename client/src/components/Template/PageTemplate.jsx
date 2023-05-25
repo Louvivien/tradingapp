@@ -124,29 +124,31 @@ const PageTemplate = () => {
   };
 
 
-  //Function to get the Strategy Portfolios from the server using MangoDB
-  // const getPortfolio  = async () => {
-  //   const url = config.base_url + `/api/strategies/portfolios/${userData.user.id}`;
-  //   const headers = {
-  //     "x-auth-token": userData.token,
-  //   };
-
-  //   const response = await Axios.get(url, {
-  //     headers,
-  //   });
-
-  //   if (response.data.status === "success") {
-  //     setPortfolios(response.data.orders);
-      
-  //   }
-  // };
+  // Function to get the Strategy Portfolios from the server using MangoDB
+  const getPortfolio = async () => {
+    try {
+      const url = config.base_url + `/api/strategies/portfolios/${userData.user.id}`;
+      const headers = {
+        "x-auth-token": userData.token,
+      };
+  
+      const response = await Axios.get(url, { headers });
+  
+      if (response.data.status === "success") {
+        setPortfolios(response.data.portfolios);
+      }
+    } catch (error) {
+      console.error('Error fetching portfolios:', error);
+    }
+  };
+  
 
 
 
   useEffect(() => {
     getPurchasedStocks();
     getOrderList();
-    // getPortfolio();
+    getPortfolio();
   }, []);
   
 
@@ -248,7 +250,7 @@ const PageTemplate = () => {
             purchasedStocks={purchasedStocks}
             accountBalance={accountBalance}
             orderList={orderList}
-            // portfolios={portfolios}
+            portfolios={portfolios}
           />
 
 
