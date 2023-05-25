@@ -147,6 +147,7 @@ const Strategies = () => {
                 name="strategyName"
                 value={strategyName}
                 onChange={(e) => setstrategyName(e.target.value)}
+                fullWidth
 
                 />
           <br />
