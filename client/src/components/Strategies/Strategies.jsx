@@ -59,7 +59,7 @@ const Strategies = () => {
     const url = config.base_url + "/api/strategies/collaborative/";
 
     try {
-      console.log("About to send request:", url, {collaborative, userID, strategyName}, {headers});
+      // console.log("About to send request:", url, {collaborative, userID, strategyName}, {headers});
       const response = await Axios.post(url, {collaborative, userID, strategyName}, {headers});
     
       if (response.status === 200) {

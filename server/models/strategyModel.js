@@ -12,6 +12,10 @@ const strategySchema = new Schema({
     type: String,
     required: true,
   },
+  strategy_id: {
+    type: String, 
+    required: true,
+  },
 });
 
 

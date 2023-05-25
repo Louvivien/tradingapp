@@ -136,6 +136,7 @@ const PageTemplate = () => {
   
       if (response.data.status === "success") {
         setPortfolios(response.data.portfolios);
+        console.log("Portfolios ", response.data.portfolios);
       }
     } catch (error) {
       console.error('Error fetching portfolios:', error);

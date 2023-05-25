@@ -8,6 +8,8 @@ const axios = require("axios");
 const moment = require('moment');
 const { spawn } = require('child_process');
 const { Transform } = require('stream');
+const crypto = require('crypto');
+
 
 
 // Debugging function to log all axios requests as curl commands
@@ -17,9 +19,18 @@ axios.interceptors.request.use((request) => {
   for (let header in request.headers) {
     headers += `-H '${header}: ${request.headers[header]}' `;
   }
-  console.log(`curl -X ${request.method.toUpperCase()} '${request.url}' ${headers}${data ? ` -d '${data}'` : ''}` + '\n');
+
+  let params = '';
+  if (request.params) {
+    params = Object.keys(request.params)
+      .map(key => `${key}=${encodeURIComponent(request.params[key])}`)
+      .join('&');
+  }
+
+  console.log(`curl -X ${request.method.toUpperCase()} '${request.url}${params ? `?${params}` : ''}' ${headers}${data ? ` -d '${data}'` : ''}` + '\n');
   return request;
 });
+
 
 
 // Debugging function to retry a promise-based function
@@ -150,7 +161,7 @@ exports.createCollaborative = async (req, res) => {
 
           });
         } catch (error) {
-          console.error('Request Error: check keys and cookies');
+          console.error('Request Error: check keys and cookies', error);
         }
       };
 
@@ -218,8 +229,9 @@ exports.createCollaborative = async (req, res) => {
                 time_in_force: 'gtc'
               }
             }).then((response) => {
-              console.log(`Order of ${qty} shares for ${symbol} has been placed.`)
-              return { qty: qty, symbol: symbol };
+              // console.log(response.data);
+              console.log(`Order of ${qty} shares for ${symbol} has been placed. Order ID: ${response.data.client_order_id}`);
+              return { qty: qty, symbol: symbol, orderID: response.data.client_order_id};
             });
           }, 5, 2000).catch((error) => { // Retry up to 5 times, with a delay of 2 seconds between attempts
             console.error(`Failed to place order for ${symbol}: ${error}`)
@@ -276,12 +288,58 @@ exports.createCollaborative = async (req, res) => {
 
 }
 
+exports.deleteCollaborative = async (req, res) => {
+  try {
+    // Get the strategy ID from the request parameters
+    const strategyId = req.params.strategy;
+
+    // Find the strategy in the database
+    const strategy = await Strategy.findById(strategyId);
+
+    if (!strategy) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Strategy not found",
+      });
+    }
+
+    // Find the portfolio in the database
+    const portfolio = await Portfolio.findOne({ strategy: strategy._id });
+
+    if (!portfolio) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Portfolio not found",
+      });
+    }
+
+    // Delete the strategy
+    await Strategy.deleteOne({ _id: strategy._id });
+
+    // Delete the portfolio
+    await Portfolio.deleteOne({ strategy: strategy._id });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Strategy and portfolio deleted successfully",
+    });
+  } catch (error) {
+    console.error(`Error deleting strategy and portfolio: ${error}`);
+    return res.status(500).json({
+      status: "fail",
+      message: "An error occurred while deleting the strategy and portfolio",
+    });
+  }
+};
+
+
 
 
 exports.addPortfolio = async (strategyinput, strategyName, orders, UserID) => {
   console.log('strategyName', strategyName);
   console.log('orders', orders);
   console.log('UserID', UserID);
+
   try {
     const numberOfOrders = orders.length;
     console.log('numberOfOrders', numberOfOrders);
@@ -313,6 +371,7 @@ if (!clock.is_open) {
                 symbol: order.symbol,
                 avgCost: null, // Set the average cost to null
                 quantity: order.qty,
+                orderID: order.orderID,
               })),
             });
 
@@ -342,7 +401,7 @@ else {
                   }
                 });
 
-                // console.log('ordersResponse', ordersResponse.data);
+                console.log('ordersResponse', ordersResponse.data);
 
                 // Check if all orders are filled
                 const filledOrders = ordersResponse.data.filter(order => order.filled_qty !== '0');
@@ -357,34 +416,37 @@ else {
               let ordersResponse;
               try {
                 ordersResponse = await retry(getOrders, 5, 4000);
+
               } catch (error) {
                 console.error(`Error: ${error}`);
                 throw error;
               }
 
 
-              const orderSymbols = orders.map(order => order.symbol);
-              console.log('orderSymbols:', orderSymbols);
+                // Create an object to store orders by symbol
+                const ordersBySymbol = {};
 
+                ordersResponse.forEach((order) => {
+                  if (order.side === 'buy' && !ordersBySymbol[order.symbol]) {
+                    ordersBySymbol[order.symbol] = {
+                      symbol: order.symbol,
+                      avgCost: order.filled_avg_price,
+                      filled_qty: order.filled_qty,
+                      orderID: order.client_order_id
+                    };
+                  }
+                });
 
-              // Create an object to store orders by symbol
-              const ordersBySymbol = {};
-
-              ordersResponse.data.forEach((order) => {
-                if (order.side === 'buy' && !ordersBySymbol[order.symbol]) {
-                  ordersBySymbol[order.symbol] = order;
-                  ordersBySymbol[order.avgCost] = order.filled_avg_price;
-                  ordersBySymbol[order.filled_qty] = order.filled_avg_qty;
-                  // ordersBySymbol[order.filled_qty] = order.filled_avg_price; //orginally like this
-                }
-              });
 
               console.log('ordersBySymbol:', ordersBySymbol);
+              const strategy_id = crypto.randomBytes(16).toString("hex");
+            
 
               // Create a new strategy
               const strategy = new Strategy({
                 name: strategyName,
-                strategy: strategyinput, // Convert the strategy object to a string
+                strategy: strategyinput,
+                strategy_id: strategy_id, 
               });
 
               // Save the strategy
@@ -395,11 +457,12 @@ else {
               // Create a new portfolio
               const portfolio = new Portfolio({
                 name: strategyName,
-                strategy: strategy._id,
+                strategy_id: strategy_id,
                 stocks: Object.values(ordersBySymbol).map(order => ({
                   symbol: order.symbol,
-                  avgCost: order.filled_avg_price || 'undefined', 
+                  avgCost: order.filled_avg_price || 'null', 
                   quantity: order.filled_qty,
+                  orderID: order.client_order_id,
                 })),
               });
 
@@ -520,20 +583,32 @@ exports.getPortfolios = async (req, res) => {
         if (avgCost === null && marketOpen) {
           console.log('Updating portfolio to check if orders are filled');
           const alpacaConfig = await setAlpaca(UserID);
-          const alpacaApi = new Alpaca(alpacaConfig);
-
-          const orders = await alpacaApi.getOrders({
-            status: 'filled',
-            symbols: [stock.symbol],
-            limit: 50, 
-            direction: 'desc'
-          });
+          const response = await axios.get(alpacaConfig.apiURL + '/v2/orders', {
+            headers: {
+              'APCA-API-KEY-ID': alpacaConfig.keyId,
+              'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+            },
+            params: {
+              status: 'filled',
+              symbols: [stock.symbol],
+              limit: 10,
+              direction: 'desc'
+            }
+          });   
+          const orders = response.data;
 
           if (orders && orders.length > 0) {
             // Find the order that matches the quantity
-            const matchingOrder = orders.find(order => order.filled_qty === stock.quantity);
+            
+            const matchingOrder = orders.find(order => order.client_order_id === stock.orderID);
+            
+            console.log('stock.quantity:', stock.orderID);
+
 
             if (matchingOrder) {
+
+              console.log('Found matching order:', matchingOrder);
+
               avgCost = matchingOrder.filled_avg_price;
 
               // Update the avgCost in the database
@@ -543,6 +618,11 @@ exports.getPortfolios = async (req, res) => {
               );
               console.log('Portfolio updated with cost for orders');
             }
+
+            else {
+              console.log('No matching order found');
+            }
+
           }
         }
 

@@ -11,6 +11,7 @@ const errorMessage = (res, error) => {
 };
 
 exports.registerUser = async (req, res) => {
+  console.log("registering user");
   try {
     const { username, password } = req.body;
 
@@ -47,6 +48,7 @@ exports.registerUser = async (req, res) => {
     return errorMessage(res, error);
   }
 };
+
 
 exports.loginUser = async (req, res) => {
   try {

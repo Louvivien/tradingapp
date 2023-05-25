@@ -7,8 +7,8 @@ const portfolioSchema = new Schema({
     type: String,
     required: true,
   },
-  strategy: {
-    type: mongoose.Schema.Types.ObjectId,
+  strategy_id: {
+    type: String, 
     ref: 'Strategy',
   },
   stocks: [{
@@ -16,9 +16,14 @@ const portfolioSchema = new Schema({
       type: String,
       required: true,
     },
+    orderID: {
+      type: String,
+      required: true,
+    },
     avgCost: {
       type: Number,
       required: false,
+      default: null, 
     },
     quantity: {
       type: Number,
