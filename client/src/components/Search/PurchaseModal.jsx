@@ -109,10 +109,14 @@ const PurchaseModalContent = ({
       socket.emit("subscribe", { ticker });
       // console.log(ticker);
   
-      // listen for real-time data from server
+      // listen for real-time data from servers
       socket.on("stockData", (data) => {
-        setStockData(data.BidPrice);
-        // setStopPrice(
+        let bidPrice = data.BidPrice;
+        if (typeof bidPrice === 'object') {
+          bidPrice = JSON.stringify(bidPrice);
+        }
+        setStockData(bidPrice);
+              // setStopPrice(
         //   Number(data.BidPrice) * (1 - (Number(trail_percent) / 100))
         // );
       });
@@ -260,10 +264,8 @@ const PurchaseModalContent = ({
                       label="Market Price"
                       name="price"
                       autoComplete="price"
-                      value={stockData ?? (
-                        <div>Loading...</div>
-                      )}
-                    />
+                      value={stockData ? stockData : 'Market Price'}
+                      />
                     <TextField
                       variant="outlined"
                       margin="normal"
