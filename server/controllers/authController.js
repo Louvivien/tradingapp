@@ -48,7 +48,6 @@ exports.registerUser = async (req, res) => {
   }
 };
 
-
 exports.loginUser = async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -59,7 +58,6 @@ exports.loginUser = async (req, res) => {
         message: "Not all fields have been entered.",
       });
     }
-
 
     const user = await User.findOne({ username });
 
@@ -78,14 +76,23 @@ exports.loginUser = async (req, res) => {
       });
     }
 
+    let ALPACA_API_KEY_ID = user.ALPACA_API_KEY_ID;
+    let ALPACA_API_SECRET_KEY = user.ALPACA_API_SECRET_KEY;
 
-    const ALPACA_API_KEY_ID = user.ALPACA_API_KEY_ID;
-    const ALPACA_API_SECRET_KEY = user.ALPACA_API_SECRET_KEY;
+    // If user does not have ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY, use the ones from environment variables and update the user
+    if (!ALPACA_API_KEY_ID || !ALPACA_API_SECRET_KEY) {
+      ALPACA_API_KEY_ID = process.env.ALPACA_API_KEY_ID;
+      ALPACA_API_SECRET_KEY = process.env.ALPACA_API_SECRET_KEY;
+
+      await User.findByIdAndUpdate(user._id, {
+        ALPACA_API_KEY_ID,
+        ALPACA_API_SECRET_KEY,
+      });
+    }
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
 
     //connect to alpaca when signedin
-
     const alpacaConfig = await setAlpaca(user._id); 
     const alpacaApi = new Alpaca(alpacaConfig);
     console.log("Connected to Alpaca");
@@ -93,7 +100,6 @@ exports.loginUser = async (req, res) => {
     // get user's balance from Alpaca
     const balance = await alpacaApi.getAccount();
     const userBalance = balance.cash;
-    
 
     return res.status(200).json({
       token,
@@ -109,6 +115,7 @@ exports.loginUser = async (req, res) => {
     return errorMessage(res, error);
   }
 };
+
 
 exports.validate = async (req, res) => {
   try {
