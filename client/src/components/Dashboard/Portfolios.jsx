@@ -139,7 +139,7 @@ const Portfolios = ({ portfolios }) => {
                 >
                   <ExpandMoreIcon />
                 </IconButton>
-                Strategy: {portfolio.name}
+                {portfolio.name}
 
                 <IconButton color="error" onClick={() => openDeleteModal(portfolio.strategy_id)}>
                   <HighlightOffIcon fontSize="small"/>

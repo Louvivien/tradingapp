@@ -56,12 +56,18 @@ const Purchases = ({ purchasedStocks }) => {
                   </TableCell>
                   <TableCell>{row.name || "----"}</TableCell>
                   <TableCell>{row.quantity || "----"}</TableCell>
+
+
                   <TableCell align="right">
-                    ${row.purchasePrice.toLocaleString() || "----"}
+                    ${row.purchasePrice ? row.purchasePrice.toLocaleString() : "----"}
                   </TableCell>
+
+
                   <TableCell align="right">
                     ${roundNumber(purchaseTotal).toLocaleString() || "----"}
                   </TableCell>
+
+
                   <TableCell
                     align="right"
                     className={
@@ -70,8 +76,10 @@ const Purchases = ({ purchasedStocks }) => {
                         : styles.negative
                     }
                   >
-                    ${row.currentPrice.toLocaleString() || "----"}
+                    ${row.currentPrice ? row.currentPrice.toLocaleString() : "----"}
                   </TableCell>
+
+
                   <TableCell
                     align="right"
                     className={
