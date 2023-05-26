@@ -27,12 +27,13 @@ const Register = () => {
     const newUsername = e.target.value;
     setUsername(newUsername);
 
-    if (newUsername.length < 4 || newUsername.length > 15) {
-      setUsernameError("Username must be between 4 and 15 characters.");
+    if (newUsername.length < 4 || newUsername.length > 30) {
+      setUsernameError("Username must be between 4 and 30 characters. It can be an email address.");
     } else {
       setUsernameError("");
     }
   };
+
 
   const onChangePassword = (e) => {
     const newPassword = e.target.value;
