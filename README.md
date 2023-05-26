@@ -66,6 +66,21 @@ Web service → Python → Root Directory: ./server → Build Command: ./install
 export PATH="${PATH}:/opt/render/project/.render/chrome/opt/google/chrome" && yarn start
 
 
+
+## Usage
+
+You can edit you API keys in Settings
+
+To buy stocks you can go in Search, search for a stock and buy
+
+You can sell from the dashboard clicking on stocks ticker
+
+You can implement a collaborative strategy that you found online in Strategies, copy paste it and add a name for the strategy. It will buy the stocks. This create a strategy portfolio that will show up on the dashboard
+
+You can switch from paper trading to live trading in Config/Alpaca.js changing the apiurl
+
+
+
 ## To do
 Fix bugs
 
