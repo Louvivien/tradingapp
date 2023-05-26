@@ -1,5 +1,5 @@
 import React, { useContext, useState } from "react";
-import { Link, Collapse, IconButton, Modal, Button } from "@mui/material";
+import { Link, Collapse, IconButton, Modal, Button, useTheme } from "@mui/material";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -12,8 +12,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import Axios from "axios";
 import config from "../../config/Config";
 import UserContext from "../../context/UserContext";
-import DeleteIcon from '@mui/icons-material/Delete';
-
+import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 
 
 
@@ -27,6 +26,9 @@ const Portfolios = ({ portfolios }) => {
   const [openPortfolio, setOpenPortfolio] = useState({});
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [strategyToDelete, setStrategyToDelete] = useState(null);
+  const theme = useTheme();
+
+
 
 
 
@@ -103,10 +105,33 @@ const Portfolios = ({ portfolios }) => {
       <Collapse in={openStrategies}>
         {portfolios.map((portfolio) => {
           // console.log('Portfolio:', portfolio);
+          
+          // Calculate totals for each portfolio
+          let totalQuantity = 0;
+          let totalPurchaseTotal = 0;
+          let totalCurrentTotal = 0;
+          let totalDifference = 0;
+          let allStocksHaveAvgCost = true;
+
+          portfolio.stocks.forEach((stock) => {
+            if (stock.avgCost === null) {
+              allStocksHaveAvgCost = false;
+            } else {
+              totalQuantity += Number(stock.quantity);
+              totalPurchaseTotal += Number(stock.quantity) * Number(stock.avgCost);
+              totalCurrentTotal += Number(stock.quantity) * Number(stock.currentPrice);
+              totalDifference += (stock.currentPrice - stock.avgCost) / stock.currentPrice;
+            }
+          });
+
+
+
+
+
           return (
             <div style={{ minHeight: "2px", margin: "2px 0" }} key={portfolio.name}>
 
-              <h5>
+              <div style={{ color: theme.palette.info.light }}>
                 <IconButton
                   onClick={() => handlePortfolioClick(portfolio.name)}
                   aria-expanded={openPortfolio[portfolio.name]}
@@ -117,13 +142,13 @@ const Portfolios = ({ portfolios }) => {
                 Strategy: {portfolio.name}
 
                 <IconButton color="error" onClick={() => openDeleteModal(portfolio.strategy_id)}>
-                  <DeleteIcon />
+                  <HighlightOffIcon fontSize="small"/>
                 </IconButton>
 
 
 
 
-              </h5>
+              </div>
 
                   <Modal
                     open={deleteOpen}
@@ -229,6 +254,41 @@ const Portfolios = ({ portfolios }) => {
                         );
                       }
                     })}
+
+
+                      {/* Add totals row if all stocks have avgCost */}
+                      {allStocksHaveAvgCost && (
+                      <TableRow>
+                        <TableCell>Total</TableCell>
+                        <TableCell></TableCell>
+                        <TableCell>{totalQuantity}</TableCell>
+                        <TableCell></TableCell>
+                        <TableCell align="right">${roundNumber(totalPurchaseTotal).toLocaleString()}</TableCell>
+                        <TableCell></TableCell>
+                        <TableCell
+                          align="right"
+                          className={
+                            totalCurrentTotal >= totalPurchaseTotal
+                              ? styles.positive
+                              : styles.negative
+                          }
+                        >
+                          ${roundNumber(totalCurrentTotal).toLocaleString()}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          className={
+                            totalDifference >= 0 ? styles.positive : styles.negative
+                          }
+                        >
+                          {Math.abs(totalDifference * 100).toFixed(2)}%
+                        </TableCell>
+                      </TableRow>
+                    )}
+
+
+
+                    
                   </TableBody>
 
                 </Table>
