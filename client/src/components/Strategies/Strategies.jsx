@@ -99,7 +99,7 @@ const Strategies = () => {
             <div> 
             <br />
             <br />
-              <div>Loading...</div>
+              <div>Loading... It usually takes around 4 minutes to create the strategy</div>
             </div>  
           ) : responseReceived ? (
             <div>
