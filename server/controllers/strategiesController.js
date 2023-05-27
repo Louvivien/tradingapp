@@ -8,27 +8,7 @@ const moment = require('moment');
 const crypto = require('crypto');
 const extractGPT = require("../utils/ChatGPTplugins");
 
-
-
-
-// // Debugging function to log all axios requests as curl commands
-// axios.interceptors.request.use((request) => {
-//   let data = request.data ? JSON.stringify(request.data) : '';
-//   let headers = '';
-//   for (let header in request.headers) {
-//     headers += `-H '${header}: ${request.headers[header]}' `;
-//   }
-
-//   let params = '';
-//   if (request.params) {
-//     params = Object.keys(request.params)
-//       .map(key => `${key}=${encodeURIComponent(request.params[key])}`)
-//       .join('&');
-//   }
-
-//   console.log(`curl -X ${request.method.toUpperCase()} '${request.url}${params ? `?${params}` : ''}' ${headers}${data ? ` -d '${data}'` : ''}` + '\n');
-//   return request;
-// });
+//Work in progress: prompt engineering (see jira https://ai-trading-bot.atlassian.net/browse/AI-76)
 
 
 
@@ -650,4 +630,26 @@ exports.getPortfolios = async (req, res) => {
 //   }),  
 //   getPositions: Mock.fn(() => Promise.resolve([])),
 // }));
+
+
+
+// // Debugging function to log all axios requests as curl commands
+// axios.interceptors.request.use((request) => {
+//   let data = request.data ? JSON.stringify(request.data) : '';
+//   let headers = '';
+//   for (let header in request.headers) {
+//     headers += `-H '${header}: ${request.headers[header]}' `;
+//   }
+
+//   let params = '';
+//   if (request.params) {
+//     params = Object.keys(request.params)
+//       .map(key => `${key}=${encodeURIComponent(request.params[key])}`)
+//       .join('&');
+//   }
+
+//   console.log(`curl -X ${request.method.toUpperCase()} '${request.url}${params ? `?${params}` : ''}' ${headers}${data ? ` -d '${data}'` : ''}` + '\n');
+//   return request;
+// });
+
 
