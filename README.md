@@ -29,29 +29,46 @@ Project Management: Jira
 
 
 ## Installation
-Make sure you have NodeJS installed. Then install the required packages for the server with:
+Make sure you have NodeJS installed. 
+
+go to the server folder
+```sh
+cd server
+```
+
+
+Then install the required packages for the server with:
+
 
 ```sh
 npm install
 ```
 
-And the required packages for the client with:
+go to the client folder
 ```sh
-npm run install-client
+cd ..
+```
+```sh
+cd client
 ```
 
+And the required packages for the client with:
+```sh
+npm install
+```
 
-Then run the server with:
+And run the client with:
 ```sh
 npm run start
 ```
-And run the client with:
+
+Open another terminal window and then run the server with:
 ```sh
-cd client
 npm run start
 ```
 
 Then you have to set up the .env files for the server and the client:
+Go to the different services, create accounts and get the API keys
 
 here  /tradingapp/server/config/ you have an example file. Rename it .env and change the keys with yours
 
