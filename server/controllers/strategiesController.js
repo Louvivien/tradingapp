@@ -12,26 +12,6 @@ const extractGPT = require("../utils/ChatGPTplugins");
 
 
 
-// Debugging function to retry a promise-based function
-const retry = (fn, retriesLeft = 5, interval = 1000) => {
-  return new Promise((resolve, reject) => {
-    fn().then(resolve)
-      .catch((error) => {
-        setTimeout(() => {
-          if (retriesLeft === 1) {
-            // reject('maximum retries exceeded');
-            reject(error);
-          } else {
-            console.log(`Retrying... attempts left: ${retriesLeft - 1}`); // Log message at each retry
-            // Try again with one less retry attempt left
-            retry(fn, retriesLeft - 1, interval).then(resolve, reject);
-          }
-        }, interval);
-      });
-  });
-};
-
-
 exports.createCollaborative = async (req, res) => {
   return new Promise(async (resolve, reject) => {
     try {
@@ -550,6 +530,25 @@ exports.getPortfolios = async (req, res) => {
   }
 };
 
+
+// Debugging function to retry a promise-based function
+const retry = (fn, retriesLeft = 5, interval = 1000) => {
+  return new Promise((resolve, reject) => {
+    fn().then(resolve)
+      .catch((error) => {
+        setTimeout(() => {
+          if (retriesLeft === 1) {
+            // reject('maximum retries exceeded');
+            reject(error);
+          } else {
+            console.log(`Retrying... attempts left: ${retriesLeft - 1}`); // Log message at each retry
+            // Try again with one less retry attempt left
+            retry(fn, retriesLeft - 1, interval).then(resolve, reject);
+          }
+        }, interval);
+      });
+  });
+};
 
 
 //this is also in strockController can be put in utils
