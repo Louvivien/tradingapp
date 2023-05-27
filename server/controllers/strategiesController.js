@@ -283,10 +283,6 @@ exports.createCollaborative = async (req, res) => {
   };
  
 
-  
-
-
-
 exports.addPortfolio = async (strategyinput, strategyName, orders, UserID) => {
   console.log('strategyName', strategyName);
   console.log('orders', orders);
@@ -438,71 +434,6 @@ else {
 }
 
 
-
-
-const isMarketOpen = async (userId) => {
-  try {
-    const alpacaConfig = await setAlpaca(userId);
-    const response = await axios.get(alpacaConfig.apiURL+'/v2/clock', {
-      headers: {
-        'APCA-API-KEY-ID': alpacaConfig.keyId,
-        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-      },
-    });
-    return response.data.is_open;
-  } catch (error) {
-    console.error('Error fetching market status:', error);
-    return false;
-  }
-};
-
-
-
-const getPricesData = async (stocks, marketOpen, userId) => {
-  try {
-    const alpacaConfig = await setAlpaca(userId);
-
-    const promises = stocks.map(async (stock) => {
-      let url;
-      if (marketOpen) {
-        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/quotes/latest`;
-      } else {
-        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/trades/latest`;
-      }
-
-      const response = await axios.get(url, {
-        headers: {
-          'APCA-API-KEY-ID': alpacaConfig.keyId,
-          'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-        },
-      });
-
-      const currentPrice = marketOpen ? response.data.quote.ap : response.data.trade.p;
-      const date = marketOpen ? response.data.quote.t : response.data.trade.t;
-
-
-      const alpacaApi = new Alpaca(alpacaConfig);
-
-      const asset = await alpacaApi.getAsset(stock.symbol);
-      const assetName = asset.name;
-      
-
-      return {
-        ticker: stock.symbol,
-        date: date,
-        adjClose: currentPrice,
-        name: assetName, 
-
-      };
-    });
-
-    return Promise.all(promises);
-  } catch (error) {
-    return [];
-  }
-};
-
-
 exports.getPortfolios = async (req, res) => {
   try {
     if (req.user !== req.params.userId) {
@@ -618,6 +549,71 @@ exports.getPortfolios = async (req, res) => {
     });
   }
 };
+
+
+
+//this is also in strockController can be put in utils
+const isMarketOpen = async (userId) => {
+  try {
+    const alpacaConfig = await setAlpaca(userId);
+    const response = await axios.get(alpacaConfig.apiURL+'/v2/clock', {
+      headers: {
+        'APCA-API-KEY-ID': alpacaConfig.keyId,
+        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+      },
+    });
+    return response.data.is_open;
+  } catch (error) {
+    console.error('Error fetching market status:', error);
+    return false;
+  }
+};
+
+//this is also in strockController can be put in utils
+const getPricesData = async (stocks, marketOpen, userId) => {
+  try {
+    const alpacaConfig = await setAlpaca(userId);
+
+    const promises = stocks.map(async (stock) => {
+      let url;
+      if (marketOpen) {
+        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/quotes/latest`;
+      } else {
+        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/trades/latest`;
+      }
+
+      const response = await axios.get(url, {
+        headers: {
+          'APCA-API-KEY-ID': alpacaConfig.keyId,
+          'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+        },
+      });
+
+      const currentPrice = marketOpen ? response.data.quote.ap : response.data.trade.p;
+      const date = marketOpen ? response.data.quote.t : response.data.trade.t;
+
+
+      const alpacaApi = new Alpaca(alpacaConfig);
+
+      const asset = await alpacaApi.getAsset(stock.symbol);
+      const assetName = asset.name;
+      
+
+      return {
+        ticker: stock.symbol,
+        date: date,
+        adjClose: currentPrice,
+        name: assetName, 
+
+      };
+    });
+
+    return Promise.all(promises);
+  } catch (error) {
+    return [];
+  }
+};
+
 
 
 // // Mock the Alpaca client when market is closed:
