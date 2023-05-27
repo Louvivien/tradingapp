@@ -74,6 +74,9 @@ here  /tradingapp/server/config/ you have an example file. Rename it .env and ch
 
 there /tradingapp/client/  you have an example file. Rename it .env and change the keys with yours
 
+Code explanation: [Video](https://www.loom.com/share/2411f7d34ea1491ab22c166957e107de) 
+
+
 
 ## Deployment
 The front is optimized to be deployed on Vercel. Don't forget to add env variables.
