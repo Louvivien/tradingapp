@@ -7,7 +7,7 @@ const { createCollaborative, getPortfolios, deleteCollaborative, testPython} = r
 router.route("/collaborative/").post(auth, createCollaborative);
 router.route("/portfolios/:userId").get(auth, getPortfolios);
 router.route("/delete/:userId/:strategyId").delete(auth, deleteCollaborative);
-router.route("/testpython/:userId").get(auth, testPython);
+router.route("/testpython/:userId").post(auth, testPython);
 
 
 

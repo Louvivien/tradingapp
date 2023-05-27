@@ -19,10 +19,9 @@ const Test = () => {
 
       const response = await Axios.post(url, { input }, { headers });
 
-      if (response.data.status === "success") {
-        setOutput(response.data.python);
-        console.log("Python ", response.data.python);
-      }
+      
+        setOutput(response.data);
+        console.log("Python ", response.data);
     } catch (error) {
       console.error('Error fetching python:', error);
     }
