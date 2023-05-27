@@ -2,13 +2,12 @@ const User = require("../models/userModel");
 const Strategy = require("../models/strategyModel");
 const Portfolio = require("../models/portfolioModel");
 const setAlpaca = require('../config/alpaca');
-const data = require("../config/stocksData");
 const Alpaca = require('@alpacahq/alpaca-trade-api');
 const axios = require("axios");
 const moment = require('moment');
-const { spawn } = require('child_process');
-const { Transform } = require('stream');
 const crypto = require('crypto');
+const extractGPT = require("../utils/ChatGPTplugins");
+
 
 
 
@@ -69,105 +68,8 @@ exports.createCollaborative = async (req, res) => {
         input = input.replace(/Below is a trading[\s\S]*strategy does\?/, "");
       }
 
-      //Function to call ChatGPT
-      const extractGPT = async () => {
-        const stream = new Transform({
-          transform(chunk, encoding, callback) {
-            this.push(chunk);
-            callback();
-          }
-        });
 
-        try {
-          // console.log('prompt:', '\n'+process.env.Collaborative_Prompt1+'\n\n'+input);
-          console.log('Sending request to ChatGPT...');
-
-          const response = await axios({
-            method: 'post',
-            url: process.env.GPTSERVER + "/api/conversation",
-            headers: {
-              'Authorization': process.env.OPENAI_API_AUTHORIZATION,
-              'Content-Type': 'application/json'
-            },
-            data: {
-              "action": "next",
-              "messages": [
-                {
-                  "id": "cd465ab7-3ee4-40e7-8e48-ade9926ad68e",
-                  "role": "user",
-                  "content": {
-                    "content_type": "text",
-                    "parts": [
-                      process.env.Collaborative_Prompt1 + '\n\n' + input
-                    ]
-                  }
-                }
-              ],
-              "parent_message_id": "572aca1b-59e5-4262-85b6-b258fa5a38b8",
-              "model": "gpt-4-plugins",
-              "temperature": 0,
-              "stream": "false",
-              "plugin_ids": [
-                "plugin-8701f253-5910-4d4c-8057-8265b1ec587e",
-                "plugin-f4c74dea-7bee-4f77-9717-34668bbd05b9",
-                "plugin-ec68cb54-acee-4330-8d94-f97b8347d525"
-              ]
-            },
-            responseType: 'stream'
-          });
-
-          let fullMessage = '';
-          return new Promise((resolve, reject) => {
-            response.data.pipe(stream).on('data', chunk => {
-              const message = chunk.toString();
-              fullMessage += message;
-            }).on('end', () => {
-
-
-              let lines = fullMessage.split('\n');
-              let doneIndex = lines.findIndex(line => line.trim() === 'data: [DONE]');
-              console.log('doneIndex', doneIndex);
-
-              let dataLine;
-
-              if (doneIndex !== -1 && doneIndex > 0) {
-                dataLine = lines[doneIndex - 2];
-                console.log('dataLine', dataLine);
-              } else {
-                let dataLine0 = lines[lines.length - 1];  // get last line if 'data: [DONE]' not found
-                dataLine = lines[lines.length - 2]; // get second-to-last line if 'data: [DONE]' not found
-                let dataLine2 = lines[lines.length - 3] // get third-to-last line if 'data: [DONE]' not found
-                console.log('dataLine0', dataLine0);
-                console.log('dataLine', dataLine);
-                console.log('dataLine2', dataLine2);
-              }
-
-
-              fullMessage = dataLine.replace('data: ', '');
-              const contentStartIndex = fullMessage.indexOf('"content"');
-              const contentEndIndex = fullMessage.indexOf('"status"');
-              const content = fullMessage.substring(contentStartIndex, contentEndIndex);
-
-              const partsStartIndex = content.indexOf('"parts":');
-              const partsEndIndex = content.indexOf(']}');
-              const partsArray = content.substring(partsStartIndex, partsEndIndex);
-
-              const result = partsArray.replace(/\\"/g, '"').replace(/\\n/g, '\n');
-              fullMessage = result;
-
-
-              console.log('fullMessage', '\n' + fullMessage);
-              resolve(fullMessage);
-
-            }).on('error', reject);
-
-          });
-        } catch (error) {
-          console.error('Request Error: check keys and cookies', error);
-        }
-      };
-
-      // Function to parse the JSON data
+      // Function to parse the JSON data from GPT plugins
       const parseJsonData = (fullMessage) => {
 
         let jsonStart = fullMessage.indexOf('```json\n') + 8;
@@ -184,7 +86,7 @@ exports.createCollaborative = async (req, res) => {
       // Call the functions : ChatGPT and parse the data
       let parsedJson;
       try {
-        parsedJson = await extractGPT().then(fullMessage => {
+        parsedJson = await extractGPT(input).then(fullMessage => {
           return parseJsonData(fullMessage);
         });
       } catch (error) {
@@ -748,45 +650,4 @@ exports.getPortfolios = async (req, res) => {
 //   }),  
 //   getPositions: Mock.fn(() => Promise.resolve([])),
 // }));
-
-
-// Call a Python script
-
-// async function runPythonScript(input) {
-//   return new Promise((resolve, reject) => {
-//     let prompt = input;
-//     // console.log('prompt', prompt);
-
-//     let login = process.env.OPENAI_API_LOGIN;
-//     let password = process.env.OPENAI_API_PASSWORD;
-
-//     let python_process = spawn('python3', ['scripts/chatgpt.py', prompt, login, password]);
-//     let python_output = "";
-
-//     python_process.stdout.on('data', (data) => {
-//       console.log(`stdout: ${data}`);
-//       python_output += data.toString();
-//     });
-
-//     python_process.stderr.on('data', (data) => {
-//       console.error(`stderr: ${data}`);
-//     });
-
-//     python_process.on('close', (code) => {
-//       console.log(`child process exited with code ${code}`);
-//       // console.log(`Script output: ${python_output}`);
-//       resolve(python_output);
-//     });
-//   });
-// }
-
-      // async function extractGPT() {
-      //   let python_output = await runPythonScript (
-      //     process.env.Collaborative_Prompt1+'\n\n'+input
-      //   );
-
-      //   console.log('python_output:'+'\n\n'+python_output);
-      //   return python_output.toString();
-      // }
-
 
