@@ -531,6 +531,104 @@ exports.getPortfolios = async (req, res) => {
 };
 
 
+exports.getNewsHeadlines= async (req, res) => {
+};
+
+
+
+exports.getSentimentScore = async (req, res) => {
+
+//   const { spawn } = require('child_process');
+
+//   // Call a Python script
+//   const runPythonScript = async (input) => {
+//     return new Promise((resolve, reject) => {
+//       let prompt = input;
+  
+//       let login = process.env.OPENAI_API_LOGIN;
+//       let password = process.env.OPENAI_API_PASSWORD;
+  
+//       let python_process = spawn('python3', ['scripts/sentiment_claude.py', prompt, login, password]);
+//       let python_output = "";
+  
+//       python_process.stdout.on('data', (data) => {
+//         console.log(`stdout: ${data}`);
+//         python_output += data.toString();
+//       });
+  
+//       python_process.stderr.on('data', (data) => {
+//         console.error(`stderr: ${data}`);
+//       });
+  
+//       python_process.on('close', (code) => {
+//         console.log(`child process exited with code ${code}`);
+//         resolve(python_output);
+//       });
+//     });
+//   }
+  
+//   const getSentimentScore = async (input) => {
+//     let python_output = await runPythonScript (
+//       process.env.Collaborative_Prompt1+'\n\n'+input
+//     );
+  
+//     console.log('python_output:'+'\n\n'+python_output);
+//     return python_output.toString();
+//   }
+  
+//   module.exports = getSentimentScore;
+  
+
+};
+
+exports.testPython = async (req, res) => {
+  console.log('testPython called');
+  const { spawn } = require('child_process');
+  let input = req.body.input;
+
+  // Call a Python script
+  const runPythonScript = async (input) => {
+    return new Promise((resolve, reject) => {
+      let python_process = spawn('python3', ['scripts/test.py', input]);
+      let python_output = "";
+
+      python_process.stdout.on('data', (data) => {
+        console.log(`stdout: ${data}`);
+        python_output += data.toString();
+      });
+
+      python_process.stderr.on('data', (data) => {
+        console.error(`stderr: ${data}`);
+      });
+
+      python_process.on('close', (code) => {
+        console.log(`child process exited with code ${code}`);
+        resolve(python_output);
+      });
+    });
+  }
+
+  const getPython = async (input) => {
+    let python_output = await runPythonScript(input);
+    console.log('python_output:'+'\n\n'+python_output);
+    return python_output.toString();
+  }
+
+  // Call the getPython function and send the result back to the client
+  try {
+    let result = await getPython(input);
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: 'An error occurred while running the Python script.' });
+  }
+};
+
+  
+
+
+
+
+
 // Debugging function to retry a promise-based function
 const retry = (fn, retriesLeft = 5, interval = 1000) => {
   return new Promise((resolve, reject) => {
