@@ -35,7 +35,8 @@ const Test = () => {
   return (
     <Layout>
       <Box sx={{ mt: 10, ml: 3 }}>
-        <h1>This is the Test Page</h1>
+        <h1>Test your python script</h1>
+        
         <form onSubmit={handleSubmit}>
           <TextField
             id="input1"
