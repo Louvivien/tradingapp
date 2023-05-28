@@ -10,7 +10,6 @@ const errorMessage = (res, error) => {
   return res.status(400).json({ status: "fail", message: error.message });
 };
 exports.registerUser = async (req, res) => {
-  console.log("registering user");
   try {
     const { username, password } = req.body;
 
@@ -52,6 +51,10 @@ exports.loginUser = async (req, res) => {
   try {
     const { username, password } = req.body;
 
+ 
+
+
+
     if (!username || !password) {
       return res.status(200).json({
         status: "fail",
@@ -60,6 +63,8 @@ exports.loginUser = async (req, res) => {
     }
 
     const user = await User.findOne({ username });
+ 
+
 
     if (!user) {
       return res.status(200).json({
@@ -95,7 +100,6 @@ exports.loginUser = async (req, res) => {
     //connect to alpaca when signedin
     const alpacaConfig = await setAlpaca(user._id); 
     const alpacaApi = new Alpaca(alpacaConfig);
-    console.log("Connected to Alpaca");
 
     // get user's balance from Alpaca
     const balance = await alpacaApi.getAccount();
@@ -112,6 +116,7 @@ exports.loginUser = async (req, res) => {
       },
     });
   } catch (error) {
+
     return errorMessage(res, error);
   }
 };

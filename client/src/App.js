@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from "react";
 import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
 import styles from "./App.module.css";
-import { Login, Register, NotFound, PageTemplate } from "./components";
+import Test from "./components/Test/test";
+import { Login, Register, NotFound, PageTemplate} from "./components";
 import UserContext from "./context/UserContext";
 import Axios from "axios";
 import config from "./config/Config";
+
+
 
 function App() {
   const [userData, setUserData] = useState({
@@ -61,19 +64,23 @@ function App() {
       <UserContext.Provider value={{ userData, setUserData }}>
         <div className={styles.container}>
           <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
             {userData.user ? (
-              <Route path="/" element={<PageTemplate />} />
+              <>
+                <Route path="/" element={<PageTemplate />} />
+                <Route path="/test" element={<Test />} />
+              </>
             ) : (
               <Route path="/" element={<Register />} />
             )}
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route element={<NotFound />} />
+            <Route path="*" element={<NotFound />} />
           </Routes>
         </div>
       </UserContext.Provider>
     </Router>
   );
+  
 }
 
 export default App;

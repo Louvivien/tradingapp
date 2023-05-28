@@ -1,0 +1,101 @@
+[
+    {
+        "_id": 1,
+        "Date": "2023-05-01",
+        "Stock name": "Tesla",
+        "Ticker": "TSLA",
+        "News headline": "Tesla fails to meet quarterly earnings expectations",
+        "Sentiment": "NO",
+        "Description": "Tesla missed earnings targets which often negatively impacts stock price."
+    },
+    {
+        "_id": 2,
+        "Date": "2023-05-02",
+        "Stock name": "Amazon",
+        "Ticker": "AMZN",
+        "News headline": "Amazon's revenue falls short of projections for the second quarter",
+        "Sentiment": "NO",
+        "Description": "Amazon's growth slowed more than expected."
+    },
+    {
+        "_id": 3,
+        "Date": "2023-05-03",
+        "Stock name": "Microsoft",
+        "Ticker": "MSFT",
+        "News headline": "Microsoft experiences decline in market share due to stiff competition",
+        "Sentiment": "NO",
+        "Description": "Microsoft's stock price may suffer due to loss in market dominance."
+    },
+    {
+        "_id": 4,
+        "Date": "2023-05-04",
+        "Stock name": "Google",
+        "Ticker": "GOOGL",
+        "News headline": "Google's new product launch receives negative reviews from consumers",
+        "Sentiment": "NO",
+        "Description": "The new product may hurt Google's stock price in the short term."
+    },
+    {
+        "_id": 5,
+        "Date": "2023-05-05",
+        "Stock name": "Apple",
+        "Ticker": "AAPL",
+        "News headline": "Apple surpasses revenue expectations with record-breaking sales",
+        "Sentiment": "YES",
+        "Description": "Apple's stock price likely to increase due to strong quarterly results."
+    },
+    {
+        "_id": 6,
+        "Date": "2023-05-06",
+        "Stock name": "Facebook",
+        "Ticker": "FB",
+        "News headline": "Facebook's user base continues to grow, reaching new milestones",
+        "Sentiment": "YES",
+        "Description": "Facebook's growth is a positive sign for the stock."
+    },
+    {
+        "_id": 7,
+        "Date": "2023-05-07",
+        "Stock name": "Netflix",
+        "Ticker": "NFLX",
+        "News headline": "Netflix announces partnership with renowned filmmakers for original content",
+        "Sentiment": "YES",
+        "Description": "New exclusive content will attract more subscribers."
+    },
+    {
+        "_id": 8,
+        "Date": "2023-05-08",
+        "Stock name": "IBM",
+        "Ticker": "IBM",
+        "News headline": "IBM's latest breakthrough in artificial intelligence revolutionizes the industry",
+        "Sentiment": "YES",
+        "Description": "IBM's AI innovation will boost revenue and stock price."
+    },
+    {
+        "_id": 9,
+        "Date": "2023-05-09",
+        "Stock name": "Intel",
+        "Ticker": "INTC",
+        "News headline": "Intel unveils powerful new processor that exceeds performance expectations",
+        "Sentiment": "YES",
+        "Description": "Intel's new processor will boost sales and stock price."
+    },
+    {
+        "_id": 10,
+        "Date": "2023-05-10",
+        "Stock name": "Twitter",
+        "Ticker": "TWTR",
+        "News headline": "Twitter introduces new features to enhance user experience",
+        "Sentiment": "YES",
+        "Description": "New features may attract more users and boost engagement."
+    },
+    {
+        "_id": 11,
+        "Date": "2023-05-11",
+        "Stock name": "Samsung",
+        "Ticker": "SSNLF",
+        "News headline": "Samsung expands its market share with strong sales in emerging markets",
+        "Sentiment": "YES",
+        "Description": "Samsung's sales growth in emerging markets is a positive sign for future earnings."
+    }
+]
