@@ -13,7 +13,7 @@ load_dotenv("../config/.env")
 STOCKNEWS_API_KEY = os.getenv("STOCKNEWS_API_KEY")
 
 
-# Before executing this file you need to update the session cookies for degiro and IB
+# Before running this file you need to update the session cookies for degiro and IB
 # IB: filter requests on "search" in the browser network tab copy the curl command and paste it in Postman
     # paste the header section from Postman
 # degiro: filter requests on "news" in the browser network tab copy the curl command and paste it in Postman
@@ -39,12 +39,12 @@ def print_curl_command(request):
 # # Degiro API
 # Paste the code from Postman to get the updated session ID
 
-def fetch_degiro_news():
+def fetch_degiro_news(ticker='AAPL'):
     try:
         print("Fetching data from Degiro API...")
         url = 'https://trader.degiro.nl/dgtbxdsservice/newsfeed/v2/news-by-company' 
-        aapl = yf.Ticker("AAPL")
-        isin = aapl.isin
+        stock = yf.Ticker(ticker)
+        isin = stock.isin
         headers = {
             'authority': 'trader.degiro.nl',
             'accept': 'application/json, text/plain, */*',
@@ -81,12 +81,12 @@ def fetch_degiro_news():
 
 # # StockNews API 
 # 100 calls per month for free
-def fetch_stocknews_news():
+def fetch_stocknews_news(ticker='AAPL'):
     try:
         print("Fetching data from StockNews API...")
         url = 'https://stocknewsapi.com/api/v1'
         params = {
-            'tickers': 'AAPL',
+            'tickers': ticker,
             'items': 3,
             'page': 1, 
             'token': STOCKNEWS_API_KEY 
@@ -104,11 +104,11 @@ def fetch_stocknews_news():
 
 # # TickerTick API
 #  30 requests per minute from the same IP address
-def fetch_tickertick_news():
+def fetch_tickertick_news(ticker='AAPL'):
     try:
         print("Fetching data from TickerTick API...")
         base_url = 'https://api.tickertick.com/feed'
-        query = '(or+TT:AAPL+(or+T:fin_news+T:analysis+T:industry+T:earning+T:curated))'
+        query = f'(or+TT:{ticker}+(or+T:fin_news+T:analysis+T:industry+T:earning+T:curated))'
         params = f'?q={query}&n=10'
         url = base_url + params
         response = requests.get(url)
@@ -122,11 +122,11 @@ def fetch_tickertick_news():
 
 
 # # Yahoo Finance 
-def fetch_yahoo_news():
+def fetch_yahoo_news(ticker='AAPL'):
     try:
         print("Fetching data from Yahoo Finance...")
-        aapl = yf.Ticker("AAPL")
-        yahoo_news = aapl.news
+        stock = yf.Ticker(ticker)
+        yahoo_news = stock.news
         yahoo_news = [n for n in yahoo_news if n['title'].strip()]
         print("Data fetched successfully from Yahoo Finance.")
         return yahoo_news
@@ -137,13 +137,13 @@ def fetch_yahoo_news():
 
 # Interactive Brokers API
 # Paste the code from Postman to get the updated cookie
-def fetch_ib_news():
+def fetch_ib_news(ticker='AAPL'):
 
 # Get the contract number from the ticker
     try:
         url = "https://www.interactivebrokers.co.uk/portal.proxy/v1/portal/iserver/secdef/search"
 
-        payload = "{\"symbol\":\"AAPL\",\"pattern\":true,\"referrer\":\"onebar\"}"
+        payload = f'{{"symbol":"{ticker}","pattern":true,"referrer":"onebar"}}'
         headers = {
         'authority': 'www.interactivebrokers.co.uk',
         'accept': '*/*',
@@ -239,11 +239,11 @@ class DateTimeEncoder(json.JSONEncoder):
             return o.isoformat()
         return super(DateTimeEncoder, self).default(o)
 
-def fetch_google_news():
+def fetch_google_news(ticker='AAPL'):
     try:
         print("Fetching data from Google News...")
         google_news = GoogleNews()
-        google_news.search(f'Apple stock')
+        google_news.search(f'{ticker} stock')
         google_news_results = google_news.result()
         google_news_final = json.dumps(google_news_results, cls=DateTimeEncoder)
         google_news_results_dict = json.loads(google_news_final)
@@ -277,14 +277,15 @@ def print_news_headlines(degiro_news, stocknews_news, tickertick_news, yahoo_new
     except Exception as e:
         print(f"An error occurred while printing news headlines: {e}")
 
-def main():
-    degiro_news = fetch_degiro_news()
-    stocknews_news = fetch_stocknews_news()
-    tickertick_news = fetch_tickertick_news()
-    yahoo_news = fetch_yahoo_news()
-    ib_news = fetch_ib_news()
-    google_news_results_dict = fetch_google_news()
+def main(ticker='AAPL'):
+    degiro_news = fetch_degiro_news(ticker)
+    stocknews_news = fetch_stocknews_news(ticker)
+    tickertick_news = fetch_tickertick_news(ticker)
+    yahoo_news = fetch_yahoo_news(ticker)
+    ib_news = fetch_ib_news(ticker)
+    google_news_results_dict = fetch_google_news(ticker)
     print_news_headlines(degiro_news, stocknews_news, tickertick_news, yahoo_news, ib_news, google_news_results_dict)
+
 
 if __name__ == "__main__":
     main()
