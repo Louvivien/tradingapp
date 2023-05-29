@@ -531,9 +531,46 @@ exports.getPortfolios = async (req, res) => {
 };
 
 
-exports.getNewsHeadlines= async (req, res) => {
-};
+exports.getNewsHeadlines= async (req, res) => { console.log('testPython called');
+const { spawn } = require('child_process');
+let input = req.body.input;
 
+// Call a Python script
+const runPythonScript = async (input) => {
+  return new Promise((resolve, reject) => {
+    let python_process = spawn('python3', ['scripts/headlines.py', input]);
+    let python_output = "";
+
+    python_process.stdout.on('data', (data) => {
+      console.log(`stdout: ${data}`);
+      python_output += data.toString();
+    });
+
+    python_process.stderr.on('data', (data) => {
+      console.error(`stderr: ${data}`);
+    });
+
+    python_process.on('close', (code) => {
+      console.log(`child process exited with code ${code}`);
+      resolve(python_output);
+    });
+  });
+}
+
+const getPython = async (input) => {
+  let python_output = await runPythonScript(input);
+  console.log('python_output:'+'\n\n'+python_output);
+  return python_output.toString();
+}
+
+// Call the getPython function and send the result back to the client
+try {
+  let result = await getPython(input);
+  res.send(result);
+} catch (error) {
+  res.status(500).send({ message: 'An error occurred while running the Python script.' });
+}
+};
 
 
 exports.getSentimentScore = async (req, res) => {
