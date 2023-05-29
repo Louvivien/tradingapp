@@ -72,6 +72,7 @@ def fetch_degiro_news(ticker='AAPL'):
         response = requests.get(url, headers=headers, params=params)
         # print_curl_command(response.request)
         degiro_news = response.json()['data']['items']
+        # print("degiro_news", degiro_news)
         degiro_news = [n for n in degiro_news if n['title'].strip()]
         print("Data fetched successfully from Degiro API.")
         return degiro_news
@@ -94,6 +95,7 @@ def fetch_stocknews_news(ticker='AAPL'):
         response = requests.get(url, params=params)
         stocknews_news = response.json()['data']
         stocknews_news = [n for n in stocknews_news if n['title'].strip()]
+        # print("stocknews_news :", stocknews_news)
         print("Data fetched successfully from StockNews API.")
         return stocknews_news
     except Exception as e:
@@ -114,6 +116,7 @@ def fetch_tickertick_news(ticker='AAPL'):
         response = requests.get(url)
         tickertick_news = response.json()['stories']
         tickertick_news = [n for n in tickertick_news if n['title'].strip()]
+        # print("tickertick_news :", tickertick_news)
         print("Data fetched successfully from TickerTick API.")
         return tickertick_news
     except Exception as e:
@@ -128,6 +131,7 @@ def fetch_yahoo_news(ticker='AAPL'):
         stock = yf.Ticker(ticker)
         yahoo_news = stock.news
         yahoo_news = [n for n in yahoo_news if n['title'].strip()]
+        # print("yahoo_news :", yahoo_news)
         print("Data fetched successfully from Yahoo Finance.")
         return yahoo_news
     except Exception as e:
@@ -223,6 +227,7 @@ def fetch_ib_news(ticker='AAPL'):
 
         # print_curl_command(response.request)
         ib_news = response.json()['results']
+        # print("ib_news", ib_news)
 
         ib_news = [n for n in ib_news if n['headLineContent'].strip()]
         print("Data fetched successfully from Interactive Brokers API.")
@@ -248,6 +253,7 @@ def fetch_google_news(ticker='AAPL'):
         google_news_final = json.dumps(google_news_results, cls=DateTimeEncoder)
         google_news_results_dict = json.loads(google_news_final)
         google_news_results_dict = [n for n in google_news_results_dict if n['title'].strip()]
+        # print("google_news_results_dict", google_news_results_dict)
         print("Data fetched successfully from Google News.")
         return google_news_results_dict
     except Exception as e:
