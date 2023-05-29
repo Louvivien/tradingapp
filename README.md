@@ -21,7 +21,7 @@ Frontend: React
 
 Data: MongoDB
 
-Devops: Github, Vercel, Render, Google Cloud Build
+Devops: Github, Vercel, Render, Google Cloud Build, Gitguardian
 
 Product Management: Productboard, Notion
 
@@ -39,7 +39,6 @@ cd server
 
 Then install the required packages for the server with:
 
-
 ```sh
 npm install
 ```
@@ -52,7 +51,7 @@ cd ..
 cd client
 ```
 
-And the required packages for the client with:
+Install the required packages for the client with:
 ```sh
 npm install
 ```
