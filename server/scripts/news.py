@@ -15,7 +15,10 @@ STOCKNEWS_API_KEY = os.getenv("STOCKNEWS_API_KEY")
 
 # Before executing this file you need to update the session cookies for degiro and IB
 # IB: filter requests on "search" in the browser network tab copy the curl command and paste it in Postman
+    # paste the header section from Postman
 # degiro: filter requests on "news" in the browser network tab copy the curl command and paste it in Postman
+    # paste the sessionId from Postman
+
 
 
 
@@ -62,17 +65,18 @@ def fetch_degiro_news():
             'isin': isin, 
             'limit': 10, 
             'offset': 0,
-            'sessionId': '3DB6E8698A145184026660A1505C64C7.prod_b_128_5',
+            'sessionId': '0B4BB788BC2925188DAB0C59A6A9E1D8.prod_b_128_5',
             'languages': 'en,fr' 
         }
 
         response = requests.get(url, headers=headers, params=params)
+        # print_curl_command(response.request)
         degiro_news = response.json()['data']['items']
         degiro_news = [n for n in degiro_news if n['title'].strip()]
         print("Data fetched successfully from Degiro API.")
         return degiro_news
     except Exception as e:
-        print(f"An error occurred while fetching data from Degiro API: {e}")
+        print(f"Session ID expired. Please update it - {e}")
         return []
 
 # # StockNews API 
@@ -134,20 +138,19 @@ def fetch_yahoo_news():
 # Interactive Brokers API
 # Paste the code from Postman to get the updated cookie
 def fetch_ib_news():
+
+# Get the contract number from the ticker
     try:
-        print("Fetching data from Interactive Brokers API...")
+        url = "https://www.interactivebrokers.co.uk/portal.proxy/v1/portal/iserver/secdef/search"
 
-
-        url = "https://www.interactivebrokers.co.uk/tws.proxy/news2/search2?lang=en_US&tzone="
-
-        payload = "{\"modKeywords\":[],\"categories\":[],\"contracts\":[\"265598\"],\"content_type\":[],\"contract_filter_type\":[]}"
+        payload = "{\"symbol\":\"AAPL\",\"pattern\":true,\"referrer\":\"onebar\"}"
         headers = {
         'authority': 'www.interactivebrokers.co.uk',
         'accept': '*/*',
         'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
         'cache-control': 'no-cache',
         'content-type': 'application/json; charset=utf-8',
-        'cookie': 'SBID=qlku8ucrw2olhj2l78s; IB_PRIV_PREFS=0%7C0%7C0; web=1038835950; persistPickerEntry=-975354114; ROUTEIDD=.ny5japp2; PHPSESSID=1uatb4ikep5o234kpc05k956t1; _gcl_au=1.1.1159424871.1683845124; _ga=GA1.1.1577574560.1683845124; IB_LGN=T; _fbp=fb.2.1683845124910.2067711817; _tt_enable_cookie=1; _ttp=KwcgLD3IO-uMJr9oPKCG2dtx7yM; pastandalone=""; ROUTEID=.zh4www2-internet; IB_LANG=fr; credrecovery.web.session=36fb301f70cf85a0839df3622cdc2229; _uetsid=ed7f5a60fdf511edbe389b7bccaa0c57; _uetvid=849ca6d0f04d11eda4f6136e3642cc6b; _ga_V74YNFMQMQ=GS1.1.1685372607.7.0.1685372610.0.0.0; URL_PARAM="RL=1"; AKA_A2=A; XYZAB_AM.LOGIN=fdcafdafb03e6c5e5768ef462aad74e10e3e7a44; XYZAB=fdcafdafb03e6c5e5768ef462aad74e10e3e7a44; USERID=102719436; IS_MASTER=true; cp.eu=2de6a9d6ad723d6a946958e1365381c7; ibcust=0f55a49bdffcfe45b3bb5a665d52a1f9; RT="z=1&dm=www.interactivebrokers.co.uk&si=e3e1ccec-d396-4feb-812d-b90d1172b25b&ss=li8xwb2l&sl=p&tt=33ft&obo=8&rl=1"',
+        'cookie': 'SBID=qlku8ucrw2olhj2l78s; IB_PRIV_PREFS=0%7C0%7C0; web=1038835950; persistPickerEntry=-975354114; ROUTEIDD=.ny5japp2; PHPSESSID=1uatb4ikep5o234kpc05k956t1; _gcl_au=1.1.1159424871.1683845124; _ga=GA1.1.1577574560.1683845124; IB_LGN=T; _fbp=fb.2.1683845124910.2067711817; _tt_enable_cookie=1; _ttp=KwcgLD3IO-uMJr9oPKCG2dtx7yM; pastandalone=""; ROUTEID=.zh4www2-internet; IB_LANG=fr; credrecovery.web.session=36fb301f70cf85a0839df3622cdc2229; cp.eu=2de6a9d6ad723d6a946958e1365381c7; _uetsid=ed7f5a60fdf511edbe389b7bccaa0c57; _uetvid=849ca6d0f04d11eda4f6136e3642cc6b; _ga_V74YNFMQMQ=GS1.1.1685385602.8.0.1685385607.0.0.0; XYZAB_AM.LOGIN=0f03d91b75bbd2505de34b7738fc2d88193287df; XYZAB=0f03d91b75bbd2505de34b7738fc2d88193287df; USERID=102719436; IS_MASTER=true; AKA_A2=A; RT="z=1&dm=www.interactivebrokers.co.uk&si=e3e1ccec-d396-4feb-812d-b90d1172b25b&ss=li8xwb2l&sl=t&tt=39na&obo=9&rl=1"; ibcust=3981e4ba2bb4b19da2d0a0df59668747',
         'origin': 'https://www.interactivebrokers.co.uk',
         'pragma': 'no-cache',
         'referer': 'https://www.interactivebrokers.co.uk/portal/',
@@ -162,9 +165,56 @@ def fetch_ib_news():
         'x-embedded-in': 'web',
         'x-request-id': '17',
         'x-service': 'AM.LOGIN',
-        'x-session-id': '6d4f192a-8ace-4e7b-c3dc-60a39c9de1ab',
+        'x-session-id': '62f7f0ce-0332-4144-994b-86f2d596a0f2',
         'x-wa-version': '61d75d4,Mon, 15 May 2023 07:09:01 -0400/2023-05-15T15:42:00.639Z',
-        'x-xyzab': 'fdcafdafb03e6c5e5768ef462aad74e10e3e7a44'
+        'x-xyzab': '0f03d91b75bbd2505de34b7738fc2d88193287df'
+        }
+
+        response = requests.request("POST", url, headers=headers, data=payload)
+        # print_curl_command(response.request)
+
+        ib_contracts = response.json()[0]['conid']
+        # ib_contracts = response.json()['conid']
+
+        # print("ib_contracts",  ib_contracts)
+
+
+    except Exception as e:
+        print(f"Cookies expired. Please update it -  {e}")
+        return []
+
+# Get the news from the contract number
+    try:
+        print("Fetching data from Interactive Brokers API...")
+
+
+        url = "https://www.interactivebrokers.co.uk/tws.proxy/news2/search2?lang=en_US&tzone="
+
+        payload = f'{{"modKeywords":[],"categories":[],"contracts":["{ib_contracts}"],"content_type":[],"contract_filter_type":[]}}'
+        headers = {
+        'authority': 'www.interactivebrokers.co.uk',
+        'accept': '*/*',
+        'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'cache-control': 'no-cache',
+        'content-type': 'application/json; charset=utf-8',
+        'cookie': 'SBID=qlku8ucrw2olhj2l78s; IB_PRIV_PREFS=0%7C0%7C0; web=1038835950; persistPickerEntry=-975354114; ROUTEIDD=.ny5japp2; PHPSESSID=1uatb4ikep5o234kpc05k956t1; _gcl_au=1.1.1159424871.1683845124; _ga=GA1.1.1577574560.1683845124; IB_LGN=T; _fbp=fb.2.1683845124910.2067711817; _tt_enable_cookie=1; _ttp=KwcgLD3IO-uMJr9oPKCG2dtx7yM; pastandalone=""; ROUTEID=.zh4www2-internet; IB_LANG=fr; credrecovery.web.session=36fb301f70cf85a0839df3622cdc2229; cp.eu=2de6a9d6ad723d6a946958e1365381c7; _uetsid=ed7f5a60fdf511edbe389b7bccaa0c57; _uetvid=849ca6d0f04d11eda4f6136e3642cc6b; _ga_V74YNFMQMQ=GS1.1.1685385602.8.0.1685385607.0.0.0; XYZAB_AM.LOGIN=0f03d91b75bbd2505de34b7738fc2d88193287df; XYZAB=0f03d91b75bbd2505de34b7738fc2d88193287df; USERID=102719436; IS_MASTER=true; AKA_A2=A; RT="z=1&dm=www.interactivebrokers.co.uk&si=e3e1ccec-d396-4feb-812d-b90d1172b25b&ss=li8xwb2l&sl=t&tt=39na&obo=9&rl=1"; ibcust=3981e4ba2bb4b19da2d0a0df59668747',
+        'origin': 'https://www.interactivebrokers.co.uk',
+        'pragma': 'no-cache',
+        'referer': 'https://www.interactivebrokers.co.uk/portal/',
+        'sec-ch-ua': '"Google Chrome";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"macOS"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
+        'x-ccp-session-id': '64742974.0000004c',
+        'x-embedded-in': 'web',
+        'x-request-id': '17',
+        'x-service': 'AM.LOGIN',
+        'x-session-id': '62f7f0ce-0332-4144-994b-86f2d596a0f2',
+        'x-wa-version': '61d75d4,Mon, 15 May 2023 07:09:01 -0400/2023-05-15T15:42:00.639Z',
+        'x-xyzab': '0f03d91b75bbd2505de34b7738fc2d88193287df'
         }
 
         response = requests.request("POST", url, headers=headers, data=payload)
