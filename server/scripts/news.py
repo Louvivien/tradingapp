@@ -65,15 +65,28 @@ def fetch_degiro_news(ticker='AAPL'):
             'isin': isin, 
             'limit': 10, 
             'offset': 0,
-            'sessionId': '0B4BB788BC2925188DAB0C59A6A9E1D8.prod_b_128_5',
+            'sessionId': 'AD825491B7DBB9B830B8EBE7511B66D9.prod_b_128_5',
             'languages': 'en,fr' 
         }
 
         response = requests.get(url, headers=headers, params=params)
         # print_curl_command(response.request)
-        degiro_news = response.json()['data']['items']
+        degiro_news_raw = response.json()['data']['items']
         # print("degiro_news", degiro_news)
-        degiro_news = [n for n in degiro_news if n['title'].strip()]
+        degiro_news_raw = [n for n in degiro_news_raw  if n['title'].strip()]
+        degiro_news = []
+        for news in degiro_news_raw:
+            degiro_news.append({
+                'id': news.get('id'),
+                'title': news.get('title'),
+                'date': datetime.datetime.strptime(news.get('date'), "%Y-%m-%dT%H:%M:%SZ"),
+                'category': news.get('category'),
+                'tickers': news.get('isins'),
+                'sentiment': None,
+                'source': 'degiro_news'
+            })
+
+
         print("Data fetched successfully from Degiro API.")
         return degiro_news
     except Exception as e:
@@ -93,8 +106,19 @@ def fetch_stocknews_news(ticker='AAPL'):
             'token': STOCKNEWS_API_KEY 
         }
         response = requests.get(url, params=params)
-        stocknews_news = response.json()['data']
-        stocknews_news = [n for n in stocknews_news if n['title'].strip()]
+        stocknews_news_raw = response.json()['data']
+        stocknews_news_raw = [n for n in stocknews_news_raw if n['title'].strip()]
+        stocknews_news = []
+        for news in stocknews_news_raw:
+            stocknews_news.append({
+                'id': None,
+                'title': news.get('title'),
+                'date': datetime.datetime.strptime(news.get('date'), "%a, %d %b %Y %H:%M:%S %z"),
+                'category': None,
+                'tickers': news.get('tickers'),
+                'sentiment': news.get('sentiment'),
+                'source': 'stocknews_news'
+            })
         # print("stocknews_news :", stocknews_news)
         print("Data fetched successfully from StockNews API.")
         return stocknews_news
@@ -114,8 +138,19 @@ def fetch_tickertick_news(ticker='AAPL'):
         params = f'?q={query}&n=10'
         url = base_url + params
         response = requests.get(url)
-        tickertick_news = response.json()['stories']
-        tickertick_news = [n for n in tickertick_news if n['title'].strip()]
+        tickertick_news_raw = response.json()['stories']
+        tickertick_news_raw = [n for n in tickertick_news_raw if n['title'].strip()]
+        tickertick_news = []
+        for news in tickertick_news_raw:
+            tickertick_news.append({
+                'id': news.get('id'),
+                'title': news.get('title'),
+                'date': datetime.datetime.fromtimestamp(news.get('time') / 1000),
+                'category': None,
+                'tickers': news.get('tickers'),
+                'sentiment': None,
+                'source': 'tickertick_news'
+            })
         # print("tickertick_news :", tickertick_news)
         print("Data fetched successfully from TickerTick API.")
         return tickertick_news
@@ -129,8 +164,19 @@ def fetch_yahoo_news(ticker='AAPL'):
     try:
         print("Fetching data from Yahoo Finance...")
         stock = yf.Ticker(ticker)
-        yahoo_news = stock.news
-        yahoo_news = [n for n in yahoo_news if n['title'].strip()]
+        yahoo_news_raw = stock.news
+        yahoo_news_raw  = [n for n in yahoo_news_raw  if n['title'].strip()]
+        yahoo_news = []
+        for news in yahoo_news_raw:
+            yahoo_news.append({
+                'id': news.get('uuid'),
+                'title': news.get('title'),
+                'date': datetime.datetime.fromtimestamp(news.get('providerPublishTime')),
+                'category': None,
+                'tickers': news.get('relatedTickers'),
+                'sentiment': None,
+                'source': 'yahoo_news'
+            })
         # print("yahoo_news :", yahoo_news)
         print("Data fetched successfully from Yahoo Finance.")
         return yahoo_news
@@ -149,36 +195,38 @@ def fetch_ib_news(ticker='AAPL'):
 
         payload = f'{{"symbol":"{ticker}","pattern":true,"referrer":"onebar"}}'
         headers = {
-        'authority': 'www.interactivebrokers.co.uk',
-        'accept': '*/*',
-        'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-        'cache-control': 'no-cache',
-        'content-type': 'application/json; charset=utf-8',
-        'cookie': 'SBID=qlku8ucrw2olhj2l78s; IB_PRIV_PREFS=0%7C0%7C0; web=1038835950; persistPickerEntry=-975354114; ROUTEIDD=.ny5japp2; PHPSESSID=1uatb4ikep5o234kpc05k956t1; _gcl_au=1.1.1159424871.1683845124; _ga=GA1.1.1577574560.1683845124; IB_LGN=T; _fbp=fb.2.1683845124910.2067711817; _tt_enable_cookie=1; _ttp=KwcgLD3IO-uMJr9oPKCG2dtx7yM; pastandalone=""; ROUTEID=.zh4www2-internet; IB_LANG=fr; credrecovery.web.session=36fb301f70cf85a0839df3622cdc2229; cp.eu=2de6a9d6ad723d6a946958e1365381c7; _uetsid=ed7f5a60fdf511edbe389b7bccaa0c57; _uetvid=849ca6d0f04d11eda4f6136e3642cc6b; _ga_V74YNFMQMQ=GS1.1.1685385602.8.0.1685385607.0.0.0; XYZAB_AM.LOGIN=0f03d91b75bbd2505de34b7738fc2d88193287df; XYZAB=0f03d91b75bbd2505de34b7738fc2d88193287df; USERID=102719436; IS_MASTER=true; AKA_A2=A; RT="z=1&dm=www.interactivebrokers.co.uk&si=e3e1ccec-d396-4feb-812d-b90d1172b25b&ss=li8xwb2l&sl=t&tt=39na&obo=9&rl=1"; ibcust=3981e4ba2bb4b19da2d0a0df59668747',
-        'origin': 'https://www.interactivebrokers.co.uk',
-        'pragma': 'no-cache',
-        'referer': 'https://www.interactivebrokers.co.uk/portal/',
-        'sec-ch-ua': '"Google Chrome";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"macOS"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-origin',
-        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
-        'x-ccp-session-id': '64742974.0000004c',
-        'x-embedded-in': 'web',
-        'x-request-id': '17',
-        'x-service': 'AM.LOGIN',
-        'x-session-id': '62f7f0ce-0332-4144-994b-86f2d596a0f2',
-        'x-wa-version': '61d75d4,Mon, 15 May 2023 07:09:01 -0400/2023-05-15T15:42:00.639Z',
-        'x-xyzab': '0f03d91b75bbd2505de34b7738fc2d88193287df'
-        }
+            'authority': 'www.interactivebrokers.co.uk',
+            'accept': '*/*',
+            'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+            'cache-control': 'no-cache',
+            'content-type': 'application/json; charset=utf-8',
+            'cookie': 'SBID=qlku8ucrw2olhj2l78s; IB_PRIV_PREFS=0%7C0%7C0; web=1038835950; persistPickerEntry=-975354114; ROUTEIDD=.ny5japp2; PHPSESSID=1uatb4ikep5o234kpc05k956t1; _gcl_au=1.1.1159424871.1683845124; _ga=GA1.1.1577574560.1683845124; IB_LGN=T; _fbp=fb.2.1683845124910.2067711817; _tt_enable_cookie=1; _ttp=KwcgLD3IO-uMJr9oPKCG2dtx7yM; pastandalone=""; ROUTEID=.zh4www2-internet; credrecovery.web.session=36fb301f70cf85a0839df3622cdc2229; _uetsid=ed7f5a60fdf511edbe389b7bccaa0c57; _uetvid=849ca6d0f04d11eda4f6136e3642cc6b; _ga_V74YNFMQMQ=GS1.1.1685385602.8.0.1685385607.0.0.0; URL_PARAM="RL=1"; XYZAB_AM.LOGIN=b35eea4be68f035b7093de1394a44ff479d48640; XYZAB=b35eea4be68f035b7093de1394a44ff479d48640; AKA_A2=A; USERID=102719436; IS_MASTER=true; cp.eu=8804576ef4b71a09d1f4dcea741a29ea; ibcust=a1d60ae7ec5ba01ac2937316e6396238; RT="z=1&dm=www.interactivebrokers.co.uk&si=e3e1ccec-d396-4feb-812d-b90d1172b25b&ss=lia25327&sl=1&tt=32r&rl=1"',
+            'origin': 'https://www.interactivebrokers.co.uk',
+            'pragma': 'no-cache',
+            'referer': 'https://www.interactivebrokers.co.uk/portal/',
+            'sec-ch-ua': '"Google Chrome";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
+            'sec-ch-ua-mobile': '?0',
+            'sec-ch-ua-platform': '"macOS"',
+            'sec-fetch-dest': 'empty',
+            'sec-fetch-mode': 'cors',
+            'sec-fetch-site': 'same-origin',
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
+            'x-ccp-session-id': '64757af3.0000001a',
+            'x-embedded-in': 'web',
+            'x-request-id': '16',
+            'x-service': 'AM.LOGIN',
+            'x-session-id': 'e3fbba1b-dfab-4e3d-ee76-05777a5bd53a',
+            'x-wa-version': '61d75d4,Mon, 15 May 2023 07:09:01 -0400/2023-05-15T15:42:00.639Z',
+            'x-xyzab': 'b35eea4be68f035b7093de1394a44ff479d48640'
+            }
+
 
         response = requests.request("POST", url, headers=headers, data=payload)
         # print_curl_command(response.request)
 
         ib_contracts = response.json()[0]['conid']
-        # ib_contracts = response.json()['conid']
+
+
 
         # print("ib_contracts",  ib_contracts)
 
@@ -195,41 +243,27 @@ def fetch_ib_news(ticker='AAPL'):
         url = "https://www.interactivebrokers.co.uk/tws.proxy/news2/search2?lang=en_US&tzone="
 
         payload = f'{{"modKeywords":[],"categories":[],"contracts":["{ib_contracts}"],"content_type":[],"contract_filter_type":[]}}'
-        headers = {
-        'authority': 'www.interactivebrokers.co.uk',
-        'accept': '*/*',
-        'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-        'cache-control': 'no-cache',
-        'content-type': 'application/json; charset=utf-8',
-        'cookie': 'SBID=qlku8ucrw2olhj2l78s; IB_PRIV_PREFS=0%7C0%7C0; web=1038835950; persistPickerEntry=-975354114; ROUTEIDD=.ny5japp2; PHPSESSID=1uatb4ikep5o234kpc05k956t1; _gcl_au=1.1.1159424871.1683845124; _ga=GA1.1.1577574560.1683845124; IB_LGN=T; _fbp=fb.2.1683845124910.2067711817; _tt_enable_cookie=1; _ttp=KwcgLD3IO-uMJr9oPKCG2dtx7yM; pastandalone=""; ROUTEID=.zh4www2-internet; IB_LANG=fr; credrecovery.web.session=36fb301f70cf85a0839df3622cdc2229; cp.eu=2de6a9d6ad723d6a946958e1365381c7; _uetsid=ed7f5a60fdf511edbe389b7bccaa0c57; _uetvid=849ca6d0f04d11eda4f6136e3642cc6b; _ga_V74YNFMQMQ=GS1.1.1685385602.8.0.1685385607.0.0.0; XYZAB_AM.LOGIN=0f03d91b75bbd2505de34b7738fc2d88193287df; XYZAB=0f03d91b75bbd2505de34b7738fc2d88193287df; USERID=102719436; IS_MASTER=true; AKA_A2=A; RT="z=1&dm=www.interactivebrokers.co.uk&si=e3e1ccec-d396-4feb-812d-b90d1172b25b&ss=li8xwb2l&sl=t&tt=39na&obo=9&rl=1"; ibcust=3981e4ba2bb4b19da2d0a0df59668747',
-        'origin': 'https://www.interactivebrokers.co.uk',
-        'pragma': 'no-cache',
-        'referer': 'https://www.interactivebrokers.co.uk/portal/',
-        'sec-ch-ua': '"Google Chrome";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
-        'sec-ch-ua-mobile': '?0',
-        'sec-ch-ua-platform': '"macOS"',
-        'sec-fetch-dest': 'empty',
-        'sec-fetch-mode': 'cors',
-        'sec-fetch-site': 'same-origin',
-        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
-        'x-ccp-session-id': '64742974.0000004c',
-        'x-embedded-in': 'web',
-        'x-request-id': '17',
-        'x-service': 'AM.LOGIN',
-        'x-session-id': '62f7f0ce-0332-4144-994b-86f2d596a0f2',
-        'x-wa-version': '61d75d4,Mon, 15 May 2023 07:09:01 -0400/2023-05-15T15:42:00.639Z',
-        'x-xyzab': '0f03d91b75bbd2505de34b7738fc2d88193287df'
-        }
+        headers = headers
 
         response = requests.request("POST", url, headers=headers, data=payload)
 
 
 
         # print_curl_command(response.request)
-        ib_news = response.json()['results']
-        # print("ib_news", ib_news)
-
-        ib_news = [n for n in ib_news if n['headLineContent'].strip()]
+        ib_news_raw = response.json()['results']
+        # print("ib_news_raw", ib_news_raw)
+        ib_news_raw = [n for n in ib_news_raw if n['headLineContent'].strip()]
+        ib_news = []
+        for news in ib_news_raw:
+            ib_news.append({
+                'id': news.get('newsId'),
+                'title': news.get('headLineContent'),
+                'date': datetime.datetime.fromtimestamp(news.get('time') / 1000),
+                'category': None,
+                'tickers': [news.get('main_conid')],
+                'sentiment': news.get('sentiment'),
+                'source': 'ib_news'
+            })
         print("Data fetched successfully from Interactive Brokers API.")
         return ib_news
     except Exception as e:
@@ -247,20 +281,32 @@ class DateTimeEncoder(json.JSONEncoder):
 def fetch_google_news(ticker='AAPL'):
     try:
         print("Fetching data from Google News...")
-        google_news = GoogleNews()
-        google_news.search(f'{ticker} stock')
-        google_news_results = google_news.result()
+        google_news_raw = GoogleNews()
+        google_news_raw.search(f'{ticker} stock')
+        google_news_results = google_news_raw.result()
         google_news_final = json.dumps(google_news_results, cls=DateTimeEncoder)
         google_news_results_dict = json.loads(google_news_final)
         google_news_results_dict = [n for n in google_news_results_dict if n['title'].strip()]
+        google_news = []
+        for news in google_news_results_dict:
+            google_news.append({
+                'id': None,
+                'title': news.get('title'),
+                'date': datetime.datetime.strptime(news.get('datetime'), "%Y-%m-%dT%H:%M:%S.%f"),
+                'brief': None,
+                'category': None,
+                'tickers': None,
+                'sentiment': None,
+                'source': 'google_news_results_dict'
+            })
         # print("google_news_results_dict", google_news_results_dict)
         print("Data fetched successfully from Google News.")
-        return google_news_results_dict
+        return  google_news
     except Exception as e:
         print(f"An error occurred while fetching data from Google News : {e}")
         return []
 
-def print_news_headlines(degiro_news, stocknews_news, tickertick_news, yahoo_news, ib_news, google_news_results_dict):
+def print_news_headlines(degiro_news, stocknews_news, tickertick_news, yahoo_news, ib_news,  google_news):
     try:
         print("Printing news headlines...")
 
@@ -276,8 +322,8 @@ def print_news_headlines(degiro_news, stocknews_news, tickertick_news, yahoo_new
         for n in yahoo_news:
             print("Yahoo",  n['title'])
         for n in ib_news:
-            print("IB",  n['headLineContent'])   
-        for n in google_news_results_dict:
+            print("IB",  n['title'])   
+        for n in google_news:
             print("Google",  n['title'])
         print("News headlines printed successfully.")
     except Exception as e:
@@ -289,8 +335,8 @@ def main(ticker='AAPL'):
     tickertick_news = fetch_tickertick_news(ticker)
     yahoo_news = fetch_yahoo_news(ticker)
     ib_news = fetch_ib_news(ticker)
-    google_news_results_dict = fetch_google_news(ticker)
-    print_news_headlines(degiro_news, stocknews_news, tickertick_news, yahoo_news, ib_news, google_news_results_dict)
+    google_news = fetch_google_news(ticker)
+    print_news_headlines(degiro_news, stocknews_news, tickertick_news, yahoo_news, ib_news, google_news)
 
 
 if __name__ == "__main__":
