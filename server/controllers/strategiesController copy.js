@@ -9,8 +9,6 @@ const crypto = require('crypto');
 const extractGPT = require("../utils/ChatGPTplugins");
 const News = require("../models/newsModel");
 const { spawn } = require('child_process');
-const stringSimilarity = require('string-similarity');
-
 
 //Work in progress: prompt engineering (see jira https://ai-trading-bot.atlassian.net/browse/AI-76)
 
@@ -534,82 +532,79 @@ exports.getPortfolios = async (req, res) => {
   }
 };
 
-exports.getNewsHeadlines = async (req, res) => {
+
+
+
+exports.getNewsHeadlines = (req, res) => {
   const ticker = req.body.ticker;
   const period = req.body.period;
 
-  const python = spawn('python3', ['./scripts/news.py', '--ticker', ticker, '--period', period]);
+  const python = spawn('python3', ['./scripts/news.py', ticker, period]);
 
   let python_output = "";
-  let responseSent = false;
 
   python.stdout.on('data', async (data) => {
-    console.log(`stdout: ${data}`);
-    python_output += data.toString();
+      // Convert the data to a string
+      const dataStr = data.toString();
+
+      // Print the data to the console
+      console.log(`Python script output: ${dataStr}`); 
+
+      python_output += dataStr;
+      const newsData = JSON.parse(python_output);
+
+      for (const source in newsData) {
+          const newsList = newsData[source].result;
+          for (const news of newsList) {
+              // Exclude news categorized as 'stock-gain' and 'stock-loss'
+              if (news.category === 'stock-gain' || news.category === 'stock-loss') {
+                  continue;
+              }
+
+              // Exclude news talking about the stock performance
+              const performanceKeywords = ['stock jumped', 'stock dropped', 'intraday', 'pre-market', 'uptrend', 'downtrend'];
+              let isPerformanceNews = false;
+              for (const keyword of performanceKeywords) {
+                  if (news.title.toLowerCase().includes(keyword)) {
+                      isPerformanceNews = true;
+                      break;
+                  }
+              }
+              if (isPerformanceNews) {
+                  continue;
+              }
+
+              // Check if the title is already in the database
+              const existingNews = await News.find({ title: { $regex: createTitleRegex(news.title), $options: 'i' } });
+
+              // Check the similarity of the titles using the Optimal String Alignment metric
+              let isSimilarTitle = false;
+              for (const existingTitle of existingNews) {
+                  const similarity = stringSimilarity.compareTwoStrings(news.title, existingTitle);
+                  if (similarity > 0.6) {
+                      isSimilarTitle = true;
+                      break;
+                  }
+              }
+
+              if (existingNews.length === 0 && !isSimilarTitle) {
+                  const newNews = new News(news);
+                  newNews.save()
+                      .then(() => console.log('News saved successfully'))
+                      .catch(err => console.log('Error saving news: ', err));
+              }
+          }
+      }
+
+      res.send('News fetched and saved successfully');
   });
 
   python.stderr.on('data', (data) => {
-    console.error(`Python script stderr: ${data}`);
-    if (!responseSent) {
-      responseSent = true;
-      res.status(500).send(`Python script error: ${data}`);
-    }
-  });
-
-  python.on('close', async (code) => {
-    if (code !== 0) {
-      console.log(`Python script exited with code ${code}`);
-      if (!responseSent) {
-        responseSent = true;
-        res.status(500).send(`Python script exited with code ${code}`);
-      }
-    } else {
-      try {
-        const newsData = JSON.parse(python_output);
-        for (const source in newsData) {
-          const newsList = newsData[source];
-          for (const news of newsList) {
-            const existingNews = await News.find({ title: { $regex: createTitleRegex(news.title), $options: 'i' } });
-            let isSimilarTitle = false;
-            for (const existingTitle of existingNews) {
-              const similarity = stringSimilarity.compareTwoStrings(news.title, existingTitle.title);
-              if (similarity > 0.6) {
-                isSimilarTitle = true;
-                break;
-              }
-            }
-            if (existingNews.length === 0 && !isSimilarTitle) {
-              const newNews = new News(news);
-              newNews.newsId = newNews.id; // Save the id in the newsId field
-              delete newNews.id; // Remove the id field
-              try {
-                const updatedDoc = await News.findOneAndUpdate(
-                  { newsId: newNews.newsId },
-                  newNews,
-                  { upsert: true, new: true, runValidators: true }
-                );
-                console.log(`Saved: ${updatedDoc.title}`);
-              } catch (err) {
-                console.log('Error saving news: ', err);
-              }
-            }
-          }
-        }
-        if (!responseSent) {
-          responseSent = true;
-          res.send('News fetched and saved successfully');
-        }
-      } catch (err) {
-        console.error('Error processing Python script output:', err);
-        if (!responseSent) {
-          responseSent = true;
-          res.status(500).send('Error processing Python script output');
-        }
-      }
-    }
+    // This will now include the Python logging messages as well as any errors
+    console.log(`Python script stderr: ${data}`);
+    res.status(500).send(`Python script error: ${data}`);
   });
 };
-
 
 function createTitleRegex(title) {
     const words = title.split(' ');
