@@ -86,51 +86,9 @@ def fetch_degiro_news(ticker='AAPL', period=1):
             params['offset'] += 10
             print(f"Fetching next 10 articles. Current offset: {params['offset']}")
     except Exception as e:
-        print(f"Session ID expired. Please update it - {e}")
+        print(f"degiro: Session ID expired. Please update it - {e}")
         return []
 
-
-# # StockNews API 
-# 100 calls per month for free
-# https://stocknewsapi.com/documentation
-def fetch_stocknews_news(ticker='AAPL', period=1):
-    try:
-        print("Fetching data from StockNews API...")
-        url = 'https://stocknewsapi.com/api/v1/trending-headlines'
-        page = 1
-        params = {
-            'tickers': ticker,
-            'page': page, 
-            'token': STOCKNEWS_API_KEY 
-        }
-
-        stocknews_news = []
-        while True:
-            response = requests.get(url, params=params)
-            # print_curl_command(response.request)
-
-            stocknews_news_raw = response.json()['data']
-            stocknews_news_raw = [n for n in stocknews_news_raw if n['title'].strip()]
-            for news in stocknews_news_raw:
-                news_date = datetime.datetime.strptime(news.get('date'), "%a, %d %b %Y %H:%M:%S %z")
-                if (datetime.datetime.now() - news_date).days > period:
-                    print("Data fetched successfully from StockNews API.")
-                    return stocknews_news
-                stocknews_news.append({
-                    'id': generate_id(news.get('title'), news_date),
-                    'title': news.get('title'),
-                    'date': news_date,
-                    'category': None,
-                    'tickers': news.get('tickers'),
-                    'sentiment': news.get('sentiment'),
-                    'source': 'stocknews_news'
-                })
-            page += 1
-            params['page'] = page
-            print(f"Fetching next page. Current page: {page}")
-    except Exception as e:
-        print(f"An error occurred while fetching data from StockNews API: {e}")
-        return []
 
 # # TickerTick API
 #  30 requests per minute from the same IP address
@@ -195,7 +153,7 @@ def fetch_ib_news(ticker='AAPL', period=1):
         'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
         'cache-control': 'no-cache',
         'content-type': 'application/json; charset=utf-8',
-        'cookie': 'SBID=qlku8ucrw2olhj2l78s; IB_PRIV_PREFS=0%7C0%7C0; web=1038835950; persistPickerEntry=-975354114; ROUTEIDD=.ny5japp2; PHPSESSID=1uatb4ikep5o234kpc05k956t1; _gcl_au=1.1.1159424871.1683845124; _ga=GA1.1.1577574560.1683845124; IB_LGN=T; _fbp=fb.2.1683845124910.2067711817; _tt_enable_cookie=1; _ttp=KwcgLD3IO-uMJr9oPKCG2dtx7yM; pastandalone=""; ROUTEID=.zh4www2-internet; credrecovery.web.session=36fb301f70cf85a0839df3622cdc2229; URL_PARAM="RL=1"; AKA_A2=A; IB_LANG=fr; ib_fb_px=1; _uetsid=35e35da0ff9911ed9380097bf408f5eb; _uetvid=849ca6d0f04d11eda4f6136e3642cc6b; _ga_V74YNFMQMQ=GS1.1.1685526901.9.0.1685526904.0.0.0; XYZAB_AM.LOGIN=dbab9a2ad85acc4e2d12bb35dd4623183e76fadc; XYZAB=dbab9a2ad85acc4e2d12bb35dd4623183e76fadc; USERID=102719436; IS_MASTER=true; cp.eu=dc22998f8b649da65498327ca85c0171; ibcust=159b58be768cd729593ed7e57c0aedb8; RT="z=1&dm=www.interactivebrokers.co.uk&si=e3e1ccec-d396-4feb-812d-b90d1172b25b&ss=libj73g8&sl=4&tt=8vy&rl=1"',
+        'cookie': 'SBID=qlku8ucrw2olhj2l78s; IB_PRIV_PREFS=0%7C0%7C0; web=1038835950; persistPickerEntry=-975354114; ROUTEIDD=.ny5japp2; PHPSESSID=1uatb4ikep5o234kpc05k956t1; _gcl_au=1.1.1159424871.1683845124; _ga=GA1.1.1577574560.1683845124; IB_LGN=T; _fbp=fb.2.1683845124910.2067711817; _tt_enable_cookie=1; _ttp=KwcgLD3IO-uMJr9oPKCG2dtx7yM; pastandalone=""; ROUTEID=.zh4www2-internet; credrecovery.web.session=36fb301f70cf85a0839df3622cdc2229; URL_PARAM="RL=1"; AKA_A2=A; IB_LANG=fr; _uetsid=35e35da0ff9911ed9380097bf408f5eb; _uetvid=849ca6d0f04d11eda4f6136e3642cc6b; _ga_V74YNFMQMQ=GS1.1.1685526901.9.0.1685526904.0.0.0; XYZAB_AM.LOGIN=dbab9a2ad85acc4e2d12bb35dd4623183e76fadc; XYZAB=dbab9a2ad85acc4e2d12bb35dd4623183e76fadc; USERID=102719436; IS_MASTER=true; cp.eu=dc22998f8b649da65498327ca85c0171; ibcust=cd77ed66e7cf83a569b6749366cc17b0; RT="z=1&dm=www.interactivebrokers.co.uk&si=e3e1ccec-d396-4feb-812d-b90d1172b25b&ss=libj73g8&sl=6&tt=e19&obo=1&rl=1"',
         'origin': 'https://www.interactivebrokers.co.uk',
         'pragma': 'no-cache',
         'referer': 'https://www.interactivebrokers.co.uk/portal/',
@@ -208,9 +166,9 @@ def fetch_ib_news(ticker='AAPL', period=1):
         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
         'x-ccp-session-id': '6476cc71.00000023',
         'x-embedded-in': 'web',
-        'x-request-id': '18',
+        'x-request-id': '10',
         'x-service': 'AM.LOGIN',
-        'x-session-id': 'ad0b0f10-9957-4017-d192-79b3798fb75c',
+        'x-session-id': 'd6db652e-e12a-4512-fd8f-e2d2970a195d',
         'x-wa-version': '61d75d4,Mon, 15 May 2023 07:09:01 -0400/2023-05-15T15:42:00.639Z',
         'x-xyzab': 'dbab9a2ad85acc4e2d12bb35dd4623183e76fadc'
         }
@@ -222,7 +180,7 @@ def fetch_ib_news(ticker='AAPL', period=1):
         print(f"Contract number for {ticker}: {ib_contracts}")
 
     except Exception as e:
-        print(f"Cookies expired. Please update it -  {e}")
+        print(f"IB: Cookies expired. Please update it -  {e}")
         return []
 
     # Get the news from the contract number
@@ -328,7 +286,7 @@ def remove_duplicates(news_list):
 
 # def print_news_headlines(degiro_news, stocknews_news, tickertick_news, yahoo_news, ib_news,  google_news):
 
-def print_news_headlines(degiro_news, stocknews_news, tickertick_news, ib_news,  google_news):
+def print_news_headlines(degiro_news, tickertick_news, ib_news,  google_news):
     try:
         print("Printing news headlines...")
 
@@ -337,8 +295,8 @@ def print_news_headlines(degiro_news, stocknews_news, tickertick_news, ib_news, 
 
         for n in degiro_news: 
             print("Degiro",  n['title'])
-        for n in stocknews_news: 
-            print("Stocknews",  n['title']) 
+        # for n in stocknews_news: 
+        #     print("Stocknews",  n['title']) 
         for n in tickertick_news:
             print("TickerTick",  n['title'])
         # for n in yahoo_news:
@@ -355,12 +313,11 @@ def print_news_headlines(degiro_news, stocknews_news, tickertick_news, ib_news, 
 def main(ticker='AAPL', period=1):
     with ThreadPoolExecutor() as executor:
         degiro_news = executor.submit(fetch_degiro_news, ticker, period)
-        stocknews_news = executor.submit(fetch_stocknews_news, ticker, period)
         tickertick_news = executor.submit(fetch_tickertick_news, ticker, period)
         ib_news = executor.submit(fetch_ib_news, ticker, period)
         google_news = executor.submit(fetch_google_news, ticker, period)
 
-    print_news_headlines(degiro_news.result(), stocknews_news.result(), tickertick_news.result(), ib_news.result(), google_news.result())
+    print_news_headlines(degiro_news.result(), tickertick_news.result(), ib_news.result(), google_news.result())
 
 
 
@@ -380,6 +337,52 @@ if __name__ == "__main__":
 #     print("Data fetched successfully from Stocksight.")
 # except Exception as e:
 #     print(f"An error occurred while fetching data from Stocksight : {e}")  
+
+
+
+# # StockNews API 
+# 100 calls per month for free
+# You have used your free 100 trial calls. Please activate your subscription today.
+# https://stocknewsapi.com/documentation
+# def fetch_stocknews_news(ticker='AAPL', period=1):
+#     try:
+#         print("Fetching data from StockNews API...")
+#         url = 'https://stocknewsapi.com/api/v1/trending-headlines'
+#         page = 1
+#         params = {
+#             'tickers': ticker,
+#             'page': page, 
+#             'token': STOCKNEWS_API_KEY 
+#         }
+
+#         stocknews_news = []
+#         while True:
+#             response = requests.get(url, params=params)
+#             # print_curl_command(response.request)
+
+#             stocknews_news_raw = response.json()['data']
+#             stocknews_news_raw = [n for n in stocknews_news_raw if n['title'].strip()]
+#             for news in stocknews_news_raw:
+#                 news_date = datetime.datetime.strptime(news.get('date'), "%a, %d %b %Y %H:%M:%S %z")
+#                 if (datetime.datetime.now() - news_date).days > period:
+#                     print("Data fetched successfully from StockNews API.")
+#                     return stocknews_news
+#                 stocknews_news.append({
+#                     'id': generate_id(news.get('title'), news_date),
+#                     'title': news.get('title'),
+#                     'date': news_date,
+#                     'category': None,
+#                     'tickers': news.get('tickers'),
+#                     'sentiment': news.get('sentiment'),
+#                     'source': 'stocknews_news'
+#                 })
+#             page += 1
+#             params['page'] = page
+#             print(f"Fetching next page. Current page: {page}")
+#     except Exception as e:
+#         print(f"An error occurred while fetching data from StockNews API: {e}")
+#         return []
+
 
 
 
