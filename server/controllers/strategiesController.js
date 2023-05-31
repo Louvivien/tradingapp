@@ -7,6 +7,8 @@ const axios = require("axios");
 const moment = require('moment');
 const crypto = require('crypto');
 const extractGPT = require("../utils/ChatGPTplugins");
+const News = require("../models/newsModel");
+const { spawn } = require('child_process');
 
 //Work in progress: prompt engineering (see jira https://ai-trading-bot.atlassian.net/browse/AI-76)
 
@@ -530,47 +532,126 @@ exports.getPortfolios = async (req, res) => {
   }
 };
 
+exports.getNewsHeadlines = (req, res) => {
+  const ticker = req.body.ticker;
+  const period = req.body.period;
 
-exports.getNewsHeadlines= async (req, res) => { console.log('testPython called');
-const { spawn } = require('child_process');
-let input = req.body.input;
+  const python = spawn('python3', ['./scripts/news.py', ticker, period]);
 
-// Call a Python script
-const runPythonScript = async (input) => {
-  return new Promise((resolve, reject) => {
-    let python_process = spawn('python3', ['scripts/headlines.py', input]);
-    let python_output = "";
+  let python_output = "";
 
-    python_process.stdout.on('data', (data) => {
-      console.log(`stdout: ${data}`);
-      python_output += data.toString();
-    });
+  python.stdout.on('data', async (data) => {
+      // Convert the data to a string
+      const dataStr = data.toString();
 
-    python_process.stderr.on('data', (data) => {
-      console.error(`stderr: ${data}`);
-    });
+      // Print the data to the console
+      console.log(`Python script output: ${dataStr}`);
 
-    python_process.on('close', (code) => {
-      console.log(`child process exited with code ${code}`);
-      resolve(python_output);
-    });
+      python_output += dataStr;
+      const newsData = JSON.parse(python_output);
+
+      for (const source in newsData) {
+          const newsList = newsData[source].result;
+          for (const news of newsList) {
+              // Exclude news categorized as 'stock-gain' and 'stock-loss'
+              if (news.category === 'stock-gain' || news.category === 'stock-loss') {
+                  continue;
+              }
+
+              // Exclude news talking about the stock performance
+              const performanceKeywords = ['stock jumped', 'stock dropped', 'intraday', 'pre-market', 'uptrend', 'downtrend'];
+              let isPerformanceNews = false;
+              for (const keyword of performanceKeywords) {
+                  if (news.title.toLowerCase().includes(keyword)) {
+                      isPerformanceNews = true;
+                      break;
+                  }
+              }
+              if (isPerformanceNews) {
+                  continue;
+              }
+
+              // Check if the title is already in the database
+              const existingNews = await News.find({ title: { $regex: createTitleRegex(news.title), $options: 'i' } });
+
+              // Check the similarity of the titles using the Optimal String Alignment metric
+              let isSimilarTitle = false;
+              for (const existingTitle of existingNews) {
+                  const similarity = stringSimilarity.compareTwoStrings(news.title, existingTitle);
+                  if (similarity > 0.6) {
+                      isSimilarTitle = true;
+                      break;
+                  }
+              }
+
+              if (existingNews.length === 0 && !isSimilarTitle) {
+                  const newNews = new News(news);
+                  newNews.save()
+                      .then(() => console.log('News saved successfully'))
+                      .catch(err => console.log('Error saving news: ', err));
+              }
+          }
+      }
+
+      res.send('News fetched and saved successfully');
   });
-}
 
-const getPython = async (input) => {
-  let python_output = await runPythonScript(input);
-  console.log('python_output:'+'\n\n'+python_output);
-  return python_output.toString();
-}
-
-// Call the getPython function and send the result back to the client
-try {
-  let result = await getPython(input);
-  res.send(result);
-} catch (error) {
-  res.status(500).send({ message: 'An error occurred while running the Python script.' });
-}
+  python.stderr.on('data', (data) => {
+    // This will now include the Python logging messages as well as any errors
+    console.log(`Python script stderr: ${data}`);
+    res.status(500).send(`Python script error: ${data}`);
+  });
 };
+
+
+function createTitleRegex(title) {
+    const words = title.split(' ');
+    const half = Math.ceil(words.length / 2);
+    const halfTitle = words.slice(0, half).join(' ');
+    return `.*${halfTitle}.*`;
+}
+
+
+
+// exports.getNewsHeadlines= async (req, res) => { console.log('testPython called');
+// let input = req.body.input;
+
+// // Call a Python script
+// const runPythonScript = async (input) => {
+//   return new Promise((resolve, reject) => {
+//     let python_process = spawn('python3', ['scripts/headlines.py', input]);
+//     let python_output = "";
+
+//     python_process.stdout.on('data', (data) => {
+//       console.log(`stdout: ${data}`);
+//       python_output += data.toString();
+//     });
+
+//     python_process.stderr.on('data', (data) => {
+//       console.error(`stderr: ${data}`);
+//     });
+
+//     python_process.on('close', (code) => {
+//       console.log(`child process exited with code ${code}`);
+//       resolve(python_output);
+//     });
+//   });
+// }
+
+// const getPython = async (input) => {
+//   let python_output = await runPythonScript(input);
+//   console.log('python_output:'+'\n\n'+python_output);
+//   return python_output.toString();
+// }
+
+// // Call the getPython function and send the result back to the client
+// try {
+//   let result = await getPython(input);
+//   res.send(result);
+// } catch (error) {
+//   res.status(500).send({ message: 'An error occurred while running the Python script.' });
+// }
+// };
 
 
 exports.getSentimentScore = async (req, res) => {

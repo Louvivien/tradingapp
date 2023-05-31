@@ -7,41 +7,51 @@ import config from '../../config/Config';
 
 const Test = () => {
   const { userData } = useContext(UserContext);
-  const [input, setInput] = useState('');
-  const [output, setOutput] = useState('');
+  const [ticker, setTicker] = useState('');
+  const [period, setPeriod] = useState('');
+  const [newsHeadlines, setNewsHeadlines] = useState([]);
 
-  const testPython = async () => {
+  const fetchNews = async () => {
     try {
-      const url = config.base_url + `/api/strategies/testpython/${userData.user.id}`;
+      const url = config.base_url + `/api/strategies/news/${userData.user.id}`;
       const headers = {
         "x-auth-token": userData.token,
       };
 
-      const response = await Axios.post(url, { input }, { headers });
+      const response = await Axios.post(url, { ticker, period }, { headers });
 
-      setOutput(response.data);
-      console.log("Python ", response.data);
+      setNewsHeadlines(response.data.headlines);
+      console.log("News Headlines: ", response.data.headlines);
     } catch (error) {
-      console.error('Error fetching python:', error);
+      console.error('Error fetching news:', error);
     }
   };
 
   const handleSubmit = (event) => {
     event.preventDefault();
-    testPython();
+    fetchNews();
   };
 
   return (
     <Layout>
       <Box sx={{ mt: 10, ml: 3 }}>
-        <h1>Test your python script</h1>
+        <h1>Fetch News Headlines</h1>
         
         <form onSubmit={handleSubmit}>
           <TextField
-            id="input1"
-            label="Input 1"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
+            id="ticker"
+            label="Ticker"
+            value={ticker}
+            onChange={(e) => setTicker(e.target.value)}
+            variant="outlined"
+            fullWidth
+            margin="normal"
+          />
+          <TextField
+            id="period"
+            label="Period"
+            value={period}
+            onChange={(e) => setPeriod(e.target.value)}
             variant="outlined"
             fullWidth
             margin="normal"
@@ -63,7 +73,9 @@ const Test = () => {
               whiteSpace: 'pre-wrap',
             }}
           >
-            {output}
+            {newsHeadlines.map((headline, index) => (
+              <p key={index}>{headline}</p>
+            ))}
           </div>
         </form>
       </Box>
