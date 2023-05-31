@@ -296,7 +296,7 @@ def fetch_google_news(ticker='AAPL', period=1):
         google_news_raw.search(f'{ticker} stock')
         google_news_results += google_news_raw.result()
 
-        print("Google News raw results:", google_news_results)
+        # print("Google News raw results:", google_news_results)
 
         # Process the results
         google_news = []
