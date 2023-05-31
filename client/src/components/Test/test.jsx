@@ -19,11 +19,27 @@ const Test = () => {
       };
 
       const response = await Axios.post(url, { ticker, period }, { headers });
+      console.log(response.data);
 
-      setNewsHeadlines(response.data.headlines);
-      console.log("News Headlines: ", response.data.headlines);
+      setNewsHeadlines(response.data);
+      console.log("Headlines added to the database");
     } catch (error) {
       console.error('Error fetching news:', error);
+    }
+  };
+
+  const fetchScores = async () => {
+    try {
+      const url = config.base_url + `/api/strategies/score/${userData.user.id}`;
+      const headers = {
+        "x-auth-token": userData.token,
+      };
+
+      await Axios.get(url, { headers });
+
+      console.log("Scores calculated");
+    } catch (error) {
+      console.error('Error fetching scores:', error);
     }
   };
 
@@ -57,23 +73,13 @@ const Test = () => {
             margin="normal"
           />
           <Button variant="contained" color="primary" type="submit">
-            Submit
+            Get News
           </Button>
-          <div 
-            style={{
-              marginTop: '16px',
-              padding: '18.5px 14px',
-              border: '1px solid #ced4da',
-              borderRadius: '4px',
-              fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
-              fontSize: '1rem',
-              lineHeight: '1.1876em',
-              overflowWrap: 'break-word',
-              wordWrap: 'break-word',
-              whiteSpace: 'pre-wrap',
-            }}
-          >
-            {newsHeadlines.map((headline, index) => (
+          <Button variant="contained" color="secondary" onClick={fetchScores} style={{ marginLeft: '10px' }}>
+            Get Scores
+          </Button>
+          <div>
+            {newsHeadlines && newsHeadlines.map((headline, index) => (
               <p key={index}>{headline}</p>
             ))}
           </div>

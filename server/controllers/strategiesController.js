@@ -1,15 +1,17 @@
 const User = require("../models/userModel");
 const Strategy = require("../models/strategyModel");
 const Portfolio = require("../models/portfolioModel");
+const News = require("../models/newsModel");
 const setAlpaca = require('../config/alpaca');
 const Alpaca = require('@alpacahq/alpaca-trade-api');
 const axios = require("axios");
 const moment = require('moment');
 const crypto = require('crypto');
 const extractGPT = require("../utils/ChatGPTplugins");
-const News = require("../models/newsModel");
 const { spawn } = require('child_process');
 const stringSimilarity = require('string-similarity');
+const fs = require('fs');
+const path = require('path');
 
 
 //Work in progress: prompt engineering (see jira https://ai-trading-bot.atlassian.net/browse/AI-76)
@@ -541,9 +543,91 @@ exports.getNewsHeadlines = async (req, res) => {
   const python = spawn('python3', ['./scripts/news.py', '--ticker', ticker, '--period', period]);
 
   let python_output = "";
+  let python_log = "";
+
+  const pythonPromise = new Promise((resolve, reject) => {
+      python.stdout.on('data', (data) => {
+          python_output += data.toString();
+      });
+
+      python.stderr.on('data', (data) => {
+          python_log += data.toString();
+      });
+
+      python.on('close', (code) => {
+          if (code !== 0) {
+              console.log(`Python script exited with code ${code}`);
+              reject(`Python script exited with code ${code}`);
+          } else {
+              resolve(python_output);
+          }
+      });
+  });
+
+  try {
+      const python_output = await pythonPromise;
+      console.log('Python output:', python_output);
+      console.log('Python log:', python_log);
+
+      let newsData;
+      try {
+          newsData = JSON.parse(python_output);
+      } catch (err) {
+          console.error(`Error parsing JSON in nodejs: ${err}`);
+          console.error(`Invalid  JSON in nodejs: ${python_output}`);
+          newsData = [];
+      }
+
+      // Extract headlines from newsData
+      const newsHeadlines = newsData.map(news => news["News headline"]);
+
+      for (const news of newsData) {
+          const existingNews = await News.findById(news._id).catch(err => {
+              console.error('Error finding news:', err);
+              throw err;
+          });
+          if (!existingNews) {
+              const newNews = new News({
+                  newsId: news.id,
+                  "News headline": news.title,
+                  Date: news.date,
+                  Ticker: news.tickers,
+                  "Stock name": ticker, // Assuming ticker parameter is the stock name
+                  Source: news.source,
+              });
+              try {
+                  await newNews.save();
+                  console.log(`Saved: ${newNews["News headline"]}`);
+              } catch (err) {
+                  console.log('Error saving news: ', err);
+              }
+          }
+      }
+      res.send(newsHeadlines);
+  } catch (err) {
+      console.error('Error:', err);
+      res.status(500).send(err);
+  }
+};
+
+
+
+
+
+exports.getScoreHeadlines = async (req, res) => {
+  const newsData = await News.find({});
+  const newsDataJson = JSON.stringify(newsData);
+  const inputFilePath = './data/newsData.json';
+  const outputFilePath = './data/sentimentResults.json';
+
+  fs.writeFileSync(inputFilePath, newsDataJson);
+
+  const python = spawn('python3', ['./scripts/score_claude_chatgpt_1.py', 'claude', inputFilePath, outputFilePath]);
+
+  let python_output = "";
   let responseSent = false;
 
-  python.stdout.on('data', async (data) => {
+  python.stdout.on('data', (data) => {
     console.log(`stdout: ${data}`);
     python_output += data.toString();
   });
@@ -565,39 +649,11 @@ exports.getNewsHeadlines = async (req, res) => {
       }
     } else {
       try {
-        const newsData = JSON.parse(python_output);
-        for (const source in newsData) {
-          const newsList = newsData[source];
-          for (const news of newsList) {
-            const existingNews = await News.find({ title: { $regex: createTitleRegex(news.title), $options: 'i' } });
-            let isSimilarTitle = false;
-            for (const existingTitle of existingNews) {
-              const similarity = stringSimilarity.compareTwoStrings(news.title, existingTitle.title);
-              if (similarity > 0.6) {
-                isSimilarTitle = true;
-                break;
-              }
-            }
-            if (existingNews.length === 0 && !isSimilarTitle) {
-              const newNews = new News(news);
-              newNews.newsId = newNews.id; // Save the id in the newsId field
-              delete newNews.id; // Remove the id field
-              try {
-                const updatedDoc = await News.findOneAndUpdate(
-                  { newsId: newNews.newsId },
-                  newNews,
-                  { upsert: true, new: true, runValidators: true }
-                );
-                console.log(`Saved: ${updatedDoc.title}`);
-              } catch (err) {
-                console.log('Error saving news: ', err);
-              }
-            }
-          }
-        }
+        const sentimentResults = JSON.parse(fs.readFileSync(outputFilePath));
+        // TODO: Process sentimentResults as needed
         if (!responseSent) {
           responseSent = true;
-          res.send('News fetched and saved successfully');
+          res.send('Sentiment analysis completed successfully');
         }
       } catch (err) {
         console.error('Error processing Python script output:', err);
@@ -609,14 +665,6 @@ exports.getNewsHeadlines = async (req, res) => {
     }
   });
 };
-
-
-function createTitleRegex(title) {
-    const words = title.split(' ');
-    const half = Math.ceil(words.length / 2);
-    const halfTitle = words.slice(0, half).join(' ');
-    return `.*${halfTitle}.*`;
-}
 
 
 

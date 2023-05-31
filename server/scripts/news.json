@@ -1,76 +1,76 @@
 [
   {
-    "_id": 1,
+    "News_id": 1,
     "Date": "2023-05-01",
     "Stock name": "Tesla",
     "Ticker": "TSLA",
     "News headline": "Tesla fails to meet quarterly earnings expectations"
   },
   {
-    "_id": 2,
+    "News_id": 2,
     "Date": "2023-05-02",
     "Stock name": "Amazon",
     "Ticker": "AMZN",
     "News headline": "Amazon's revenue falls short of projections for the second quarter"
   },
   {
-    "_id": 3,
+    "News_id": 3,
     "Date": "2023-05-03",
     "Stock name": "Microsoft",
     "Ticker": "MSFT",
     "News headline": "Microsoft experiences decline in market share due to stiff competition"
   },
   {
-    "_id": 4,
+    "News_id": 4,
     "Date": "2023-05-04",
     "Stock name": "Google",
     "Ticker": "GOOGL",
     "News headline": "Google's new product launch receives negative reviews from consumers"
   },
   {
-    "_id": 5,
+    "News_id": 5,
     "Date": "2023-05-05",
     "Stock name": "Apple",
     "Ticker": "AAPL",
     "News headline": "Apple surpasses revenue expectations with record-breaking sales"
   },
   {
-    "_id": 6,
+    "News_id": 6,
     "Date": "2023-05-06",
     "Stock name": "Facebook",
     "Ticker": "FB",
     "News headline": "Facebook's user base continues to grow, reaching new milestones"
   },
   {
-    "_id": 7,
+    "News_id": 7,
     "Date": "2023-05-07",
     "Stock name": "Netflix",
     "Ticker": "NFLX",
     "News headline": "Netflix announces partnership with renowned filmmakers for original content"
   },
   {
-    "_id": 8,
+    "News_id": 8,
     "Date": "2023-05-08",
     "Stock name": "IBM",
     "Ticker": "IBM",
     "News headline": "IBM's latest breakthrough in artificial intelligence revolutionizes the industry"
   },
   {
-    "_id": 9,
+    "News_id": 9,
     "Date": "2023-05-09",
     "Stock name": "Intel",
     "Ticker": "INTC",
     "News headline": "Intel unveils powerful new processor that exceeds performance expectations"
   },
   {
-    "_id": 10,
+    "News_id": 10,
     "Date": "2023-05-10",
     "Stock name": "Twitter",
     "Ticker": "TWTR",
     "News headline": "Twitter introduces new features to enhance user experience"
   },
   {
-    "_id": 11,
+    "News_id": 11,
     "Date": "2023-05-11",
     "Stock name": "Samsung",
     "Ticker": "SSNLF",

@@ -5,6 +5,21 @@ import openai
 import anthropic
 from datetime import datetime
 import re
+import logging
+import sys
+import time
+
+
+
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)s %(message)s',
+    datefmt='%Y/%m/%d %H:%M:%S',
+    stream=sys.stderr 
+)
+
+logging.getLogger().setLevel(logging.INFO)
+
 
 class BaseSentimentAnalyzer:
     def process_news(self, news):
@@ -44,7 +59,7 @@ class OpenAISentimentAnalyzer(BaseSentimentAnalyzer):
             description = match.group(2).strip()
             return sentiment, description
         else:
-            print("Este contenido No hizo Match en chatgpt:", content)
+            logging.info("Este contenido No hizo Match en chatgpt:", content)
             return None, None
 
     def analyze_sentiment(self, text):
@@ -64,7 +79,7 @@ class OpenAISentimentAnalyzer(BaseSentimentAnalyzer):
                 )
                 break
             except openai.error.RateLimitError:
-                print("RateLimitError: That model is currently overloaded with other requests. Retrying in 10 seconds.")
+                logging.info("RateLimitError: That model is currently overloaded with other requests. Retrying in 10 seconds.")
                 time.sleep(10)
                 retries += 1
 
@@ -81,8 +96,8 @@ class ClaudeSentimentAnalyzer(BaseSentimentAnalyzer):
 
     def _prompt_builder(self, headline):
         prompt_base = """Forget all your previous instructions. Pretend you are a financial expert. You are a financial expert with stock recommendation experience. Answer “YES” if good news, “NO” if bad news, or “UNKNOWN” if uncertain , Only respond with the line in the format Ticker|(YES, NO, or UNKNWON): """
-        print(anthropic.HUMAN_PROMPT)
-        print({anthropic.AI_PROMPT})
+        logging.info(anthropic.HUMAN_PROMPT)
+        logging.info({anthropic.AI_PROMPT})
         return f'{anthropic.HUMAN_PROMPT}{prompt_base} {headline} {anthropic.AI_PROMPT}'
 
     def analyze_sentiment(self, headline):
@@ -98,7 +113,7 @@ class ClaudeSentimentAnalyzer(BaseSentimentAnalyzer):
             sentiment = response['completion']
             return sentiment
         except Exception as e:
-            print(f"Error during sentiment analysis: {e}")
+            logging.info(f"Error during sentiment analysis: {e}")
             return None
 
     def analyze_sentiment_stream(self, headline):
@@ -113,9 +128,9 @@ class ClaudeSentimentAnalyzer(BaseSentimentAnalyzer):
                 stream=True
             )
             for data in response_stream:
-                print("Streaming Response:", data)
+                logging.info("Streaming Response:", data)
         except Exception as e:
-            print(f"Error during sentiment analysis: {e}")
+            logging.info(f"Error during sentiment analysis: {e}")
             return None
 
 
@@ -165,11 +180,13 @@ def main():
 
     news = load_json(args.input)
     if news:
-        results = analyzer.process_json(news)
-        sentiment_results = analyzer.analyze_sentiment(results)
+        results = analyzer.process_news(news)
+        sentiment_results = analyzer.process_json(results)
         calculate_score_bulk(args.output, sentiment_results)
     else:
         print("Error: Failed to load news data.")
 
 if __name__ == "__main__":
     main()
+
+

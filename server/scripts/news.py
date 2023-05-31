@@ -27,6 +27,7 @@ STOCKNEWS_API_KEY = os.getenv("STOCKNEWS_API_KEY")
 logging.basicConfig(
     format='%(asctime)s %(levelname)s %(message)s',
     datefmt='%Y/%m/%d %H:%M:%S',
+    stream=sys.stderr 
 )
 
 logging.getLogger().setLevel(logging.INFO)
@@ -77,6 +78,7 @@ def fetch_tickertick_news(ticker='AAPL', period=1):
                 news_date = datetime.datetime.fromtimestamp(news.get('time') / 1000)
                 if (datetime.datetime.now() - news_date).days > period:
                     logging.info("Data fetched successfully from TickerTick API.")
+                    # print(tickertick_news)  
                     return tickertick_news
                 tickertick_news.append({
                     'id': generate_id(news.get('title'), news_date),
@@ -162,7 +164,6 @@ def print_news_headlines(tickertick_news, google_news):
     except Exception as e:
         logging.error(f"An error occurred while printing news headlines: {e}")
 
-
 def main(ticker='AAPL', period=1):
     with ThreadPoolExecutor() as executor:
         try:
@@ -178,12 +179,19 @@ def main(ticker='AAPL', period=1):
             tickertick_news = []
             google_news = []
 
-    news_data = {
-        'tickertick_news': tickertick_news,
-        'google_news': google_news
-    }
+    # Combine the news from both sources into a single list
+    news_data = tickertick_news + google_news
 
-    print(json.dumps(news_data, cls=DateTimeEncoder))
+    try:
+        json_output = json.dumps(news_data, cls=DateTimeEncoder, ensure_ascii=False)
+        print(json_output)
+    except Exception as e:
+        print(f"Error generating JSON: {e}")
+        json_output = "[]"
+    return json_output
+
+
+
 
 
 if __name__ == '__main__':
