@@ -65,12 +65,12 @@ def fetch_degiro_news(ticker='AAPL'):
             'isin': isin, 
             'limit': 10, 
             'offset': 0,
-            'sessionId': 'AD825491B7DBB9B830B8EBE7511B66D9.prod_b_128_5',
+            'sessionId': '73960D8F6429810BA87A4AA009AB9FA3.prod_b_128_5',
             'languages': 'en,fr' 
         }
 
         response = requests.get(url, headers=headers, params=params)
-        # print_curl_command(response.request)
+        print_curl_command(response.request)
         degiro_news_raw = response.json()['data']['items']
         # print("degiro_news", degiro_news)
         degiro_news_raw = [n for n in degiro_news_raw  if n['title'].strip()]
@@ -95,17 +95,19 @@ def fetch_degiro_news(ticker='AAPL'):
 
 # # StockNews API 
 # 100 calls per month for free
+# https://stocknewsapi.com/documentation
 def fetch_stocknews_news(ticker='AAPL'):
     try:
         print("Fetching data from StockNews API...")
-        url = 'https://stocknewsapi.com/api/v1'
+        url = 'https://stocknewsapi.com/api/v1/trending-headlines'
         params = {
             'tickers': ticker,
-            'items': 3,
             'page': 1, 
             'token': STOCKNEWS_API_KEY 
         }
         response = requests.get(url, params=params)
+        print_curl_command(response.request)
+
         stocknews_news_raw = response.json()['data']
         stocknews_news_raw = [n for n in stocknews_news_raw if n['title'].strip()]
         stocknews_news = []
@@ -134,10 +136,12 @@ def fetch_tickertick_news(ticker='AAPL'):
     try:
         print("Fetching data from TickerTick API...")
         base_url = 'https://api.tickertick.com/feed'
-        query = f'(or+TT:{ticker}+(or+T:fin_news+T:analysis+T:industry+T:earning+T:curated))'
+        query = f'(diff (and tt:{ticker}) (or s:reddit s:phonearena s:slashgear)) (or T:fin_news T:analysis T:industry T:earning T:curated)'
         params = f'?q={query}&n=10'
         url = base_url + params
         response = requests.get(url)
+        print_curl_command(response.request)
+
         tickertick_news_raw = response.json()['stories']
         tickertick_news_raw = [n for n in tickertick_news_raw if n['title'].strip()]
         tickertick_news = []
@@ -195,30 +199,30 @@ def fetch_ib_news(ticker='AAPL'):
 
         payload = f'{{"symbol":"{ticker}","pattern":true,"referrer":"onebar"}}'
         headers = {
-            'authority': 'www.interactivebrokers.co.uk',
-            'accept': '*/*',
-            'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-            'cache-control': 'no-cache',
-            'content-type': 'application/json; charset=utf-8',
-            'cookie': 'SBID=qlku8ucrw2olhj2l78s; IB_PRIV_PREFS=0%7C0%7C0; web=1038835950; persistPickerEntry=-975354114; ROUTEIDD=.ny5japp2; PHPSESSID=1uatb4ikep5o234kpc05k956t1; _gcl_au=1.1.1159424871.1683845124; _ga=GA1.1.1577574560.1683845124; IB_LGN=T; _fbp=fb.2.1683845124910.2067711817; _tt_enable_cookie=1; _ttp=KwcgLD3IO-uMJr9oPKCG2dtx7yM; pastandalone=""; ROUTEID=.zh4www2-internet; credrecovery.web.session=36fb301f70cf85a0839df3622cdc2229; _uetsid=ed7f5a60fdf511edbe389b7bccaa0c57; _uetvid=849ca6d0f04d11eda4f6136e3642cc6b; _ga_V74YNFMQMQ=GS1.1.1685385602.8.0.1685385607.0.0.0; URL_PARAM="RL=1"; XYZAB_AM.LOGIN=b35eea4be68f035b7093de1394a44ff479d48640; XYZAB=b35eea4be68f035b7093de1394a44ff479d48640; AKA_A2=A; USERID=102719436; IS_MASTER=true; cp.eu=8804576ef4b71a09d1f4dcea741a29ea; ibcust=a1d60ae7ec5ba01ac2937316e6396238; RT="z=1&dm=www.interactivebrokers.co.uk&si=e3e1ccec-d396-4feb-812d-b90d1172b25b&ss=lia25327&sl=1&tt=32r&rl=1"',
-            'origin': 'https://www.interactivebrokers.co.uk',
-            'pragma': 'no-cache',
-            'referer': 'https://www.interactivebrokers.co.uk/portal/',
-            'sec-ch-ua': '"Google Chrome";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
-            'sec-ch-ua-mobile': '?0',
-            'sec-ch-ua-platform': '"macOS"',
-            'sec-fetch-dest': 'empty',
-            'sec-fetch-mode': 'cors',
-            'sec-fetch-site': 'same-origin',
-            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
-            'x-ccp-session-id': '64757af3.0000001a',
-            'x-embedded-in': 'web',
-            'x-request-id': '16',
-            'x-service': 'AM.LOGIN',
-            'x-session-id': 'e3fbba1b-dfab-4e3d-ee76-05777a5bd53a',
-            'x-wa-version': '61d75d4,Mon, 15 May 2023 07:09:01 -0400/2023-05-15T15:42:00.639Z',
-            'x-xyzab': 'b35eea4be68f035b7093de1394a44ff479d48640'
-            }
+        'authority': 'www.interactivebrokers.co.uk',
+        'accept': '*/*',
+        'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+        'cache-control': 'no-cache',
+        'content-type': 'application/json; charset=utf-8',
+        'cookie': 'SBID=qlku8ucrw2olhj2l78s; IB_PRIV_PREFS=0%7C0%7C0; web=1038835950; persistPickerEntry=-975354114; ROUTEIDD=.ny5japp2; PHPSESSID=1uatb4ikep5o234kpc05k956t1; _gcl_au=1.1.1159424871.1683845124; _ga=GA1.1.1577574560.1683845124; IB_LGN=T; _fbp=fb.2.1683845124910.2067711817; _tt_enable_cookie=1; _ttp=KwcgLD3IO-uMJr9oPKCG2dtx7yM; pastandalone=""; ROUTEID=.zh4www2-internet; credrecovery.web.session=36fb301f70cf85a0839df3622cdc2229; _uetsid=ed7f5a60fdf511edbe389b7bccaa0c57; _uetvid=849ca6d0f04d11eda4f6136e3642cc6b; _ga_V74YNFMQMQ=GS1.1.1685385602.8.0.1685385607.0.0.0; URL_PARAM="RL=1"; AKA_A2=A; XYZAB_AM.LOGIN=d90c5d5b0b194796999f89cfc50dc07d5366fa4a; XYZAB=d90c5d5b0b194796999f89cfc50dc07d5366fa4a; USERID=102719436; IS_MASTER=true; cp.eu=63891bba3d28defbbc55fa9bdad78e7e; ibcust=22dc43d8adb4b4bc5b61d137f42c261e; RT="z=1&dm=www.interactivebrokers.co.uk&si=e3e1ccec-d396-4feb-812d-b90d1172b25b&ss=liajnfh0&sl=3&tt=5f7&obo=1&rl=1"',
+        'origin': 'https://www.interactivebrokers.co.uk',
+        'pragma': 'no-cache',
+        'referer': 'https://www.interactivebrokers.co.uk/portal/',
+        'sec-ch-ua': '"Google Chrome";v="113", "Chromium";v="113", "Not-A.Brand";v="24"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-ch-ua-platform': '"macOS"',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-origin',
+        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
+        'x-ccp-session-id': '64757af3.00000089',
+        'x-embedded-in': 'web',
+        'x-request-id': '17',
+        'x-service': 'AM.LOGIN',
+        'x-session-id': 'e1cd1c9c-638e-4139-9dc6-cf0de318e047',
+        'x-wa-version': '61d75d4,Mon, 15 May 2023 07:09:01 -0400/2023-05-15T15:42:00.639Z',
+        'x-xyzab': 'd90c5d5b0b194796999f89cfc50dc07d5366fa4a'
+        }
 
 
         response = requests.request("POST", url, headers=headers, data=payload)
@@ -247,9 +251,8 @@ def fetch_ib_news(ticker='AAPL'):
 
         response = requests.request("POST", url, headers=headers, data=payload)
 
+        print_curl_command(response.request)
 
-
-        # print_curl_command(response.request)
         ib_news_raw = response.json()['results']
         # print("ib_news_raw", ib_news_raw)
         ib_news_raw = [n for n in ib_news_raw if n['headLineContent'].strip()]
@@ -278,33 +281,52 @@ class DateTimeEncoder(json.JSONEncoder):
             return o.isoformat()
         return super(DateTimeEncoder, self).default(o)
 
+
+
 def fetch_google_news(ticker='AAPL'):
     try:
         print("Fetching data from Google News...")
-        google_news_raw = GoogleNews()
-        google_news_raw.search(f'{ticker} stock')
+
+        # Get the current date and the date a week ago
+        end_date = datetime.datetime.now()
+        start_date = end_date - datetime.timedelta(days=7)
+        formatted_start_date = start_date.strftime("%m/%d/%Y")
+        formatted_end_date = end_date.strftime("%m/%d/%Y")
+
+        # Create a GoogleNews object with the current date as the start and end date
+        google_news_raw = GoogleNews(start=formatted_start_date, end=formatted_end_date)
+
+        # Search for news related to the ticker and the ticker stock
+        google_news_raw.search(f'{ticker}')
         google_news_results = google_news_raw.result()
-        google_news_final = json.dumps(google_news_results, cls=DateTimeEncoder)
-        google_news_results_dict = json.loads(google_news_final)
-        google_news_results_dict = [n for n in google_news_results_dict if n['title'].strip()]
+        google_news_raw.search(f'{ticker} stock')
+        google_news_results += google_news_raw.result()
+
+        print("google_news_results", google_news_results)
+
+        # Process the results
         google_news = []
-        for news in google_news_results_dict:
-            google_news.append({
-                'id': None,
-                'title': news.get('title'),
-                'date': datetime.datetime.strptime(news.get('datetime'), "%Y-%m-%dT%H:%M:%S.%f"),
-                'brief': None,
-                'category': None,
-                'tickers': None,
-                'sentiment': None,
-                'source': 'google_news_results_dict'
-            })
-        # print("google_news_results_dict", google_news_results_dict)
+        for news in google_news_results:
+            if news.get('title').strip():  # Exclude news with empty title
+                google_news.append({
+                    'id': None,
+                    'title': news.get('title'),
+                    'date': news.get('datetime'),  # Use the date from the news article
+                    'brief': None,
+                    'category': None,
+                    'tickers': None,
+                    'sentiment': None,
+                    'source': 'google_news_results_dict'
+                })
+
         print("Data fetched successfully from Google News.")
-        return  google_news
+        return google_news
+
     except Exception as e:
         print(f"An error occurred while fetching data from Google News : {e}")
         return []
+
+
 
 def print_news_headlines(degiro_news, stocknews_news, tickertick_news, yahoo_news, ib_news,  google_news):
     try:

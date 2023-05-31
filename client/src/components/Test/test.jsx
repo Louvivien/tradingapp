@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useContext } from 'react';
 import Layout from '../Template/Layout';
 import { TextField, Button, Box } from '@mui/material';
 import UserContext from '../../context/UserContext';
@@ -19,9 +19,8 @@ const Test = () => {
 
       const response = await Axios.post(url, { input }, { headers });
 
-      
-        setOutput(response.data);
-        console.log("Python ", response.data);
+      setOutput(response.data);
+      console.log("Python ", response.data);
     } catch (error) {
       console.error('Error fetching python:', error);
     }
@@ -50,17 +49,22 @@ const Test = () => {
           <Button variant="contained" color="primary" type="submit">
             Submit
           </Button>
-          <TextField
-            id="output1"
-            label="Output 1"
-            value={output}
-            variant="outlined"
-            fullWidth
-            margin="normal"
-            InputProps={{
-              readOnly: true,
+          <div 
+            style={{
+              marginTop: '16px',
+              padding: '18.5px 14px',
+              border: '1px solid #ced4da',
+              borderRadius: '4px',
+              fontFamily: '"Roboto", "Helvetica", "Arial", sans-serif',
+              fontSize: '1rem',
+              lineHeight: '1.1876em',
+              overflowWrap: 'break-word',
+              wordWrap: 'break-word',
+              whiteSpace: 'pre-wrap',
             }}
-          />
+          >
+            {output}
+          </div>
         </form>
       </Box>
     </Layout>
