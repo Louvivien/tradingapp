@@ -9,9 +9,10 @@ const moment = require('moment');
 const crypto = require('crypto');
 const extractGPT = require("../utils/ChatGPTplugins");
 const { spawn } = require('child_process');
-const stringSimilarity = require('string-similarity');
 const fs = require('fs');
 const path = require('path');
+const { distance } = require('fastest-levenshtein');
+
 
 
 //Work in progress: prompt engineering (see jira https://ai-trading-bot.atlassian.net/browse/AI-76)
@@ -536,6 +537,8 @@ exports.getPortfolios = async (req, res) => {
   }
 };
 
+
+
 exports.getNewsHeadlines = async (req, res) => {
   const ticker = req.body.ticker;
   const period = req.body.period;
@@ -583,12 +586,30 @@ exports.getNewsHeadlines = async (req, res) => {
       // Extract headlines from newsData
       const newsHeadlines = newsData.map(news => news["title"]);
 
+      const stockKeywords = ["stock", "jumped", "intraday", "pre-market", "uptrend", "position", "increased", "gains", "loss", "up", "down", "rise", "fall", "bullish", "bearish", "nasdaq", "nyse", "percent", "%"];
+
       for (const news of newsData) {
-          const existingNews = await News.findById(news.newsId).catch(err => {
+          // Check if the headline contains any of the stock keywords
+          const lowerCaseTitle = news.title.toLowerCase();
+          if (stockKeywords.some(keyword => lowerCaseTitle.includes(keyword))) {
+              continue;  // Skip this headline
+          }
+
+          const existingNews = await News.find({ "Stock name": ticker, Date: news.date }).catch(err => {
               console.error('Error finding news:', err);
               throw err;
           });
-          if (!existingNews) {
+
+          let isSimilar = false;
+          for (const existing of existingNews) {
+              const similarity = 1 - distance(existing["News headline"], news.title) / Math.max(existing["News headline"].length, news.title.length);
+              if (similarity > 0.6) {
+                  isSimilar = true;
+                  break;
+              }
+          }
+
+          if (!isSimilar) {
               const newNews = new News({
                   newsId: news.id,
                   "News headline": news.title,
@@ -611,6 +632,7 @@ exports.getNewsHeadlines = async (req, res) => {
       res.status(500).send(err);
   }
 };
+
 
 
 
