@@ -15,7 +15,7 @@ const newsSchema = new Schema({
         required: true
     },
     Ticker: {
-        type: [String],
+        type: String,
         required: true
     },
     "Stock name": {

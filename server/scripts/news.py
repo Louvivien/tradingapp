@@ -84,7 +84,7 @@ def fetch_tickertick_news(ticker='AAPL', period=1):
                     'id': generate_id(news.get('title'), news_date),
                     'title': news.get('title'),
                     'date': news_date,
-                    'tickers': news.get('tickers'),
+                    'ticker': news.get('tickers')[0],
                     'source': 'tickertick_news'
                 })
             last_id = tickertick_news_raw[-1]['id']
@@ -132,7 +132,7 @@ def fetch_google_news(ticker='AAPL', period=1):
                     'id': generate_id(news.get('title'), news.get('datetime')),
                     'title': news.get('title'),
                     'date': news.get('datetime'),  # Use the date from the news article
-                    'tickers': [ticker],  # Convert the set to a list
+                    'ticker': ticker,
                     'source': 'google_news'
                 })
 

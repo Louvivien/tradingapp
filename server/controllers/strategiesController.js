@@ -572,6 +572,8 @@ exports.getNewsHeadlines = async (req, res) => {
       let newsData;
       try {
           newsData = JSON.parse(python_output);
+          console.log('newsData:', newsData);
+
       } catch (err) {
           console.error(`Error parsing JSON in nodejs: ${err}`);
           console.error(`Invalid  JSON in nodejs: ${python_output}`);
@@ -579,10 +581,10 @@ exports.getNewsHeadlines = async (req, res) => {
       }
 
       // Extract headlines from newsData
-      const newsHeadlines = newsData.map(news => news["News headline"]);
+      const newsHeadlines = newsData.map(news => news["title"]);
 
       for (const news of newsData) {
-          const existingNews = await News.findById(news._id).catch(err => {
+          const existingNews = await News.findById(news.newsId).catch(err => {
               console.error('Error finding news:', err);
               throw err;
           });
@@ -591,7 +593,7 @@ exports.getNewsHeadlines = async (req, res) => {
                   newsId: news.id,
                   "News headline": news.title,
                   Date: news.date,
-                  Ticker: news.tickers,
+                  Ticker: news.ticker,
                   "Stock name": ticker, // Assuming ticker parameter is the stock name
                   Source: news.source,
               });

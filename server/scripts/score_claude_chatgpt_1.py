@@ -59,7 +59,7 @@ class OpenAISentimentAnalyzer(BaseSentimentAnalyzer):
             description = match.group(2).strip()
             return sentiment, description
         else:
-            logging.info("Este contenido No hizo Match en chatgpt:", content)
+            logging.info("This content did not match in ChatGPT:", content)
             return None, None
 
     def analyze_sentiment(self, text):
@@ -93,6 +93,18 @@ class OpenAISentimentAnalyzer(BaseSentimentAnalyzer):
 class ClaudeSentimentAnalyzer(BaseSentimentAnalyzer):
     def __init__(self, api_key):
         self.claude = anthropic.Client(api_key=api_key)
+
+    @staticmethod
+    def extract_sentiment_description(content):
+        match = re.search(r'\b(YES|NO|UNKNOWN)\b\s*([\s\S]+)', content)
+        if match:
+            sentiment = match.group(1)
+            description = match.group(2).strip()
+            return sentiment, description
+        else:
+            logging.info("This content did not match in CLaude:", content)
+            return None, None
+
 
     def _prompt_builder(self, headline):
         prompt_base = """Forget all your previous instructions. Pretend you are a financial expert. You are a financial expert with stock recommendation experience. Answer “YES” if good news, “NO” if bad news, or “UNKNOWN” if uncertain , Only respond with the line in the format Ticker|(YES, NO, or UNKNWON): """
@@ -173,9 +185,11 @@ def main():
 
     if args.assistant == 'chatgpt':
         api_key = os.environ['OPENAI_API_KEY']
+        logging.info(f"OPENAI_API_KEY:"+api_key)
         analyzer = OpenAISentimentAnalyzer(api_key)
     else:
         api_key = os.environ['ANTHROPIC_API_KEY']
+        logging.info(f"ANTHROPIC_API_KEY:"+api_key)
         analyzer = ClaudeSentimentAnalyzer(api_key)
 
     news = load_json(args.input)
