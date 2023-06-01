@@ -76,7 +76,7 @@ const Test = () => {
           />
           <TextField
             id="period"
-            label="Period"
+            label="Period (days)"
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
             variant="outlined"
