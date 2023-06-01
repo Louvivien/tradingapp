@@ -3,6 +3,8 @@
 # exit on error
 set -o errexit
 
+
+
 STORAGE_DIR=/opt/render/project/.render
 
 if [[ ! -d $STORAGE_DIR/chrome ]]; then
@@ -26,6 +28,14 @@ yarn install
 
 # navigate to scripts directory
 cd scripts
+
+# Check Python version
+PYTHON_VERSION=$(python3 --version | cut -d " " -f 2 | cut -d "." -f 1-2)
+REQUIRED_VERSION="3.8"
+if (( $(echo "$PYTHON_VERSION < $REQUIRED_VERSION" | bc -l) )); then
+  echo "Your Python version is $PYTHON_VERSION. Please upgrade to Python $REQUIRED_VERSION or higher."
+  exit 1
+fi
 
 # upgrade pip in the virtual environment
 echo "Upgrading pip in the virtual environment..."
