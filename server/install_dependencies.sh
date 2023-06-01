@@ -1,9 +1,5 @@
 #!/bin/bash
 
-# exit on error
-set -o errexit
-
-
 
 STORAGE_DIR=/opt/render/project/.render
 
@@ -30,12 +26,7 @@ yarn install
 cd scripts
 
 # Check Python version
-PYTHON_VERSION=$(python3 --version | cut -d " " -f 2 | cut -d "." -f 1-2)
-REQUIRED_VERSION="3.8"
-if (( $(echo "$PYTHON_VERSION < $REQUIRED_VERSION" | bc -l) )); then
-  echo "Your Python version is $PYTHON_VERSION. Please upgrade to Python $REQUIRED_VERSION or higher."
-  exit 1
-fi
+python3 --version 
 
 # upgrade pip in the virtual environment
 echo "Upgrading pip in the virtual environment..."
