@@ -19,8 +19,6 @@ openai_key = os.getenv('OPENAI_API_KEY')
 anthropic_key = os.getenv('ANTHROPIC_API_KEY')
 
 
-
-
 logging.basicConfig(
     format='%(asctime)s %(levelname)s %(message)s',
     datefmt='%Y/%m/%d %H:%M:%S',
@@ -31,23 +29,7 @@ logging.getLogger().setLevel(logging.INFO)
 
 
 class BaseSentimentAnalyzer:
-    def process_news(self, news):
-        results = []
-        for article in news:
-            headline = article.get('News headline')
-            stock_name = article.get('Stock name')
-            ticker = article.get('Ticker')
 
-            if all([headline, stock_name, ticker]):
-                content = self.analyze_sentiment(headline)
-                sentiment, description = self.extract_sentiment_description(content)
-
-                if sentiment:
-                    article['Sentiment'] = sentiment.strip()
-                if description:
-                    article['Description'] = description.strip()
-                results.append(article)
-        return results
 
     def process_json(self, news):
         results= "".join(f'{article.get("Ticker")}|{article.get("News headline")}\n' for article in news if article.get('News headline') and article.get('Ticker'))
@@ -60,16 +42,7 @@ class OpenAISentimentAnalyzer(BaseSentimentAnalyzer):
     def __init__(self, api_key):
         openai.api_key = api_key
 
-    @staticmethod
-    def extract_sentiment_description(content):
-        match = re.search(r'\b(YES|NO|UNKNOWN)\b\s*([\s\S]+)', content)
-        if match:
-            sentiment = match.group(1)
-            description = match.group(2).strip()
-            return sentiment, description
-        else:
-            logging.info("This content did not match in ChatGPT:", content)
-            return None, None
+
 
     def analyze_sentiment(self, text):
         prompt="""Forget all your previous instructions. Pretend you are a financial expert. You are a financial expert with stock recommendation experience. Answer “YES” if good news, “NO” if bad news, or “UNKNOWN” if uncertain , Only respond with the line in the format Ticker|(YES, NO, or UNKNWON):  """
@@ -102,6 +75,8 @@ class OpenAISentimentAnalyzer(BaseSentimentAnalyzer):
 class ClaudeSentimentAnalyzer(BaseSentimentAnalyzer):
     def __init__(self, api_key):
         self.claude = anthropic.Client(api_key=api_key)
+    
+
 
 
     def _prompt_builder(self, headline):
@@ -192,8 +167,7 @@ def main():
 
     news = load_json(args.input)
     if news:
-        results = analyzer.process_news(news)
-        sentiment_results = analyzer.process_json(results)
+        sentiment_results = analyzer.process_json(news)
         calculate_score_bulk(args.output, sentiment_results)
     else:
         print("Error: Failed to load news data.")

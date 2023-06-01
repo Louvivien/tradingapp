@@ -641,8 +641,8 @@ exports.getNewsHeadlines = async (req, res) => {
 exports.getScoreHeadlines = async (req, res) => {
   const newsData = await News.find({});
   const newsDataJson = JSON.stringify(newsData);
-  const inputFilePath = '../data/newsData.json';
-  const outputFilePath = '../data/sentimentResults.json';
+  const inputFilePath = './data/newsData.json';
+  const outputFilePath = './data/sentimentResults.json';
 
   fs.writeFileSync(inputFilePath, newsDataJson);
 
