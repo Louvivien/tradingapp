@@ -8,6 +8,15 @@ import re
 import logging
 import sys
 import time
+from dotenv import load_dotenv
+
+# Load .env file
+dotenv_path = os.path.join(os.path.dirname(__file__), '../config/.env')
+load_dotenv(dotenv_path)
+
+# Now you can access your keys with os.getenv
+openai_key = os.getenv('OPENAI_API_KEY')
+anthropic_key = os.getenv('ANTHROPIC_API_KEY')
 
 
 
@@ -102,8 +111,8 @@ class ClaudeSentimentAnalyzer(BaseSentimentAnalyzer):
             description = match.group(2).strip()
             return sentiment, description
         else:
-            logging.info("This content did not match in CLaude:", content)
-            return None, None
+            logging.info("This content did not match in Claude", content)
+            return None, None        
 
 
     def _prompt_builder(self, headline):
@@ -184,11 +193,11 @@ def main():
     args = parser.parse_args()
 
     if args.assistant == 'chatgpt':
-        api_key = os.environ['OPENAI_API_KEY']
+        api_key = openai_key 
         logging.info(f"OPENAI_API_KEY:"+api_key)
         analyzer = OpenAISentimentAnalyzer(api_key)
     else:
-        api_key = os.environ['ANTHROPIC_API_KEY']
+        api_key = anthropic_key 
         logging.info(f"ANTHROPIC_API_KEY:"+api_key)
         analyzer = ClaudeSentimentAnalyzer(api_key)
 

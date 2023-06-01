@@ -594,7 +594,7 @@ exports.getNewsHeadlines = async (req, res) => {
                   "News headline": news.title,
                   Date: news.date,
                   Ticker: news.ticker,
-                  "Stock name": ticker, // Assuming ticker parameter is the stock name
+                  "Stock name": ticker, 
                   Source: news.source,
               });
               try {
@@ -619,8 +619,8 @@ exports.getNewsHeadlines = async (req, res) => {
 exports.getScoreHeadlines = async (req, res) => {
   const newsData = await News.find({});
   const newsDataJson = JSON.stringify(newsData);
-  const inputFilePath = './data/newsData.json';
-  const outputFilePath = './data/sentimentResults.json';
+  const inputFilePath = '../data/newsData.json';
+  const outputFilePath = '../data/sentimentResults.json';
 
   fs.writeFileSync(inputFilePath, newsDataJson);
 
