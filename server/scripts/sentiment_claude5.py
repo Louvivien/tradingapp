@@ -2,6 +2,29 @@ import os
 import json
 import anthropic
 import datetime
+from dotenv import load_dotenv
+import argparse
+import logging
+import sys
+
+
+# Load .env file
+dotenv_path = os.path.join(os.path.dirname(__file__), '../config/.env')
+load_dotenv(dotenv_path)
+
+# Now you can access your keys with os.getenv
+openai_key = os.getenv('OPENAI_API_KEY')
+anthropic_key = os.getenv('ANTHROPIC_API_KEY')
+
+
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)s %(message)s',
+    datefmt='%Y/%m/%d %H:%M:%S',
+    stream=sys.stderr 
+)
+
+logging.getLogger().setLevel(logging.INFO)
 
 
 
@@ -10,7 +33,6 @@ class SentimentAnalyzer:
         self.claude = anthropic.Client(api_key=api_key)
 
     def analyze_sentiment(self, headline):
-        """Analyze the sentiment of a headline."""
         prompt_base = """Forget all your previous instructions. Pretend you are a financial expert. You are a financial expert with stock recommendation experience. Answer “YES” if good news, “NO” if bad news, or “UNKNOWN” if uncertain in the first line. Then elaborate with one short and concise sentence on the next line. """
         prompt = f'{anthropic.HUMAN_PROMPT}{prompt_base} {headline} {anthropic.AI_PROMPT}'
         try:
@@ -24,7 +46,7 @@ class SentimentAnalyzer:
             sentiment = response['completion']
             return sentiment
         except Exception as e:
-            print(f"Error during sentiment analysis: {e}")
+            logging.info(f"Error during sentiment analysis: {e}")
             return None
 
     def process_news(self, news):
@@ -51,7 +73,7 @@ def calculate_sentiment_score(path, output_path):
         with open(path) as f:
             data = json.load(f)
     except Exception as e:
-        print(f"Error loading JSON: {e}")
+        logging.info(f"Error loading JSON: {e}")
         return
 
     stock_counts = {}
@@ -91,7 +113,7 @@ def load_json(path):
         with open(path) as f:
             return json.load(f)
     except Exception as e:
-        print(f"Error loading JSON: {e}")
+        logging.info(f"Error loading JSON: {e}")
         return None
 
 
@@ -101,20 +123,36 @@ def save_json(path, data):
         with open(path, 'w') as f:
             json.dump(data, f, indent=4)
     except Exception as e:
-        print(f"Error saving JSON: {e}")
-
+        logging.info(f"Error saving JSON: {e}")
 
 def main():
-    analyzer = SentimentAnalyzer(api_key=os.environ['ANTHROPIC_API_KEY'])
-    news = load_json('news2.json')
+    print("Starting sentiment analysis...")
+    parser = argparse.ArgumentParser(description='Analyze sentiment of news articles.')
+    parser.add_argument('input', help='The JSON file to load news articles from.')
+    parser.add_argument('output', help='The JSON file to save results to.')
+    parser.add_argument('output2', help='The JSON file to save results to.')
+    args = parser.parse_args()
+
+    analyzer = SentimentAnalyzer(anthropic_key)
+    print("SentimentAnalyzer initialized.")
+
+    news = load_json(args.input)
     if news is not None:
+        print("News data loaded successfully.")
+        print("Starting sentiment analysis")
         results = analyzer.process_news(news)
-        save_json('out_claude_3.json', results)
-        calculate_sentiment_score('out_claude_3.json', 'sentiment_scores.json')
+        print("Sentiment analysis completed.")
+        save_json(args.output, results)
+        print("Sentiment analysis results saved.")
+        print("Starting sentiment score calculation")
+        calculate_sentiment_score(args.output, args.output2)
+        print("Sentiment scores calculated and saved.")
     else:
-        print("Error: Failed to load news data.")
+        print("Failed to load news data.")
 
-
+    print("Sentiment analysis process finished.")
 
 if __name__ == "__main__":
     main()
+
+

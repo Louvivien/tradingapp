@@ -570,7 +570,6 @@ exports.getNewsHeadlines = async (req, res) => {
   try {
       const python_output = await pythonPromise;
       console.log('Python output:', python_output);
-      console.log('Python log:', python_log);
 
       let newsData;
       try {
@@ -632,151 +631,55 @@ exports.getNewsHeadlines = async (req, res) => {
       res.status(500).send(err);
   }
 };
-
-
-
-
-
-
 exports.getScoreHeadlines = async (req, res) => {
-  const newsData = await News.find({});
-  const newsDataJson = JSON.stringify(newsData);
-  const inputFilePath = './data/newsData.json';
-  const outputFilePath = './data/sentimentResults.json';
+  try {
+    const newsData = await News.find({});
+    const newsDataJson = JSON.stringify(newsData);
+    const inputFilePath = './data/newsData.json';
+    const outputFilePath = './data/sentimentResults.json';
+    const output2FilePath = './data/scoreResults.json';
 
-  fs.writeFileSync(inputFilePath, newsDataJson);
+    fs.writeFileSync(inputFilePath, newsDataJson);
 
-  const python = spawn('python3', ['./scripts/score_claude_chatgpt_1.py', 'claude', inputFilePath, outputFilePath]);
+    const python = spawn('python3', ['-u', './scripts/sentiment_claude5.py', inputFilePath, outputFilePath, output2FilePath]);
 
-  let python_output = "";
-  let responseSent = false;
-
-  python.stdout.on('data', (data) => {
-    console.log(`stdout: ${data}`);
-    python_output += data.toString();
-  });
-
-  python.stderr.on('data', (data) => {
-    console.error(`Python script stderr: ${data}`);
-    if (!responseSent) {
-      responseSent = true;
-      res.status(500).send(`Python script error: ${data}`);
-    }
-  });
-
-  python.on('close', async (code) => {
-    if (code !== 0) {
-      console.log(`Python script exited with code ${code}`);
-      if (!responseSent) {
-        responseSent = true;
-        res.status(500).send(`Python script exited with code ${code}`);
+    python.stdout.on('data', (data) => {
+      const message = data.toString();
+      if (message.trim() !== '') {  // Only print the message if it's not an empty string
+        console.log(message);  // Stream the Python output immediately
       }
-    } else {
-      try {
-        const sentimentResults = JSON.parse(fs.readFileSync(outputFilePath));
-        // TODO: Process sentimentResults as needed
-        if (!responseSent) {
-          responseSent = true;
-          res.send('Sentiment analysis completed successfully');
+    });
+
+    python.stderr.on('data', (data) => {
+      console.error('Python error:', data.toString());  // Log the Python errors immediately
+    });
+
+    const pythonPromise = new Promise((resolve, reject) => {
+      python.on('close', (code) => {
+        if (code !== 0) {
+          console.log(`Python script exited with code ${code}`);
+          reject(`Python script exited with code ${code}`);
+        } else {
+          resolve();
         }
-      } catch (err) {
-        console.error('Error processing Python script output:', err);
-        if (!responseSent) {
-          responseSent = true;
-          res.status(500).send('Error processing Python script output');
-        }
-      }
+      });
+    });
+
+    try {
+      await pythonPromise;  // Wait for the Python script to finish
+      res.send('Sentiment analysis completed successfully');
+    } catch (err) {
+      console.error('Error:', err);
+      res.status(500).send(err);
     }
-  });
+  } catch (err) {
+    console.error('Error in getScoreHeadlines:', err);
+    res.status(500).send('Error in getScoreHeadlines');
+  }
 };
 
 
 
-// exports.getNewsHeadlines= async (req, res) => { console.log('testPython called');
-// let input = req.body.input;
-
-// // Call a Python script
-// const runPythonScript = async (input) => {
-//   return new Promise((resolve, reject) => {
-//     let python_process = spawn('python3', ['scripts/headlines.py', input]);
-//     let python_output = "";
-
-//     python_process.stdout.on('data', (data) => {
-//       console.log(`stdout: ${data}`);
-//       python_output += data.toString();
-//     });
-
-//     python_process.stderr.on('data', (data) => {
-//       console.error(`stderr: ${data}`);
-//     });
-
-//     python_process.on('close', (code) => {
-//       console.log(`child process exited with code ${code}`);
-//       resolve(python_output);
-//     });
-//   });
-// }
-
-// const getPython = async (input) => {
-//   let python_output = await runPythonScript(input);
-//   console.log('python_output:'+'\n\n'+python_output);
-//   return python_output.toString();
-// }
-
-// // Call the getPython function and send the result back to the client
-// try {
-//   let result = await getPython(input);
-//   res.send(result);
-// } catch (error) {
-//   res.status(500).send({ message: 'An error occurred while running the Python script.' });
-// }
-// };
-
-
-exports.getSentimentScore = async (req, res) => {
-
-//   const { spawn } = require('child_process');
-
-//   // Call a Python script
-//   const runPythonScript = async (input) => {
-//     return new Promise((resolve, reject) => {
-//       let prompt = input;
-  
-//       let login = process.env.OPENAI_API_LOGIN;
-//       let password = process.env.OPENAI_API_PASSWORD;
-  
-//       let python_process = spawn('python3', ['scripts/sentiment_claude.py', prompt, login, password]);
-//       let python_output = "";
-  
-//       python_process.stdout.on('data', (data) => {
-//         console.log(`stdout: ${data}`);
-//         python_output += data.toString();
-//       });
-  
-//       python_process.stderr.on('data', (data) => {
-//         console.error(`stderr: ${data}`);
-//       });
-  
-//       python_process.on('close', (code) => {
-//         console.log(`child process exited with code ${code}`);
-//         resolve(python_output);
-//       });
-//     });
-//   }
-  
-//   const getSentimentScore = async (input) => {
-//     let python_output = await runPythonScript (
-//       process.env.Collaborative_Prompt1+'\n\n'+input
-//     );
-  
-//     console.log('python_output:'+'\n\n'+python_output);
-//     return python_output.toString();
-//   }
-  
-//   module.exports = getSentimentScore;
-  
-
-};
 
 exports.testPython = async (req, res) => {
   console.log('testPython called');

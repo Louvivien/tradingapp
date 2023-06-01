@@ -19,6 +19,8 @@ openai_key = os.getenv('OPENAI_API_KEY')
 anthropic_key = os.getenv('ANTHROPIC_API_KEY')
 
 
+
+
 logging.basicConfig(
     format='%(asctime)s %(levelname)s %(message)s',
     datefmt='%Y/%m/%d %H:%M:%S',
@@ -98,7 +100,7 @@ class ClaudeSentimentAnalyzer(BaseSentimentAnalyzer):
             sentiment = response['completion']
             return sentiment
         except Exception as e:
-            logging.info(f"Error during sentiment analysis: {e}")
+            print(f"Error during sentiment analysis: {e}")
             return None
 
     def analyze_sentiment_stream(self, headline):
@@ -113,13 +115,13 @@ class ClaudeSentimentAnalyzer(BaseSentimentAnalyzer):
                 stream=True
             )
             for data in response_stream:
-                logging.info("Streaming Response:", data)
+                print("Streaming Response:", data)
         except Exception as e:
-            logging.info(f"Error during sentiment analysis: {e}")
+            print(f"Error during sentiment analysis: {e}")
             return None
 
 
-    
+
 def calculate_score_bulk(output_path, data):
     ticker_sentiments = data.strip().split('\n')
     ticker_scores = {}
@@ -134,6 +136,7 @@ def calculate_score_bulk(output_path, data):
     results = [{"ID": idx+1, "DATE": datetime.now().isoformat(), "Ticker": ticker, "Score": (total_yes / count) * 100} for idx, (ticker, (total_yes, count)) in enumerate(ticker_scores.items())]
     save_json(output_path, results)
 
+    
 def load_json(path):
     try:
         with open(path) as f:
@@ -151,7 +154,6 @@ def save_json(path, data):
 
 def main():
     parser = argparse.ArgumentParser(description='Analyze sentiment of news articles.')
-    parser.add_argument('assistant', choices=['chatgpt', 'claude'], help='The assistant to use for sentiment analysis.')
     parser.add_argument('input', help='The JSON file to load news articles from.')
     parser.add_argument('output', help='The JSON file to save results to.')
     args = parser.parse_args()

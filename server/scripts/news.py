@@ -84,7 +84,7 @@ def fetch_tickertick_news(ticker='AAPL', period=1):
                     'id': generate_id(news.get('title'), news_date),
                     'title': news.get('title'),
                     'date': news_date,
-                    'ticker': news.get('tickers')[0],
+                    'ticker': news.get('tickers')[0].upper(),
                     'source': 'tickertick_news'
                 })
             last_id = tickertick_news_raw[-1]['id']
@@ -199,6 +199,8 @@ if __name__ == '__main__':
     parser.add_argument('--ticker', default='AAPL')
     parser.add_argument('--period', type=int, default=1)
     args = parser.parse_args()
+    # Convert the ticker to uppercase
+    ticker = args.ticker.upper()
 
     main(args.ticker, args.period)
 
