@@ -15,6 +15,8 @@ const Test = () => {
 
   const fetchNews = async () => {
     setLoading(true);
+    setMessage('');  // Clear the message
+    setNewsHeadlines([]);  // Clear the news headlines
     try {
       const url = config.base_url + `/api/strategies/news/${userData.user.id}`;
       const headers = {
@@ -34,6 +36,8 @@ const Test = () => {
 
   const fetchScores = async () => {
     setLoading(true);
+    setMessage('');  // Clear the message
+    setNewsHeadlines([]);  // Clear the news headlines
     try {
       const url = config.base_url + `/api/strategies/score/${userData.user.id}`;
       const headers = {
