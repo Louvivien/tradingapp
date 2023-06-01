@@ -27,6 +27,10 @@ yarn install
 # navigate to scripts directory
 cd scripts
 
+# upgrade pip in the virtual environment
+echo "Upgrading pip in the virtual environment..."
+/opt/render/project/src/.venv/bin/python -m pip install --upgrade pip
+
 # install python packages
 echo "Installing Python dependencies..."
 pip3 install -r requirements.txt
