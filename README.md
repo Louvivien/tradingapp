@@ -6,7 +6,9 @@
 Welcome to the AI Trading App!
 
 It can connect to Alpaca to get positions and orders, sell and buy stocks.
-It will implement AI strategies to trade.
+- you can import collaborative trading strategies
+- currently implementing sentiment analysis 
+
 
 
 Credit for UI: [OktarianTB](https://github.com/OktarianTB/stock-trading-simulator) 
@@ -15,7 +17,7 @@ Credit for UI: [OktarianTB](https://github.com/OktarianTB/stock-trading-simulato
 Update: trailing orders removed
 
 ## Stack
-Backend: NodeJS with Python Scripts, Material 5
+Backend: NodeJS with Python Scripts, Material 5, ChatGPT, Claude
 
 Frontend: React
 

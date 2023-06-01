@@ -1,4 +1,9 @@
-undetected_chromedriver
-selenium
-webdriver-manager
+anthropic
+python-dotenv
+argparse
+logging
+yfinance
 requests
+GoogleNews
+concurrent.futures
+hashlib
