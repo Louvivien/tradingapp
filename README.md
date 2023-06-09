@@ -6,10 +6,7 @@
 [![Issues][issues-shield]][issues-url]
 [![MIT License][license-shield]][license-url]
 [![LinkedIn][linkedin-shield]][linkedin-url]
-[![Node.js][nodejs-shield]][nodejs-url]
-[![React][react-shield]][react-url]
-[![Python][python-shield]][python-url]
-[![MongoDB][mongodb-shield]][mongodb-url]
+
 
 ## About
 Welcome to the AI Trading App!
