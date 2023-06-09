@@ -1,40 +1,35 @@
-import sys
-import yfinance as yf
-import datetime
+import string
 
-def fetch_yahoo_news(ticker='AAPL'):
-    try:
-        stock = yf.Ticker(ticker)
-        yahoo_news_raw = stock.news
+alpha_to_num = {c: i for i, c in enumerate(string.ascii_letters + string.digits + string.punctuation, start=1)}  
 
-     
-        
-        yahoo_news_raw  = [n for n in yahoo_news_raw  if n['title'].strip()]
-        yahoo_news = []
-        for news in yahoo_news_raw:
-            yahoo_news.append({
-                'id': news.get('uuid'),
-                'title': news.get('title'),
-                'date': datetime.datetime.fromtimestamp(news.get('providerPublishTime')),
-                'category': None,
-                'tickers': news.get('relatedTickers'),
-                'sentiment': None,
-                'source': 'yahoo_news'
-            })
-            
-        # Print the title of each news item
-        for n in yahoo_news:
-            print("Yahoo",  n['title'])
+def encode(text):
+    for _ in range(50):
+        text = ' '.join(str(alpha_to_num[c]) for c in text.upper())
+    return text
 
-        return yahoo_news  # Return the yahoo_news list
+def decode(text):
+    for _ in range(50):
+        text = ''.join(num_to_alpha[int(c)] for c in text.split()) 
+    return text 
+
+num_to_alpha = {i: c for c, i in alpha_to_num.items()}   
+
+text = 'Hello World!'
+encoded = encode(text)
+print(encoded)  
+# 8 5 12 12 15 15 23 15 18 12 4  23 15 18 12 4 ...
+
+decoded = decode(encoded) 
+print(decoded)
+# HELLO WORLD! HELLO WORLD! ... 
+
+if __name__ == '__main__':
+    user_text = input('Enter text to encode/decode: ')
+    user_choice = input('Do you want to (e)ncode or (d)ecode the text? ')
     
-    except Exception as e:
-        print(f"An error occurred while fetching data from Yahoo Finance : {e}")
-        return []
-
-if __name__ == "__main__":
-    # Get the input string from the command line arguments
-    input_string = sys.argv[1]
-
-    # Call the fetch_yahoo_news function
-    fetch_yahoo_news(input_string)
+    if user_choice == 'e':
+        encoded_text = encode(user_text)
+        print(f'Encoded text: {encoded_text}')
+    elif user_choice == 'd':
+        decoded_text = decode(user_text)
+        print(f'Decoded text: {decoded_text}')
