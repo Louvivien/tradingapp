@@ -114,15 +114,15 @@ Roadmap: [Productboard](https://roadmap.productboard.com/21c090eb-9351-42c4-a248
 Discord: [Discord](https://discord.gg/Neu7KBrhV3)
 
 <!-- Badges -->
-[contributors-shield]: https://img.shields.io/github/contributors/Louvivien/tradingapp/.svg?style=for-the-badge
+[contributors-shield]: https://img.shields.io/github/contributors/Louvivien/tradingapp.svg?style=for-the-badge
 [contributors-url]: https://github.com/Louvivien/tradingapp/graphs/contributors
-[forks-shield]: https://img.shields.io/github/forks/Louvivien/tradingapp/.svg?style=for-the-badge
+[forks-shield]: https://img.shields.io/github/forks/Louvivien/tradingapp.svg?style=for-the-badge
 [forks-url]: https://github.com/Louvivien/tradingapp/network/members
-[stars-shield]: https://img.shields.io/github/stars/Louvivien/tradingapp/.svg?style=for-the-badge
+[stars-shield]: https://img.shields.io/github/stars/Louvivien/tradingapp.svg?style=for-the-badge
 [stars-url]: https://github.com/Louvivien/tradingapp/stargazers
-[issues-shield]: https://img.shields.io/github/issues/Louvivien/tradingapp/.svg?style=for-the-badge
+[issues-shield]: https://img.shields.io/github/issues/Louvivien/tradingapp.svg?style=for-the-badge
 [issues-url]: https://github.com/Louvivien/tradingapp/issues
-[license-shield]: https://img.shields.io/github/license/Louvivien/tradingapp/.svg?style=for-the-badge
+[license-shield]: https://img.shields.io/github/license/Louvivien/tradingapp.svg?style=for-the-badge
 [license-url]: https://github.com/Louvivien/tradingapp/blob/master/LICENSE.txt
 [linkedin-shield]: https://img.shields.io/badge/-LinkedIn-black.svg?style=for-the-badge&logo=linkedin&colorB=555
 [linkedin-url]: https://www.linkedin.com/in/vivienrichaud/
