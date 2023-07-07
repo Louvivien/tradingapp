@@ -221,7 +221,6 @@ exports.sellStock = async (req, res) => {
 //   }
 // };
 
-
 exports.searchStocks = async (req, res) => {
   try {
     const { userId, value } = req.params;
@@ -238,12 +237,11 @@ exports.searchStocks = async (req, res) => {
 
     const securities = response.data;
     
-    const filteredSecurities = securities.filter(security => security.assetType === 'Stock').slice(0, 20);
-
+    const filteredSecurities = securities.slice(0, 20);
 
     return res.status(200).json({
       status: "success",
-      data: filteredSecurities.map(security => ({ name: security.name, ticker: security.ticker })),
+      data: filteredSecurities.map(security => ({ name: security.name, ticker: security.ticker, assetType: security.assetType })),
     });
   } catch (error) {
     console.error('Error:', error);
@@ -253,6 +251,7 @@ exports.searchStocks = async (req, res) => {
     });
   }
 };
+
 
 
 exports.getStockForUser = async (req, res) => {
