@@ -136,7 +136,7 @@ return (
       <FixedHeightPaper>
         
     <Box>
-      <Title>Composer strategy</Title>
+      <Title>Collaborative strategy</Title>
               <Typography color="textSecondary" align="left">Add a collaborative strategy</Typography>
         {loading ? (
           <div> 
@@ -166,9 +166,12 @@ return (
         ) : (
 
         <div>
-          <Typography variant="body1" size="small">
-          Here you can copy paste a strategy from Composer
-        </Typography>
+    <Typography variant="body1" size="small">
+      Here you can copy paste a strategy from{" "}  
+      <Link href="https://www.composer.trade/" target="_blank" rel="noopener noreferrer">
+         Composer
+      </Link>
+    </Typography>
           
           <>
           <TextField
