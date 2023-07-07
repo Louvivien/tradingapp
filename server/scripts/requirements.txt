@@ -5,4 +5,4 @@ logging
 yfinance
 requests
 GoogleNews
-
+python-Levenshtein
