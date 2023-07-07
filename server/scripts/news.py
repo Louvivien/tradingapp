@@ -182,15 +182,15 @@ def main(ticker='AAPL', period=1):
     # Combine the news from both sources into a single list
     news_data = tickertick_news + google_news
 
+    # Combine the news from both sources into a single list
+    news_data = tickertick_news + google_news
+    
     try:
         json_output = json.dumps(news_data, cls=DateTimeEncoder, ensure_ascii=False)
         
-        # Create a 'data' folder if it doesn't exist
-        if not os.path.exists('data'):
-            os.makedirs('data')
-        
-        # Save the JSON output to a file
-        with open('data/headlines.json', 'w') as file:
+        # Save the JSON output to the data folder
+        file_path = os.path.join('..', 'data', 'newsData.json')
+        with open(file_path, 'w') as file:
             file.write(json_output)
             
         print("JSON output saved successfully.")
