@@ -184,13 +184,21 @@ def main(ticker='AAPL', period=1):
 
     try:
         json_output = json.dumps(news_data, cls=DateTimeEncoder, ensure_ascii=False)
-        print(json_output)
+        
+        # Create a 'data' folder if it doesn't exist
+        if not os.path.exists('data'):
+            os.makedirs('data')
+        
+        # Save the JSON output to a file
+        with open('data/headlines.json', 'w') as file:
+            file.write(json_output)
+            
+        print("JSON output saved successfully.")
     except Exception as e:
-        print(f"Error generating JSON: {e}")
+        print(f"Error generating JSON or saving the output: {e}")
         json_output = "[]"
+        
     return json_output
-
-
 
 
 

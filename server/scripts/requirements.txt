@@ -5,5 +5,4 @@ logging
 yfinance
 requests
 GoogleNews
-concurrent.futures
-hashlib
+
