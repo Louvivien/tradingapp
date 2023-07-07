@@ -105,6 +105,9 @@ return (
     </Tabs>
 
     {value === 0 && (
+
+<FixedHeightPaper>
+
       <Box>
         <Title>AI Fund Strategy</Title>
         <Typography color="textSecondary" align="left">Setup your AI fund strategy</Typography>
@@ -130,6 +133,8 @@ return (
           Create this strategy
         </Button>
       </Box>
+      </FixedHeightPaper>
+
     )}
 
     {value === 1 && (
