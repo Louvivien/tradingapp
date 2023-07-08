@@ -14,13 +14,6 @@ import argparse
 from Levenshtein import distance as levenshtein_distance
 
 
-
-
-
-
-
-
-
 load_dotenv("../config/.env")
 
 STOCKNEWS_API_KEY = os.getenv("STOCKNEWS_API_KEY")
@@ -29,7 +22,7 @@ STOCKNEWS_API_KEY = os.getenv("STOCKNEWS_API_KEY")
 logging.basicConfig(
     format='%(asctime)s %(levelname)s %(message)s',
     datefmt='%Y/%m/%d %H:%M:%S',
-    stream=sys.stderr 
+    stream=sys.stderr
 )
 
 logging.getLogger().setLevel(logging.INFO)
@@ -45,7 +38,7 @@ def print_curl_command(request):
     headers = ['"{0}: {1}"'.format(k, v) for k, v in request.headers.items()]
     headers = " -H ".join(headers)
     logging.info(command.format(uri=uri, method=method, headers=headers, data=data))
-# To use:   
+# To use:
 # print_curl_command(response.request)
 
 def generate_id(title, date):
@@ -80,9 +73,9 @@ def fetch_tickertick_news(ticker='AAPL', period=1):
                 news_date = datetime.datetime.fromtimestamp(news.get('time') / 1000)
                 if (datetime.datetime.now() - news_date).days > period:
                     logging.info("Data fetched successfully from TickerTick API.")
-                    # print(tickertick_news)  
+                    # print(tickertick_news)
                     return tickertick_news
-                
+
                 tickertick_news.append({
                     'Id': generate_id(news.get('title'), news_date),
                     'News headline': news.get('title'),
@@ -98,7 +91,7 @@ def fetch_tickertick_news(ticker='AAPL', period=1):
         return []
 
 
-# # Google News 
+# # Google News
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, datetime.datetime):
@@ -142,7 +135,7 @@ def fetch_google_news(ticker='AAPL', period=1):
                 })
 
         logging.info("Data fetched successfully from Google News.")
-        # print(google_news)  
+        # print(google_news)
         return google_news
 
     except Exception as e:
@@ -235,20 +228,20 @@ def main(ticker='AAPL', period=1):
 
     # Remove similar headlines
     news_data = remove_similar_headlines(news_data)
-    
+
     try:
         json_output = json.dumps(news_data, cls=DateTimeEncoder, ensure_ascii=False, indent=4)
-        
+
         # Save the JSON output to the data folder
         file_path = os.path.join('..', 'data', 'newsData.json')
         with open(file_path, 'w') as file:
             file.write(json_output)
-            
+
         print("JSON output saved successfully.")
     except Exception as e:
         print(f"Error generating JSON or saving the output: {e}")
         json_output = "[]"
-        
+
     return json_output
 
 
@@ -265,7 +258,6 @@ if __name__ == '__main__':
 
 
 
-   
 # Before running this file you need to update the session cookies for degiro and IB
 # IB: filter requests on "search" in the browser network tab copy the curl command and paste it in Postman
     # paste the header section from Postman

@@ -16,17 +16,13 @@ load_dotenv(dotenv_path)
 openai_key = os.getenv('OPENAI_API_KEY')
 anthropic_key = os.getenv('ANTHROPIC_API_KEY')
 
-
-
 logging.basicConfig(
     format='%(asctime)s %(levelname)s %(message)s',
     datefmt='%Y/%m/%d %H:%M:%S',
-    stream=sys.stderr 
+    stream=sys.stderr
 )
 
 logging.getLogger().setLevel(logging.INFO)
-
-
 
 class SentimentAnalyzer:
     def __init__(self, api_key):

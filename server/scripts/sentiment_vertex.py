@@ -32,17 +32,43 @@ class SentimentAnalyzer:
         self.model = model
         self.parameters = parameters
 
-    def analyze_sentiment(self, headline):
-        prompt_base = """Forget all your previous instructions. Pretend you are a financial expert. You are a financial expert with stock recommendation experience. Answer “YES” if good news, “NO” if bad news, or “UNKNOWN” if uncertain in the first line. Then elaborate with one short and concise sentence on the next line. """
+    def analyze_sentiment(self, headline, company):
+        prompt_base = f"""Forget all your previous instructions. Pretend you are a financial expert.
+        Positive sentiment about {company} in the news usually results in the price of its stock increasing and vice versa.
+        Depending on the news text predict if the value of the stock would increase or decrease.
+        The output should be in the range of -1 to 1. Where 1 represents a potential increase in the stock price, -1 means
+        the value is likely to decrease and 0 means price will remain unchanged.\n
+        input: Elon Musk smokes weed at Joe Rogan Show. People think it was irresponsible of him to do so, being the CEO of Tesla.
+        output: -0.9
+
+        input: Tesla has acquired a new battery technology company which is likely to result in higher effeciency batteries in its next generation cars.
+        output: 0.75
+
+        input: Tesla Laying off workers in China factory.
+        output: -0.1
+
+        input: {headline}.
+        output:
+        """
         prompt = f'{prompt_base} {headline}'
         response = self.model.predict(prompt, **self.parameters)
-        if response.text:
-            sentiment = response.text
-            logging.info(f"Sentiment for '{headline}': {sentiment}")
-            return sentiment
-        else:
-            logging.warning(f"No sentiment returned for '{headline}'")
-            return None
+        try:
+            response = int(response)
+            if response > 0.3:
+                return "YES"
+            elif response < -0.3:
+                return "NO"
+            else:
+                return "UNKNOWN"
+
+        except ValueError:
+            if response.text:
+                sentiment = response.text
+                logging.info(f"Sentiment for '{headline}': {sentiment}")
+                return sentiment
+            else:
+                logging.warning(f"No sentiment returned for '{headline}'")
+                return None
 
     def process_news(self, news):
         """Process a list of news articles."""
@@ -53,7 +79,7 @@ class SentimentAnalyzer:
             ticker = article.get('Ticker')
             if headline is not None and stock_name is not None and ticker is not None:
                 logging.info(f"Processing article: {headline}")
-                sentiment = self.analyze_sentiment(headline)
+                sentiment = self.analyze_sentiment(headline, stock_name)
                 if sentiment is not None:
                     sentiment = sentiment.strip()
                     if sentiment.startswith('YES'):
