@@ -32,7 +32,7 @@ Product Management: Productboard, Notion
 Project Management: Jira
 
 ## Installation
-Make sure you have NodeJS installed. You can check your Node.js version by running the command node -v in your terminal. If your version is older than 14.20.1, you will need to update Node.js. 
+Make sure you have NodeJS installed. You can check your Node.js version by running the command node -v in your terminal. If your version is older than 14.20.1, you will need to update Node.js. Please make sure that node -v gives you a version after 14.20.1 before doing anything else. 
 
 
 
@@ -61,15 +61,7 @@ Install the required packages for the client with:
 npm install
 ```
 
-And run the client with:
-```sh
-npm run start
-```
 
-Open another terminal window and then run the server with:
-```sh
-npm run start
-```
 
 Then you have to set up the .env files for the server and the client:
 Go to the different services, create accounts and get the API keys
@@ -78,9 +70,33 @@ here  /tradingapp/server/config/ you have an example file. Rename it .env and ch
 
 there /tradingapp/client/  you have an example file. Rename it .env and change the keys with yours
 
-Code explanation: [Video](https://www.loom.com/share/2411f7d34ea1491ab22c166957e107de) 
 
 Please make sure you have created a .env in the server AND in the client or it will not work
+
+To use Vertex you will need to create /tradingapp/server/config/googlecredentials.json with your google credentials
+
+
+
+Then you can start the server and the client
+
+Go to the client folder
+
+And run the client with:
+```sh
+npm run start
+```
+
+Open another terminal window and then run the server with:
+
+Go to the server folder
+
+```sh
+npm run start
+```
+
+Code explanation: [Video](https://www.loom.com/share/2411f7d34ea1491ab22c166957e107de) 
+
+
 
 ## Deployment
 The front is optimized to be deployed on Vercel. Don't forget to add env variables.
