@@ -1,5 +1,53 @@
 [
     {
+        "Id": "485a6ae80b90f9046e5e9d7fc064a8c765c5521bc467d9d1a58eef2e09b3fa60",
+        "News headline": "New MacBook Pro Leak Uncovers Apple’s Disappointing Upgrade",
+        "Date": "2023-07-08T18:29:19",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "9d03eb0d2045f54f54b66affe98d9d6924bd6db82668b0bc9eb829eacdb3cabb",
+        "News headline": "2 Roaring Stocks to Hold for the Next 20 Years",
+        "Date": "2023-07-08T18:00:00",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "d150860142400885c86ce4309e5fadc07a0917e4371ca779aaa3db8ee3cfc7e9",
+        "News headline": "Apple’s new Mac Studio and 15-inch MacBook Air are both on sale right now",
+        "Date": "2023-07-08T15:43:38",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "03d7a522f1c76be21beb3c3faa9fb506bbf96e4791c3e4725dc31ac64ffee129",
+        "News headline": "Datadog: 50 Top Growth Stocks, These 3 Worth Considering | $AAPL $AMZN $CRWD $ENVX $GOOG",
+        "Date": "2023-07-08T15:18:53",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "882e96c3bae07c4cdeb2d979575f9c6f0a0e0f4b74b9ca8c5c2c9b96c6c0f238",
+        "News headline": "Samsung Targets Apple iPhone Owners With Silly Flip 5 Promotion",
+        "Date": "2023-07-08T15:06:43",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "7158ed917d716f2c9546ae28f32a33c19b8b4d435d79aa606c42c37770f86ee7",
+        "News headline": ": 15 best early Amazon Prime Day deals not to miss, including Apple Airpods, MacBook Air, Amazon Echo and more",
+        "Date": "2023-07-08T14:07:52",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news"
+    },
+    {
         "Id": "2e35d501ed95bb7b74a9a64aed0f57506bfbc1054ea788acbedb745967c4fc77",
         "News headline": "Apple Loop: Stunning iPhone 15 Pro Details, Apple Music Defeated, Future Mac Plans",
         "Date": "2023-07-07T23:59:26",
@@ -192,209 +240,121 @@
         "Source": "tickertick_news"
     },
     {
-        "Id": "0810a6afc21dc89e3ca0518b75f701a835590b6e187cc4d357fc5e680021c87b",
-        "News headline": "Spotify Blocks Subscribers From Apple in-App Payments",
-        "Date": "2023-07-06T19:43:58",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "ce26c6d6d29cbfec5f6c37aa249cfb6584706cb762dc5575c3909488e213cad3",
-        "News headline": "St. James Investment Company Value Investor's Q2 2023 Quarterly Letter | $AAPL $AMZN $DIS $GOOG $GOOGL",
-        "Date": "2023-07-06T18:00:00",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "e6975012d1c5df64a5cf66a916bc8994bd73f59becedd27c690733220918bf90",
-        "News headline": "Apple's Threat To Meta Is Bigger Than You May Think | $AAPL $META",
-        "Date": "2023-07-06T16:48:36",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "af9075cdef07a8056291f106efe28b8ae04a75cedbceba233d5e78b9d0898c97",
-        "News headline": "UK court sides with Optis Cellular Technology in Apple 4G patent clash",
-        "Date": "2023-07-06T16:45:11",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "c5f934c604844310bd02de8204e324384447022685fb6c55ddc8f79d08e7e8f7",
-        "News headline": "Apple goes against trend, sees 8% increase during China's 6.18 sales festival",
-        "Date": "2023-07-06T16:33:33",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "30560dfc0a8367065e189b655ec5b424a8d1ba265052743150f057ba85b4ed49",
-        "News headline": "Apple’s Strange Planet animated series starts streaming in August",
-        "Date": "2023-07-06T16:00:00",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "07d41837f144abbc1a4362bc2d451e086137286f942fb4b64695d8b5f8ed3f81",
-        "News headline": "Ellie Simmonds' emotional search for birth mother",
-        "Date": "2023-07-06T15:50:29",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "139e089b6c56c2f8e63f9884c0d0cb9df2a43f764a5a803b5ba86b412b8b7143",
-        "News headline": "Transforming Fashion & Luxury: Exploring The Implications Of Apple’s Vision Pro And The Spatial Computing Era",
-        "Date": "2023-07-06T14:00:00",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "6f346f8410c7345e853abe740279d39cd86f4bd9030362d0d146aa6c50d5b06e",
-        "News headline": "Palm Valley Capital Fund Q2 2023 Commentary | $AAP $AAPL $AMZN $AZO $COF",
-        "Date": "2023-07-06T12:00:00",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "450400415b57bc07ae7097625ef73050982519b7a1f598f873e24be4349b5c15",
-        "News headline": "Here's How Much Higher Wall Street Thinks Apple Stock Will Go",
-        "Date": "2023-07-06T11:50:00",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "9844e25202b22b0572a56cb70c27617d67cb5532092eba0dd0479e365da7842f",
+        "Id": "017a45c7e2bea0503d1b23aec7be7275fc44400cd9a93fad4b12d152b2d6b9dd",
         "News headline": "Is Apple (AAPL)’s Digi Wallet Safe?",
-        "Date": "2023-07-08T09:31:48.744455",
+        "Date": "2023-07-07T21:00:25.081319",
         "Ticker": "AAPL",
         "Stock name": "AAPL",
         "Source": "google_news"
     },
     {
-        "Id": "c9067e83efa20461866c57720c5e2cb38dd1b9fdeaee70f7c9fa2bd84373d8d2",
-        "News headline": "Here is What to Know Beyond Why Apple Inc. (AAPL) is a ...",
-        "Date": "2023-07-08T01:31:48.748743",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "google_news"
-    },
-    {
-        "Id": "078b6ee9989e4aafee22649da8c7bf2dc0107eeebab0bd5d78d88d1dd5cba97d",
-        "News headline": "After Hours Most Active for Jul 7, 2023 : INTC, AAPL, BAC, KO ...",
-        "Date": "2023-07-08T08:31:48.750256",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "google_news"
-    },
-    {
-        "Id": "d0e53b41c144f75e4b29478ae78b418f5186dead74e26d4094829a0237fe2f3a",
-        "News headline": "Apple Inc (AAPL) Stock Is Up 0.70% This Week: Buy, Hold, or Sell?",
-        "Date": "2023-07-08T03:31:48.751676",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "google_news"
-    },
-    {
-        "Id": "c7aa96f4e51e0c0ae1acad6905490d53a71be549de04d3f0a6c9dd895cf6d823",
-        "News headline": "Apple (NASDAQ:AAPL) Moves To Bring Vison Pro to Retail ...",
-        "Date": "2023-07-08T02:31:48.753062",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "google_news"
-    },
-    {
-        "Id": "6c6a12d9e80302235aa0c8854c98ba8693aaf74211f43f8de7fe8512c172f66d",
-        "News headline": "Warren Buffett Detailed Fundamental Analysis - AAPL",
-        "Date": "2023-07-08T10:31:48.754473",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "google_news"
-    },
-    {
-        "Id": "3fce37a97e310bc4fa0dbfc362030013b98612c3f635b5215e777d70c5a85bc3",
-        "News headline": "Technology Sector Update for 07/07/2023: BABA, META, AAPL",
-        "Date": "2023-07-08T06:31:48.755977",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "google_news"
-    },
-    {
-        "Id": "e830358b9f64a1d1af2d5afa31fcbf4f044ab4f172270dc9de9d886fec843205",
-        "News headline": "Apple: Now Significantly Overvalued - Don't Be Fooled (AAPL)",
-        "Date": "2023-07-08T04:31:48.757493",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "google_news"
-    },
-    {
-        "Id": "314f5f3897c505f636cb0d4f6be0bff6a66f5c7fd0e3aa5ad890dd04981e2561",
-        "News headline": "A￼pple is Warren Buffett’s biggest investment coup ever",
-        "Date": "2023-07-08T09:31:48.758831",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "google_news"
-    },
-    {
-        "Id": "d2b18e53f619b227ecc05202b4d5ebd534d2dccd096fdbac366da0f15e6d581b",
+        "Id": "effdddac90b36304294fc679123109f572307371bfa17c45db0388a27ea74621",
         "News headline": "AAPL Stock Spotlight: Apple Looks Juicy, but Beware the Worm",
-        "Date": "2023-07-08T02:31:49.323093",
+        "Date": "2023-07-07T21:00:25.092912",
         "Ticker": "AAPL",
         "Stock name": "AAPL",
         "Source": "google_news"
     },
     {
-        "Id": "9d99f16d5972aeaa650607ee5afdf62170b49122e7155dcacb248e40a61a7023",
+        "Id": "e850b39449be2b88ebd258a93408ddccb4e21f06bf45354136425389c900d832",
+        "News headline": "After Hours Most Active for Jul 7, 2023 : INTC, AAPL, BAC, KO ...",
+        "Date": "2023-07-08T19:00:25.094667",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "53daa063d3549e34113d9f27bb1abf89886c14361f99047a5ba5a1890f41bff8",
+        "News headline": "Here is What to Know Beyond Why Apple Inc. (AAPL) is a ...",
+        "Date": "2023-07-07T21:00:25.104258",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "40c35470b5c69467917edb5f3c6da5a6d3ca431d36d49e08c28284cf1249ed85",
+        "News headline": "Apple Inc (AAPL) Stock Is Up 0.70% This Week: Buy, Hold, or Sell?",
+        "Date": "2023-07-07T21:00:25.113983",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "c6eff2075b59b3d1a32bc7b51dbb7e6668beac8650972f58963d630b236d4f54",
+        "News headline": "Apple (NASDAQ:AAPL) Moves To Bring Vison Pro to Retail ...",
+        "Date": "2023-07-07T21:00:25.123973",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "4a4a2ac65beac8c463048cdc8602cfdcad0c58cbc845db1002d19f8f375c4138",
+        "News headline": "Warren Buffett Detailed Fundamental Analysis - AAPL",
+        "Date": "2023-07-07T21:00:25.137957",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "b648a4e8de45ef16f1955940ac824442cd25689b7ee5029c09a35ac382cc4122",
+        "News headline": "Technology Sector Update for 07/07/2023: BABA, META, AAPL",
+        "Date": "2023-07-07T21:00:25.147536",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "9cd8a6c3269c2c41a365a18dd6b20c6c08d27a4f65937841d301f0e5a9135634",
+        "News headline": "A￼pple is Warren Buffett’s biggest investment coup ever",
+        "Date": "2023-07-08T20:00:25.159259",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "7553884ad036c1dbb61246a863ddae9a10c2224a0e98dc230982bb6589476bf8",
+        "News headline": "2 Top Stocks to Buy for the Next Bull Market",
+        "Date": "2023-07-08T14:00:25.654790",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "bbe3158e9024a63207401689dc8ba89f48de5ef8228a5ab528436843bb13bdbb",
         "News headline": "3 Growth Stocks to Make Your 'Get Rich' Dreams Come True",
-        "Date": "2023-07-08T01:31:49.326847",
+        "Date": "2023-07-07T21:00:25.674151",
         "Ticker": "AAPL",
         "Stock name": "AAPL",
         "Source": "google_news"
     },
     {
-        "Id": "528a8d0f02cd36b7ea098cdded37c02949a5277aaf6b8d093cbcd1fef49009c0",
+        "Id": "ea0130a1f1c83f9cd4e6dad371396e98ad49ad667012c935d2c55ea412fab023",
+        "News headline": "Stocks May Head Higher This Year As Bulls Have History on ...",
+        "Date": "2023-07-08T14:00:25.684907",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "cd6291345d572d2059ecb97f9285ebb601a0beacf7f9a0094cc9d4cee888cda8",
         "News headline": "Hot Stocks Alert: 7 Companies to Watch for Share Buybacks",
-        "Date": "2023-07-08T06:31:49.328091",
+        "Date": "2023-07-07T21:00:25.704293",
         "Ticker": "AAPL",
         "Stock name": "AAPL",
         "Source": "google_news"
     },
     {
-        "Id": "da6e5f05a99ca2355ed2531950f9d9876532feaa66f26e88e0abf0df9dd1c0bd",
+        "Id": "7c253cc719150a87dc03a515680483629e2bbafb9e426e22b80a962d6cb85173",
         "News headline": "14 Best NASDAQ Dividend Stocks To Buy",
-        "Date": "2023-07-08T04:31:49.329341",
+        "Date": "2023-07-07T21:00:25.714021",
         "Ticker": "AAPL",
         "Stock name": "AAPL",
         "Source": "google_news"
     },
     {
-        "Id": "934f4fabe89fefbc2c53d9e9c3e59bdb912f023c5476b528230ee18e59a3c5b6",
+        "Id": "d95f7cd0a57cf45cce0802f00f2e5c53e460291cfb0592a71cd32b9fd77a7498",
         "News headline": "$100 Invested In This Stock 10 Years Ago Would Be Worth $1,300 Today - Apple (NASDAQ:AAPL)",
-        "Date": "2023-07-08T02:31:49.330578",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "google_news"
-    },
-    {
-        "Id": "89b13af70394561c043f7f1187c0caf2668c325ded067cd61fec61ea0b013d86",
-        "News headline": "S&P 500 Faces Moment of Truth as Q2 Earnings Season ...",
-        "Date": "2023-07-08T08:31:49.331854",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "google_news"
-    },
-    {
-        "Id": "44d5b58b2c4a392f987d34c59aee693c8c8e5351d4217cb4ed02cdc59ca9f609",
-        "News headline": "Investors Scramble To Buy Stocks Again — Especially These 10",
-        "Date": "2023-07-08T10:31:49.333130",
+        "Date": "2023-07-07T21:00:25.723919",
         "Ticker": "AAPL",
         "Stock name": "AAPL",
         "Source": "google_news"

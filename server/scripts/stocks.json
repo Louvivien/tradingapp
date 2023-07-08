@@ -1,0 +1,5 @@
+{
+    "_comment": "This is a list of 20 US major US stocks from different industries",
+    "stocks": ["AAPL", "MSFT", "GOOGL", "AMZN", "FB", "TSLA", "BRK.B", "V", "JNJ", "WMT", "PG", "MA", "INTC", "VZ", "HD", "DIS", "NFLX", "KO", "NKE", "MCD"]
+}
+
