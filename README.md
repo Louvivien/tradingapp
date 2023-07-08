@@ -32,9 +32,9 @@ Product Management: Productboard, Notion
 Project Management: Jira
 
 ## Installation
-Make sure you have NodeJS installed.
+Make sure you have NodeJS installed. You can check your Node.js version by running the command node -v in your terminal. If your version is older than 14.20.1, you will need to update Node.js. 
 
-Make sure you have NodeJS installed. 
+
 
 go to the server folder
 ```sh
