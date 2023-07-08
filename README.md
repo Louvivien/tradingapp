@@ -80,6 +80,8 @@ there /tradingapp/client/  you have an example file. Rename it .env and change t
 
 Code explanation: [Video](https://www.loom.com/share/2411f7d34ea1491ab22c166957e107de) 
 
+Please make sure you have created a .env in the server AND in the client or it will not work
+
 ## Deployment
 The front is optimized to be deployed on Vercel. Don't forget to add env variables.
 
