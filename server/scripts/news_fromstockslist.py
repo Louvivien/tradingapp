@@ -1,5 +1,8 @@
 
-# currently not working
+# without a proxy googlenews does not work
+
+# currently not working with this solution
+
 # maybe use this package instead https://pypi.org/project/pygooglenews/
 # or add a timeout to to the google news request
 
