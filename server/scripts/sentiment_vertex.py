@@ -16,6 +16,7 @@ load_dotenv(dotenv_path)
 os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = os.path.join(os.path.dirname(__file__), os.getenv('GOOGLE_APPLICATION_CREDENTIALS_PATH'))
 
 # Initialize Vertex AI
+# Make sure the project is the same here than in your googlecredentials.json file
 vertexai.init(project="ghc-026", location="us-central1")
 model = TextGenerationModel.from_pretrained("text-bison@001")
 parameters = {
