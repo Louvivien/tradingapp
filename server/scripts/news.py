@@ -82,12 +82,14 @@ def fetch_tickertick_news(ticker='AAPL', period=1):
                     logging.info("Data fetched successfully from TickerTick API.")
                     # print(tickertick_news)  
                     return tickertick_news
+                
                 tickertick_news.append({
-                    'id': generate_id(news.get('title'), news_date),
-                    'title': news.get('title'),
-                    'date': news_date,
-                    'ticker': news.get('tickers')[0].upper(),
-                    'source': 'tickertick_news'
+                    'Id': generate_id(news.get('title'), news_date),
+                    'News headline': news.get('title'),
+                    'Date': news_date,
+                    'Ticker': news.get('tickers')[0].upper(),
+                    'Stock name': news.get('tickers')[0].upper(),
+                    'Source': 'tickertick_news'
                 })
             last_id = tickertick_news_raw[-1]['id']
             logging.info(f"Fetching next 100 articles. Last ID: {last_id}")
@@ -131,14 +133,16 @@ def fetch_google_news(ticker='AAPL', period=1):
         for news in google_news_results:
             if news.get('title').strip():  # Exclude news with empty title
                 google_news.append({
-                    'id': generate_id(news.get('title'), news.get('datetime')),
-                    'title': news.get('title'),
-                    'date': news.get('datetime'),  # Use the date from the news article
-                    'ticker': ticker,
-                    'source': 'google_news'
+                    'Id': generate_id(news.get('title'), news.get('datetime')),
+                    'News headline': news.get('title'),
+                    'Date': news.get('datetime'),  # Use the date from the news article
+                    'Ticker': ticker,
+                    'Stock name': ticker,
+                    'Source': 'google_news'
                 })
 
         logging.info("Data fetched successfully from Google News.")
+        # print(google_news)  
         return google_news
 
     except Exception as e:
@@ -179,9 +183,9 @@ def remove_similar_headlines(news_list, similarity_threshold=0.6):
         # Loop over the unique news
         for unique in unique_news:
             # If the news is for the same company on the same day
-            if news['ticker'] == unique['ticker'] and news['date'].date() == unique['date'].date():
+            if news['Ticker'] == unique['Ticker'] and news['Date'].date() == unique['Date'].date():
                 # Calculate the similarity between the headlines
-                similarity = calculate_similarity(news['title'], unique['title'])
+                similarity = calculate_similarity(news['News headline'], unique['News headline'])
                 # If the similarity is greater than the threshold
                 if similarity > similarity_threshold:
                     # The news is not unique
@@ -204,9 +208,9 @@ def print_news_headlines(tickertick_news, google_news):
 
 
         for n in tickertick_news:
-            logging.info("TickerTick",  n['title'])
+            logging.info("TickerTick",  n['News headline'])
         for n in google_news:
-            logging.info("Google",  n['title'])
+            logging.info("Google",  n['News headline'])
         logging.info("News headlines printed successfully.")
     except Exception as e:
         logging.error(f"An error occurred while printing news headlines: {e}")

@@ -6,3 +6,4 @@ yfinance
 requests
 GoogleNews
 python-Levenshtein
+google-cloud-aiplatform

@@ -1,0 +1,62 @@
+[
+    {
+        "Id": "2e35d501ed95bb7b74a9a64aed0f57506bfbc1054ea788acbedb745967c4fc77",
+        "News headline": "Apple Loop: Stunning iPhone 15 Pro Details, Apple Music Defeated, Future Mac Plans",
+        "Date": "2023-07-07T23:59:26",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news",
+        "Sentiment": "YES",
+        "Description": "Apple is a very successful company and their new products are always well received by the public."
+    },
+    {
+        "Id": "be6bd3f33ef1544f1e5c7ec328c8aa9b90c7541933d1d7b14491187243890f75",
+        "News headline": "What To Stream This Weekend On Netflix, Amazon Prime Video, Disney+, Paramount, Hulu, Apple TV And More",
+        "Date": "2023-07-07T21:46:30",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news",
+        "Sentiment": "UNKNOWN",
+        "Description": "The news is about streaming services. It is not about stocks."
+    },
+    {
+        "Id": "d59afc95aae8b99649bc86504c6af318aef08a25192666413567c9012ef1bdb4",
+        "News headline": "What Apple's big bet on India means for the tech giant's future",
+        "Date": "2023-07-07T18:45:30",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news",
+        "Sentiment": "YES",
+        "Description": "Apple's big bet on India means that the company is committed to the country and sees it as a key market for growth. Apple has been investing heavily in India in recent years, and this bet is a sign that it believes the country has the potential to be a major market for its products."
+    },
+    {
+        "Id": "934f4fabe89fefbc2c53d9e9c3e59bdb912f023c5476b528230ee18e59a3c5b6",
+        "News headline": "$100 Invested In This Stock 10 Years Ago Would Be Worth $1,300 Today - Apple (NASDAQ:AAPL)",
+        "Date": "2023-07-08T02:31:49.330578",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "google_news",
+        "Sentiment": "YES",
+        "Description": "Apple stock has been a great investment over the past 10 years."
+    },
+    {
+        "Id": "89b13af70394561c043f7f1187c0caf2668c325ded067cd61fec61ea0b013d86",
+        "News headline": "S&P 500 Faces Moment of Truth as Q2 Earnings Season ...",
+        "Date": "2023-07-08T08:31:49.331854",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "google_news",
+        "Sentiment": "UNKNOWN",
+        "Description": "The S&P 500 is facing a moment of truth as the Q2 earnings season gets underway. This is a critical time for the market, as investors will be looking for signs that the economy is continuing to grow and that companies are continuing to make money."
+    },
+    {
+        "Id": "44d5b58b2c4a392f987d34c59aee693c8c8e5351d4217cb4ed02cdc59ca9f609",
+        "News headline": "Investors Scramble To Buy Stocks Again \u2014 Especially These 10",
+        "Date": "2023-07-08T10:31:49.333130",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "google_news",
+        "Sentiment": "YES",
+        "Description": "This is good news. Investors are buying stocks again, which is a sign that the market is recovering."
+    }
+]
