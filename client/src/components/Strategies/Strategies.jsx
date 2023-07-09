@@ -149,10 +149,10 @@ return (
                 <p>The portfolio is automatically rebalanced every day base on market news headlines.</p>
               </div>
               <br />
-              <Button variant="contained" color="success" >
+              <Button variant="contained" color="success" className={styles.submit} >
                 Strategy Enabled
               </Button>
-              <Button variant="contained" color="error" onClick={handleAIFundDisable}>
+              <Button variant="contained" color="error" className={styles.submit} onClick={handleAIFundDisable}>
                 X
               </Button>
             </>
