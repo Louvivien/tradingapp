@@ -106,7 +106,7 @@ def calculate_sentiment_score(path, output_path):
         score = (positive_count / total_count) * 100  # score as a percentage
         result = {
             "ID": len(results) + 1,
-            "DATE": datetime.datetime.now().isoformat(),
+            "Date": datetime.datetime.now().isoformat(),
             "Stock Name": stock_name,
             "Ticker": ticker,
             "Score": round(score, 2)
