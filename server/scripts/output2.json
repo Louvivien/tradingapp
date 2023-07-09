@@ -1,9 +1,121 @@
 [
     {
         "ID": 1,
-        "DATE": "2023-07-08T19:46:27.680343",
+        "DATE": "2023-07-09T17:29:49.618095",
+        "Stock Name": "AMZN",
+        "Ticker": "AMZN",
+        "Score": 57.89
+    },
+    {
+        "ID": 2,
+        "DATE": "2023-07-09T17:29:49.618112",
         "Stock Name": "AAPL",
         "Ticker": "AAPL",
-        "Score": 76.0
+        "Score": 56.25
+    },
+    {
+        "ID": 3,
+        "DATE": "2023-07-09T17:29:49.618116",
+        "Stock Name": "FB",
+        "Ticker": "FB",
+        "Score": 56.1
+    },
+    {
+        "ID": 4,
+        "DATE": "2023-07-09T17:29:49.618119",
+        "Stock Name": "MSFT",
+        "Ticker": "MSFT",
+        "Score": 40.0
+    },
+    {
+        "ID": 5,
+        "DATE": "2023-07-09T17:29:49.618122",
+        "Stock Name": "PG",
+        "Ticker": "PG",
+        "Score": 15.38
+    },
+    {
+        "ID": 6,
+        "DATE": "2023-07-09T17:29:49.618125",
+        "Stock Name": "V",
+        "Ticker": "V",
+        "Score": 41.67
+    },
+    {
+        "ID": 7,
+        "DATE": "2023-07-09T17:29:49.618128",
+        "Stock Name": "GOOGL",
+        "Ticker": "GOOGL",
+        "Score": 41.18
+    },
+    {
+        "ID": 8,
+        "DATE": "2023-07-09T17:29:49.618131",
+        "Stock Name": "WMT",
+        "Ticker": "WMT",
+        "Score": 46.88
+    },
+    {
+        "ID": 9,
+        "DATE": "2023-07-09T17:29:49.618134",
+        "Stock Name": "TSLA",
+        "Ticker": "TSLA",
+        "Score": 56.76
+    },
+    {
+        "ID": 10,
+        "DATE": "2023-07-09T17:29:49.618137",
+        "Stock Name": "BRK.B",
+        "Ticker": "BRK.B",
+        "Score": 60.0
+    },
+    {
+        "ID": 11,
+        "DATE": "2023-07-09T17:29:49.618140",
+        "Stock Name": "MA",
+        "Ticker": "MA",
+        "Score": 66.67
+    },
+    {
+        "ID": 12,
+        "DATE": "2023-07-09T17:29:49.618142",
+        "Stock Name": "HD",
+        "Ticker": "HD",
+        "Score": 35.29
+    },
+    {
+        "ID": 13,
+        "DATE": "2023-07-09T17:29:49.618145",
+        "Stock Name": "JNJ",
+        "Ticker": "JNJ",
+        "Score": 50.0
+    },
+    {
+        "ID": 14,
+        "DATE": "2023-07-09T17:29:49.618148",
+        "Stock Name": "DIS",
+        "Ticker": "DIS",
+        "Score": 20.0
+    },
+    {
+        "ID": 15,
+        "DATE": "2023-07-09T17:29:49.618151",
+        "Stock Name": "NFLX",
+        "Ticker": "NFLX",
+        "Score": 66.67
+    },
+    {
+        "ID": 16,
+        "DATE": "2023-07-09T17:29:49.618154",
+        "Stock Name": "KO",
+        "Ticker": "KO",
+        "Score": 43.75
+    },
+    {
+        "ID": 17,
+        "DATE": "2023-07-09T17:29:49.618157",
+        "Stock Name": "MCD",
+        "Ticker": "MCD",
+        "Score": 15.38
     }
 ]

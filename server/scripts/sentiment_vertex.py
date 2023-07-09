@@ -58,11 +58,11 @@ class SentimentAnalyzer:
                 if sentiment is not None:
                     sentiment = sentiment.strip()
                     if sentiment.startswith('YES'):
-                        sentiment, description = sentiment.split(' ', 1)
+                        sentiment, description = sentiment.split(' ', 1) if ' ' in sentiment else (sentiment, '')
                     elif sentiment.startswith('NO'):
-                        sentiment, description = sentiment.split(' ', 1)
+                        sentiment, description = sentiment.split(' ', 1) if ' ' in sentiment else (sentiment, '')
                     elif sentiment.startswith('UNKNOWN'):
-                        sentiment, description = sentiment.split(' ', 1)
+                        sentiment, description = sentiment.split(' ', 1) if ' ' in sentiment else (sentiment, '')
                     else:
                         description = sentiment
                         sentiment = 'UNKNOWN'  # or some default value

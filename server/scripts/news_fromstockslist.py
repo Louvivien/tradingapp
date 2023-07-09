@@ -1,4 +1,7 @@
 
+# Tickernews not returning results for some tickers?
+
+
 import requests
 import yfinance as yf
 from GoogleNews import GoogleNews
