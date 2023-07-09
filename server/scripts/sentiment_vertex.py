@@ -137,30 +137,31 @@ def save_json(path, data):
 
 def main():
     print("Starting sentiment analysis...")
-    parser = argparse.ArgumentParser(description='Analyze sentiment of news articles.')
-    parser.add_argument('input', help='The JSON file to load news articles from.')
-    parser.add_argument('output', help='The JSON file to save results to.')
-    parser.add_argument('output2', help='The JSON file to save results to.')
-    args = parser.parse_args()
+    
+    # Define the paths to the input and output files
+    input_path = '../data/newsData.json'
+    output_path = '../data/sentimentResults.json'
+    output2_path = '../data/scoreResults.json'
 
     analyzer = SentimentAnalyzer()
     print("SentimentAnalyzer initialized.")
 
-    news = load_json(args.input)
+    news = load_json(input_path)
     if news is not None:
         print("News data loaded successfully.")
         print("Starting sentiment analysis")
         results = analyzer.process_news(news)
         print("Sentiment analysis completed.")
-        save_json(args.output, results)
+        save_json(output_path, results)
         print("Sentiment analysis results saved.")
         print("Starting sentiment score calculation")
-        calculate_sentiment_score(args.output, args.output2)
+        calculate_sentiment_score(output_path, output2_path)
         print("Sentiment scores calculated and saved.")
     else:
         print("Failed to load news data.")
 
     print("Sentiment analysis process finished.")
+
 
 if __name__ == "__main__":
     main()
