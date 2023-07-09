@@ -275,7 +275,7 @@ exports.createCollaborative = async (req, res) => {
       try {
   
         // console.log ('req.body', req.body);
-        // let input = req.body.collaborative;
+        let budget = req.body.budget;
         let UserID = req.body.userID;
         // console.log ('UserID', UserID);
         //We will use those 2 variables to create a new portfolio
@@ -285,18 +285,21 @@ exports.createCollaborative = async (req, res) => {
 
   
   
-        // Function to get the results from the scoring model
-        
+        ////////////// Scoring
         // go here
         // /Users/vivien/Documents/tradingapp/server/data/scoreResults.json
         // get the 5 highest scoring assets and get the tickers
 
-     
+        ////////////// Creating orders
         //Check if a portfolio with the same name already exists
-        //if it does, get the 
+        //if it does, get the tickers of the stocks in this portfolio
+        //and compare it with the ones from the scoring model
 
+        //if they are the same, do nothing
+        //if some are in the scoring model but not in the portfolio, add them as buying orders
+        //if some are in the portfolio but not in the scoring model, add them as selling orders
 
-
+        //if a portfolio does not exist, add them as buying orders
 
 
   
@@ -363,12 +366,16 @@ exports.createCollaborative = async (req, res) => {
             });
           }
         
-          // If some orders were successful, continue with the rest of the code
+          // If some orders were successful, and the portfolio does not exist, create it
           this.addPortfolio(strategy, strategyName, orders, UserID);
           return res.status(200).json({
             status: "success",
             orders: orders,
           });
+
+          // If some orders were successful, and the portfolio does exist update the portfolio
+        
+        
         }).catch(error => {
           console.error(`Error: ${error}`);
           return res.status(400).json({
@@ -543,6 +550,158 @@ else {
 
 
 }
+
+
+exports.updatePortfolio = async (strategyinput, strategyName, orders, UserID) => {
+  console.log('strategyName', strategyName);
+  console.log('orders', orders);
+  console.log('UserID', UserID);
+
+  try {
+    const numberOfOrders = orders.length;
+    console.log('numberOfOrders', numberOfOrders);
+
+    const alpacaConfig = await setAlpaca(UserID);
+    const alpacaApi = new Alpaca(alpacaConfig);
+
+// Check if the market is open
+const clock = await alpacaApi.getClock();
+if (!clock.is_open) {
+            console.log('Market is closed.');
+
+            const strategy_id = crypto.randomBytes(16).toString("hex");
+            console.log('strategy_id:', strategy_id);
+
+            // find the strategy
+
+
+            // update the strategy
+
+
+
+            // Save the strategy
+            await strategy.save();
+            console.log(`Strategy ${strategyName} has been created.`);
+
+
+            // Create a new portfolio
+            const portfolio = new Portfolio({
+              name: strategyName,
+              strategy_id: strategy_id,
+              stocks: orders.map(order => ({
+                symbol: order.symbol,
+                avgCost: null, 
+                quantity: order.qty,
+                orderID: order.orderID,
+              })),
+            });
+
+            // Save the portfolio
+            await portfolio.save();
+
+            console.log(`Portfolio for strategy ${strategyName} has been created. Market is closed so the orders are not filled yet.`);
+            return;
+          }
+
+else {        
+  
+              console.log('Market is open.');
+              // Function to get the orders if market is open
+              const getOrders = async () => {
+                const ordersResponse = await axios({
+                  method: 'get',
+                  url: alpacaConfig.apiURL + '/v2/orders',
+                  headers: {
+                    'APCA-API-KEY-ID': alpacaConfig.keyId,
+                    'APCA-API-SECRET-KEY': alpacaConfig.secretKey
+                  },
+                  params: {
+                    limit: numberOfOrders,
+                    status: 'all',
+                    nested: true
+                  }
+                });
+
+                console.log('ordersResponse', ordersResponse.data);
+
+                // Check if all orders are filled
+                const filledOrders = ordersResponse.data.filter(order => order.filled_qty !== '0');
+                      if (!filledOrders || filledOrders.length !== numberOfOrders) {
+                        // If not all orders are closed or not all orders have been filled, throw an error to trigger a retry
+                        throw new Error("Not all orders are closed or filled yet.");
+                      }
+                      return filledOrders;
+                    };
+
+
+              let ordersResponse;
+              try {
+                ordersResponse = await retry(getOrders, 5, 4000);
+
+              } catch (error) {
+                console.error(`Error: ${error}`);
+                throw error;
+              }
+
+
+                // Create an object to store orders by symbol
+                const ordersBySymbol = {};
+
+                ordersResponse.forEach((order) => {
+                  if (order.side === 'buy' && !ordersBySymbol[order.symbol]) {
+                    ordersBySymbol[order.symbol] = {
+                      symbol: order.symbol,
+                      avgCost: order.filled_avg_price,
+                      filled_qty: order.filled_qty,
+                      orderID: order.client_order_id
+                    };
+                  }
+                });
+
+
+              console.log('ordersBySymbol:', ordersBySymbol);
+              const strategy_id = crypto.randomBytes(16).toString("hex");
+              console.log('strategy_id:', strategy_id);
+            
+
+              // Create a new strategy
+              const strategy = new Strategy({
+                name: strategyName,
+                strategy: strategyinput,
+                strategy_id: strategy_id, 
+              });
+
+              // Save the strategy
+              await strategy.save();
+              console.log(`Strategy ${strategyName} has been created.`);
+
+
+              // Create a new portfolio
+              const portfolio = new Portfolio({
+                name: strategyName,
+                strategy_id: strategy_id,
+                stocks: Object.values(ordersBySymbol).map(order => ({
+                  symbol: order.symbol,
+                  avgCost: order.filled_avg_price ? Number(order.filled_avg_price) : null, // Convert the avgCost to a number or set it to null
+                  quantity: order.filled_qty,
+                  orderID: order.orderID || null, // Set the orderID to null if it's not provided
+                })),
+              });
+
+
+              // Save the portfolio
+              await portfolio.save();
+
+              console.log(`Portfolio for strategy ${strategyName} has been created.`);
+
+
+  }} catch (error) {
+    console.error(`Error: ${error}`);
+  }
+
+
+}
+
 
 
 exports.getPortfolios = async (req, res) => {

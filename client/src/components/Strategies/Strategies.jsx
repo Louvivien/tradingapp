@@ -66,6 +66,8 @@ const Strategies = () => {
     const userID = userData.user.id;
     const url = config.base_url + "/api/strategies/aifund/enable";
   
+    setAiFundStrategyEnabled(true); // Set the state immediately
+  
     try {
       const response = await Axios.post(url, {userID, strategyName: "AI Fund", budget: aifundbudget}, {headers});
     
@@ -83,10 +85,7 @@ const Strategies = () => {
     } finally {
       setLoading(false);
     }
-  
-    setAiFundStrategyEnabled(true);
   };
-  
   
   const handleAIFundDisable = async () => {
     setLoading(true);
@@ -97,6 +96,8 @@ const Strategies = () => {
   
     const userID = userData.user.id;
     const url = config.base_url + "/api/strategies/aifund/disable";
+  
+    setAiFundStrategyEnabled(false); // Set the state immediately
   
     try {
       const response = await Axios.post(url, {userID, strategyName: "AI Fund"}, {headers});
@@ -115,8 +116,6 @@ const Strategies = () => {
     } finally {
       setLoading(false);
     }
-  
-    setAiFundStrategyEnabled(false);
   };
   
 
