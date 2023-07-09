@@ -4,6 +4,9 @@ import time
 import threading
 from datetime import datetime, timedelta
 import os
+import requests
+
+
 
 # Get the directory of the current script
 script_dir = os.path.dirname(os.path.realpath(__file__))
@@ -12,6 +15,12 @@ script_dir = os.path.dirname(os.path.realpath(__file__))
 working_proxies_file = os.path.join(script_dir, "workingproxies.txt")
 proxy_list_file = os.path.join(script_dir, "proxylist.txt")
 blacklist_file = os.path.join(script_dir, "blacklist.txt")
+
+# Create a threading event
+check_proxies_done = threading.Event()
+
+# Global variable to hold the last 50 tested proxies
+last_tested_proxies = []
 
 def get_proxies(url):
     try:
@@ -24,57 +33,86 @@ def get_proxies(url):
             return None  
         return []
 
-def find_working_proxy(proxies):
-    url = "http://httpbin.org/ip"
-    for proxy in proxies:
-        try:
-            response = requests.get(url, proxies={"http": proxy, "https": proxy}, timeout=30)
-            if response.status_code == 200:
-                return proxy
-        except Exception as e:
-            return None
-    print("No working proxy found")
-    return None
-
 def test_google_news(proxy):
-    headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/113.0.0.0 Safari/537.36',
-        }
-    proxies = {
-        'https': proxy,
-    }
+    global last_tested_proxies
+
+    # If the proxy is in the last 50 tested proxies, return None
+    if proxy in last_tested_proxies:
+        return None
+
+    # Setting up the environment variables for proxies
+    os.environ['http_proxy'] = proxy 
+    os.environ['https_proxy'] = proxy
+
+    print(f"Testing proxy {proxy} ")  
     try:
-        response = requests.get('https://news.google.com/', headers=headers, proxies=proxies, timeout=10)
-        if response.status_code == 429:
-            with open(blacklist_file, "a") as file:
-                file.write(proxy + "\n")
-            return False
+        url = "http://httpbin.org/ip"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            print("Proxy working")
         else:
-            print(f"Proxy {proxy} successfully accessed Google News 😃")
-            print(f"")
-            return True
+            print("Proxy does not work")
+            # Add the proxy to the start of the list
+            last_tested_proxies.insert(0, proxy)
+            # If the list has more than 50 proxies, remove the oldest one
+            if len(last_tested_proxies) > 50:
+                last_tested_proxies.pop()
+            return False  # If the proxy is not working, return False
     except Exception as e:
-        if "Failed to establish a new connection" in str(e):
+        print("Proxy does not work")
+        # Add the proxy to the start of the list
+        last_tested_proxies.insert(0, proxy)
+        # If the list has more than 50 proxies, remove the oldest one
+        if len(last_tested_proxies) > 50:
+            last_tested_proxies.pop()
+        return False  # If an exception occurs, the proxy is not working, return False
+
+    try:
+        # Attempting to get news for AAPL
+        print(f"Testing proxy {proxy} with Google News RSS")  # Add this line
+        url = "https://news.google.com/rss/search?q=AAPL"
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            print(f"Proxy {proxy} successfully accessed Google News RSS 😃")
+            return True
+        else:
+            return False
+    except requests.exceptions.RequestException as e:
+        print(f"Error with proxy {proxy}: {e}")  # Modify this line
+        if "Failed to establish a new connection" in str(e) or "[Errno 54] Connection reset by peer" in str(e):
             return None  # Return None if this specific error occurs
         return False
 
+
+
+
+
+
 def check_working_proxies():
+    print("Checking proxies for working status")
     while True:
         with open(working_proxies_file, "r") as file:
             working_proxies = [proxy.strip() for proxy in file.readlines()]
         for proxy in working_proxies:
+            print(f"Checking proxy {proxy}")  # Add this line
             if not test_google_news(proxy):
                 working_proxies.remove(proxy)
+                print(f"Removing proxy {proxy} from working proxies because it is no longer working.")
         with open(working_proxies_file, "w") as file:
             for proxy in working_proxies:
                 file.write(proxy + "\n")
-        print("Finished checking working proxies. Waiting for 30 minutes before next check.")
-        print(f"")
-        time.sleep(1800) 
+        print("Finished checking working proxies. Waiting for 5 minutes before next check.")
+        check_proxies_done.set()  # Signal that the check is done
+        time.sleep(300)  # Wait for 5 minutes
+        check_proxies_done.clear()  # Reset the event
 
 def main():
     threading.Thread(target=check_working_proxies).start()
+    check_proxies_done.wait()  # Wait for the check to be done
     while True:
+        if not check_proxies_done.is_set():
+            time.sleep(60)  # Wait for 1 minute before checking again
+            continue
         with open(proxy_list_file, "r") as file:
             proxy_list = [line.strip() for line in file.readlines()]
         if not proxy_list:

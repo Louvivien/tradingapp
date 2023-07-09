@@ -1,16 +1,4 @@
 
-# without a proxy googlenews does not work
-
-# currently not working with this solution
-
-# maybe use this package instead https://pypi.org/project/pygooglenews/
-# or add a timeout to to the google news request
-
-# or get the news only from the other API
-
-
-
-
 import requests
 import yfinance as yf
 from GoogleNews import GoogleNews
@@ -26,7 +14,8 @@ import logging
 import argparse
 from Levenshtein import distance as levenshtein_distance
 from bs4 import BeautifulSoup
-requests.packages.urllib3.util.timeout.DEFAULT_TIMEOUT = 5  # Set the default timeout to 5 seconds
+import requests
+import feedparser
 
 
 
@@ -72,7 +61,7 @@ def fetch_tickertick_news(ticker='AAPL', period=1, proxies=None):
         logging.info("Fetching data from TickerTick API...")
         base_url = 'https://api.tickertick.com/feed'
         query = f'(diff (and tt:{ticker}) (or s:reddit s:phonearena s:slashgear)) (or T:fin_news T:analysis T:industry T:earning T:curated)'
-        params = f'?q={query}&n=100'
+        params = f'?q={query}&n=50'
         url = base_url + params
         last_id = None
         tickertick_news = []
@@ -86,8 +75,10 @@ def fetch_tickertick_news(ticker='AAPL', period=1, proxies=None):
                 response = requests.get(url, proxies={"http": proxy, "https": proxy})
                 tickertick_news_raw = response.json()['stories']
                 tickertick_news_raw = [n for n in tickertick_news_raw if n['title'].strip()]
+                
                 if not tickertick_news_raw:
-                    break
+                    logging.info(f"No results from TickerTick API with proxy {proxy}. Possibly a 429 status code. Switching proxy...")
+                    continue
 
                 for news in tickertick_news_raw:
                     news_date = datetime.datetime.fromtimestamp(news.get('time') / 1000)
@@ -111,78 +102,68 @@ def fetch_tickertick_news(ticker='AAPL', period=1, proxies=None):
     except Exception as e:
         logging.info(f"An error occurred while fetching data from TickerTick API: {e}")
         return []
+    return []
+
 
 
 
 # # Google News 
+# https://newscatcherapi.com/blog/google-news-rss-search-parameters-the-missing-documentaiton
+
 class DateTimeEncoder(json.JSONEncoder):
     def default(self, o):
         if isinstance(o, datetime.datetime):
             return o.isoformat()
         return super(DateTimeEncoder, self).default(o)
-    
+  
 def fetch_google_news(ticker='AAPL', period=1, proxies=None):
     try:
-        logging.info("Fetching data from Google News...")
-
-        # Get the current date and the date a week ago
-        end_date = datetime.datetime.now()
-        start_date = end_date - datetime.timedelta(days=period)
-        formatted_start_date = start_date.strftime("%m/%d/%Y")
-        formatted_end_date = end_date.strftime("%m/%d/%Y")
-
-        logging.info(f"Start date: {formatted_start_date}, End date: {formatted_end_date}")
+        logging.info("Fetching data from Google News RSS feed...")
 
         # Process the results
         google_news = []
 
-        for proxy in proxies:
+        for i in range(len(proxies)):
+            proxy = proxies[i]
+            logging.info(f"Using proxy {proxy} for Google News...")
+            # Set the proxy environment variables
+            os.environ['http_proxy'] = proxy
+            os.environ['https_proxy'] = proxy
+
             try:
-                logging.info(f"Using proxy {proxy} for Google News...")
-                # Set the proxy environment variables
-                os.environ['http_proxy'] = proxy
-                os.environ['https_proxy'] = proxy
-
                 # Create a GoogleNews object with the current date as the start and end date
-                google_news_raw = GoogleNews(start=formatted_start_date, end=formatted_end_date)
+                url = f"https://news.google.com/rss/headlines/section/topic/BUSINESS?q={ticker}%20stock%20when%3A{period}d&hl=en-US&gl=US&ceid=US%3Aen&num=50"
+                response = requests.get(url, proxies={"http": proxy, "https": proxy}, timeout=10)
+                feed = feedparser.parse(response.text)
 
-                # Search for news related to the ticker and the ticker stock
-                google_news_raw.search(f'{ticker}')
-                google_news_results = google_news_raw.result()
-                google_news_raw.search(f'{ticker} stock')
-                google_news_results += google_news_raw.result()
-
-                for news in google_news_results:
-                    if news.get('title').strip():  # Exclude news with empty title
-                        # Parse the date string into a datetime object
-                        date_str = news.get('datetime')
-                        date = datetime.datetime.strptime(date_str, '%Y-%m-%d %H:%M:%S')
-                        google_news.append({
-                            'Id': generate_id(news.get('title'), date),
-                            'News headline': news.get('title'),
-                            'Date': date,  # Use the date from the news article
-                            'Ticker': ticker,
-                            'Stock name': ticker,
-                            'Source': 'google_news'
-                        })
+                for entry in feed.entries:
+                    title = entry.title
+                    # Skip the entry if the title contains "... -"
+                    if "... -" in title:
+                        continue
+                    date = datetime.datetime.strptime(entry.published, '%a, %d %b %Y %H:%M:%S %Z')  # Parse the date
+                    google_news.append({
+                        'Id': generate_id(title, date),
+                        'News headline': title,
+                        'Date': date,
+                        'Ticker': ticker,
+                        'Stock name': ticker,
+                        'Source': 'google_news'
+                    })
 
                 logging.info("Data fetched successfully from Google News.")
                 return google_news
-
-            except requests.exceptions.Timeout:
-                logging.error(f"Timeout occurred while fetching data from Google News with proxy {proxy}. Retrying with a different proxy...")
-                continue  # Skip to the next proxy
 
             except Exception as e:
                 logging.error(f"An error occurred while fetching data from Google News with proxy {proxy}: {e}")
                 logging.info("Retrying with a different proxy...")
 
+        logging.error("All proxies failed for Google News. No data was fetched.")
+        return []
+
     except Exception as e:
         logging.error(f"An error occurred while fetching data from Google News : {e}")
-
-    return []
-
-
+        return []
 
 
 
@@ -274,6 +255,8 @@ def main(ticker='AAPL', period=1):
     news_data = remove_similar_headlines(news_data)
     
     return news_data
+
+
 if __name__ == '__main__':
     # Load the tickers from the stocks.json file
     with open('stocks.json', 'r') as file:
@@ -311,8 +294,7 @@ if __name__ == '__main__':
         news_data = remove_similar_headlines(news_data)
 
         all_news_data.extend(news_data)
-        print(f"Waiting for 6s")
-        time.sleep(6)  # Add this line to wait 6 seconds before the next request
+
 
     # Remove duplicates from all_news_data
     all_news_data = list({news['Id']: news for news in all_news_data}.values())

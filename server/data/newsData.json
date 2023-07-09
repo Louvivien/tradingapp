@@ -1,5 +1,85 @@
 [
     {
+        "Id": "8f7c58240ff1eae366594ae622ea42a27b0b6fac29a3de5e648052b8551e6388",
+        "News headline": "New Apple Leak Confirms iPhone 15 Price Shock",
+        "Date": "2023-07-09T16:01:27",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "b6e6a4319a3b6bc02a83b93ef837d5edd0353feb41942ef9284c4c13fe57202d",
+        "News headline": "Apple may be ‘experimenting’ with a 32-inch iMac, but don’t expect one soon",
+        "Date": "2023-07-09T14:59:27",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "217049e9a010bd609fc59422f5c5c645f748225b02dfc10d1b1820cce4e66db0",
+        "News headline": "Artificial Intelligence: The Next Evolution Of The Technology World, The Next Market Bubble, Or A Little Bit Of Both? | $AAPL $AMC $AMZN $APE $GME",
+        "Date": "2023-07-09T14:00:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ee7941e52c72cca4d22aa28dd312d3602cd1342af3d370432cb9d5d02c281d70",
+        "News headline": "Is Taiwan Semiconductor Stock a Buy Now?",
+        "Date": "2023-07-09T13:00:00",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "2cf49ec795256d72465566e61cf0e9802b3a2f3b525239db5cc19ce50defb302",
+        "News headline": "Apple Gets Rid Of Six Scam Loan Apps From Its App Store For Using Outrageous Tactics To Deceive People",
+        "Date": "2023-07-09T07:43:43",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "e05d56b0e6831091f80275ef3cffdf638e52e94da0f7d390f26e7b248d1a32ce",
+        "News headline": "2023 Berkshire Hathaway Annual Meeting: Summary Of The 48 Questions And Answers | $AAPL $BAC $OXY",
+        "Date": "2023-07-09T07:11:19",
+        "Ticker": "BRK.B",
+        "Stock name": "BRK.B",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "19067bd36a5c6b57761a7fe5b9dbc359b51e6a4f7498e9dbbe9d542067cd5a6d",
+        "News headline": "A comparison of users' personal data collected by Threads, Twitter, Bluesky, Mastodon, Spill, and Hive Social, based on information from Apple's App Store (Reece Rogers/Wired)",
+        "Date": "2023-07-09T03:55:07",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "f8a6f55f226f1dbeadf3e725dd35bc14def8d311d97bded163b3b56bda52cc42",
+        "News headline": "Apple iPad Pro Brilliant Design Upgrade May Be Coming Soon",
+        "Date": "2023-07-08T21:15:00",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "0c7351bae6d50e061f0f72aef8cc7442ef38541b41d53b998a4ab025143eecc0",
+        "News headline": "How To Restart An iPhone - Here’s a complete guide to restarting an iPhone. Here’s a complete ...",
+        "Date": "2023-07-08T21:03:09",
+        "Ticker": "AAPL",
+        "Stock name": "AAPL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "b7882df50584e5d408d4272c1052ae3dbee7706d1ed4661c4d420e1e2e3dad70",
+        "News headline": "MarketWatch First Take: With Meta’s Threads, Zuck seized an opportunity and took a page from Steve Jobs",
+        "Date": "2023-07-08T20:33:00",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
         "Id": "485a6ae80b90f9046e5e9d7fc064a8c765c5521bc467d9d1a58eef2e09b3fa60",
         "News headline": "New MacBook Pro Leak Uncovers Apple’s Disappointing Upgrade",
         "Date": "2023-07-08T18:29:19",
@@ -27,8 +107,8 @@
         "Id": "03d7a522f1c76be21beb3c3faa9fb506bbf96e4791c3e4725dc31ac64ffee129",
         "News headline": "Datadog: 50 Top Growth Stocks, These 3 Worth Considering | $AAPL $AMZN $CRWD $ENVX $GOOG",
         "Date": "2023-07-08T15:18:53",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
         "Source": "tickertick_news"
     },
     {
@@ -43,8 +123,8 @@
         "Id": "7158ed917d716f2c9546ae28f32a33c19b8b4d435d79aa606c42c37770f86ee7",
         "News headline": ": 15 best early Amazon Prime Day deals not to miss, including Apple Airpods, MacBook Air, Amazon Echo and more",
         "Date": "2023-07-08T14:07:52",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
         "Source": "tickertick_news"
     },
     {
@@ -59,8 +139,8 @@
         "Id": "be6bd3f33ef1544f1e5c7ec328c8aa9b90c7541933d1d7b14491187243890f75",
         "News headline": "What To Stream This Weekend On Netflix, Amazon Prime Video, Disney+, Paramount, Hulu, Apple TV And More",
         "Date": "2023-07-07T21:46:30",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
         "Source": "tickertick_news"
     },
     {
@@ -88,275 +168,2411 @@
         "Source": "tickertick_news"
     },
     {
-        "Id": "9ef43867036ad4731660cd087164b18181f0e0ba54abcf847ae7280a381d4ae8",
-        "News headline": "Unity's Unique Competitive Advantage Explained | $AAPL $MTTR $U",
-        "Date": "2023-07-07T15:53:24",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "61d938fe3d335e4b1208a5fa6a525984865d92427070bbdfa0fe4eb98d923dd3",
-        "News headline": "Buying Apple’s Vision Pro headset could require an appointment and a face scan",
-        "Date": "2023-07-07T15:21:37",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "71b1b82bead70b0f16a5561780edc079caa3ed21ccf47d58ae24ed4904920f89",
-        "News headline": "Apple Vision Pro Headset: New Leak Reveals Design And Release Date Update",
-        "Date": "2023-07-07T15:00:34",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "0608c025b3fd473c4edbcb1e084b7e6a2a468e3e28b26358ea68db55b3f0c81a",
-        "News headline": "Apple removed several predatory lending apps from India's App Store; some of the apps reached the finance list's top 20 despite hundreds of negative reviews (Manish Singh/TechCrunch)",
-        "Date": "2023-07-07T14:55:02",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "61dfe81c0b732bc59940bf52b1e46cf82930883ed42545f1b370e657e82c649b",
-        "News headline": "Casetify’s gorgeous Evangelion iPhone and AirPods cases are (not) just a dream",
-        "Date": "2023-07-07T14:35:38",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "d69ee872eda2bbe49ebacd3cb6e4fcd15ff0f9c2aea0c1b3ed49002b89edde5a",
-        "News headline": "Shazam can now identify songs from YouTube, Instagram and TikTok on iOS",
-        "Date": "2023-07-07T14:04:00",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "788148fd6df23e3d080b6eab89033f8f8ca908cba2919678dd6fbaef73e6c495",
-        "News headline": "Where Will Chipotle Stock Be in 5 Years?",
-        "Date": "2023-07-07T13:45:00",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "15e69825e3b00aaaa4c64a816ba484a2f8c74b5956cb64f350547b5153ae0052",
-        "News headline": "Apple’s $3,500 Vision Pro Headset Reportedly Needs In-Store Fitting To Buy",
-        "Date": "2023-07-07T13:43:52",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "b7507787b96f6a090fa02d33325461be6c29f59d4789466d99159cb7db0a3255",
-        "News headline": "Apple Rival Samsung Braces for Weakest Earnings in 14 Years. Chips Are the Problem.",
-        "Date": "2023-07-07T13:35:00",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "55a57b98149cfc99bbe9857fc770e5c81fe84123bbe4edddaa895e9f3622403e",
-        "News headline": "Apple purges predatory lending apps in India following scrutiny",
-        "Date": "2023-07-07T13:31:07",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "70cd842719f2c94c82b0bfc943324027b13f9e0e7fbcf22a77f0aeaf3b6fd0be",
-        "News headline": "Apple said to tread carefully with Vision Pro, have appointment-only launch",
-        "Date": "2023-07-07T13:24:50",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "1d04b7f0085158ded17d5c3fef7da1c6de258c516617ed5191c74e6ab877aa4c",
-        "News headline": "New Apple Exclusive Confirms iPhone 15 Price Shock",
-        "Date": "2023-07-07T13:02:04",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "999ff9bfaaf10b1bce107aae24f97f949b0af59dc08198b515e3b4be1dc384a2",
-        "News headline": "Jony Ive’s LoveFrom worked on this limited edition $60,000 turntable",
-        "Date": "2023-07-07T12:27:18",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "310252ef7cbb4af54d4ffa8a28673801794bd1b0fc132659c80a4cc891dbacdb",
-        "News headline": "Sources: Apple is planning an appointment-only retail launch of the Vision Pro in the US in early 2024, starting with stores in major areas like NY and LA (Mark Gurman/Bloomberg)",
-        "Date": "2023-07-07T12:00:50",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "a8a0d3605926fbb23ab9bb6438f512a17834509fd39d4940869c0f24e540c356",
-        "News headline": "Inside the App Store’s Exclusive Million-Dollar Monthly Club",
-        "Date": "2023-07-07T07:00:00",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "85cb8573e0e7ca797d41c2e399039a7883a85dabeea8737394291872534f5c28",
-        "News headline": "Jony Ive discusses his first hardware project post-Apple",
-        "Date": "2023-07-07T06:00:00",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "1e995a50024e9b4c64b938e9bd26fb696061b6824de0b5a6898fd47e4d83b30b",
-        "News headline": "ETG: Discounted Global Exposure | $AAPL $AMZN $GOOG $GOOGL $KO",
-        "Date": "2023-07-06T23:59:56",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "61f296c495147ccb0fb2a00b8c20b220d3af139ebe3b6d2c62ecc5c0c9f467d6",
-        "News headline": "Threads app hits Top 5 on Apple’s China App Store despite ban",
-        "Date": "2023-07-06T21:49:16",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "191cacddfba28fecfa16f757801a82379a54ccbd30bbeb587b875015d9dec1b5",
-        "News headline": "Meta: Threads Launch Shows Huge Potential Post 'The Year Of Efficiency' | $GOOG $GOOGL $AAPL $META",
-        "Date": "2023-07-06T21:37:23",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
-        "Source": "tickertick_news"
-    },
-    {
-        "Id": "017a45c7e2bea0503d1b23aec7be7275fc44400cd9a93fad4b12d152b2d6b9dd",
-        "News headline": "Is Apple (AAPL)’s Digi Wallet Safe?",
-        "Date": "2023-07-07T21:00:25.081319",
+        "Id": "8d748e09655bbb76b0186afce492e2babeb71ec0053bd836e614a71e576addcb",
+        "News headline": "Apple Inc. (NASDAQ:AAPL) Shares Bought by Bill Few Associates Inc. - Defense World",
+        "Date": "2023-07-09T09:33:03",
         "Ticker": "AAPL",
         "Stock name": "AAPL",
         "Source": "google_news"
     },
     {
-        "Id": "effdddac90b36304294fc679123109f572307371bfa17c45db0388a27ea74621",
-        "News headline": "AAPL Stock Spotlight: Apple Looks Juicy, but Beware the Worm",
-        "Date": "2023-07-07T21:00:25.092912",
+        "Id": "bcae5434b65abaef53ef1bdb5b1b82dbf241b6331a9e272ba1759ba337c73ebc",
+        "News headline": "Guru Fundamental Report for AAPL - Warren Buffett - Nasdaq",
+        "Date": "2023-07-09T13:11:00",
         "Ticker": "AAPL",
         "Stock name": "AAPL",
         "Source": "google_news"
     },
     {
-        "Id": "e850b39449be2b88ebd258a93408ddccb4e21f06bf45354136425389c900d832",
-        "News headline": "After Hours Most Active for Jul 7, 2023 : INTC, AAPL, BAC, KO ...",
-        "Date": "2023-07-08T19:00:25.094667",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "78867e4957171962f7fdc9a0b46fee5f335905faa5f70c0bb12fbb9b6720cbd9",
+        "News headline": "Weekly Preview: Earnings to Watch This Week 7-9-23 (C, DAL, JPM, WFC) - Nasdaq",
+        "Date": "2023-07-09T09:49:25",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
         "Source": "google_news"
     },
     {
-        "Id": "53daa063d3549e34113d9f27bb1abf89886c14361f99047a5ba5a1890f41bff8",
-        "News headline": "Here is What to Know Beyond Why Apple Inc. (AAPL) is a ...",
-        "Date": "2023-07-07T21:00:25.104258",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "ba9a3beb36f595c48163f99e82ff1e76e08c0d45df6a89fba886d39413bc288d",
+        "News headline": "You'll Never Believe this Simple Python Hack to Make More Money - Medium",
+        "Date": "2023-07-09T01:55:47",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
         "Source": "google_news"
     },
     {
-        "Id": "40c35470b5c69467917edb5f3c6da5a6d3ca431d36d49e08c28284cf1249ed85",
-        "News headline": "Apple Inc (AAPL) Stock Is Up 0.70% This Week: Buy, Hold, or Sell?",
-        "Date": "2023-07-07T21:00:25.113983",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "1fadf865c29408a9b5799f6a4b1acc6f505d5136ccd82a4ddad6d17a1392fc01",
+        "News headline": "With This Trade Nasdaq's Pain Would Be Your Gain - RealMoney",
+        "Date": "2023-07-09T11:00:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
         "Source": "google_news"
     },
     {
-        "Id": "c6eff2075b59b3d1a32bc7b51dbb7e6668beac8650972f58963d630b236d4f54",
-        "News headline": "Apple (NASDAQ:AAPL) Moves To Bring Vison Pro to Retail ...",
-        "Date": "2023-07-07T21:00:25.123973",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "dcdd84c65130c04f1342c5c2853c41f0b133811ea49ca043a0b2518243e0d885",
+        "News headline": "Can Shiba Inu Reach $1? - The Motley Fool",
+        "Date": "2023-07-09T10:32:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
         "Source": "google_news"
     },
     {
-        "Id": "4a4a2ac65beac8c463048cdc8602cfdcad0c58cbc845db1002d19f8f375c4138",
-        "News headline": "Warren Buffett Detailed Fundamental Analysis - AAPL",
-        "Date": "2023-07-07T21:00:25.137957",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "4ad39cb4671c0a283579dea380f956c833d837f7d7473376031b7acf124cce38",
+        "News headline": "URTH: Developed Markets Are At The Goldilocks Interlude | $MSFT $NVDA $VEA $URTH",
+        "Date": "2023-07-09T14:49:16",
+        "Ticker": "MSFT",
+        "Stock name": "MSFT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "5cb0dffa9949da7d2c8a538870cc40e856089e157616e2dd892efca4ac875a01",
+        "News headline": "New ‘Big Head’ ransomware displays fake Windows update alert",
+        "Date": "2023-07-08T16:23:31",
+        "Ticker": "MSFT",
+        "Stock name": "MSFT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "1b0f48fbbefc8b98dd0a61e686a1be0d74962a9115105bc12759f8a687fdf302",
+        "News headline": "What Amazon, Microsoft, and DigitalOceon Investors Should Know About Recent AI and Cloud Advances",
+        "Date": "2023-07-08T16:19:55",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "5ba6ca45b97c0c02e42b4cd49244afcf14de29d5e076ee90a81a29d1023fd728",
+        "News headline": "Bill Gates Scored a Stock Market Win in the First Half -- Bringing in $4 Billion",
+        "Date": "2023-07-08T11:30:00",
+        "Ticker": "MSFT",
+        "Stock name": "MSFT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "2caeaa4e1efa284b1092f92dd78a9d5977a675545152af144ef969a5da1384c3",
+        "News headline": "Microsoft Edge Users Are Tired Of The Browser Forcefully Installing Google Docs Offline Extension",
+        "Date": "2023-07-08T10:34:34",
+        "Ticker": "MSFT",
+        "Stock name": "MSFT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "18e5b1fe3b7180d802c88713c757504a85e273d064d6699b2f55d7a5e9ba39e6",
+        "News headline": "WhatsApp Beta for Windows Introduces Text Size Adjustment and Group Suggestions Feature in the Works",
+        "Date": "2023-07-08T09:29:51",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "235a9fed0802f5964b8be16aa1e62ec3116f79c4e27faac97123f08a57329316",
+        "News headline": "June 2023 Passive Income Update | $GIS $MFC $CWYUF $MSFT $HD",
+        "Date": "2023-07-08T09:15:00",
+        "Ticker": "MSFT",
+        "Stock name": "MSFT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "a5163aecaf091f15863b0644d925c62252f8f92625dadb9b15e6478b188862c7",
+        "News headline": "Sigh Of Relief For Microsoft Edge Users After Company Vows To Block Abusive Notifications",
+        "Date": "2023-07-08T07:20:23",
+        "Ticker": "MSFT",
+        "Stock name": "MSFT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "8593985c7c8a09516dc21cb8957a789e2c471fefa868ca89e17817ab6a895f19",
+        "News headline": "GitLab deploys on a Friday and ... is down for a few hours",
+        "Date": "2023-07-07T21:45:09",
+        "Ticker": "MSFT",
+        "Stock name": "MSFT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "aa70312802f07e6bed767934ccc681ae2dfe1d5c8a5aeb00e9ef2d6b3db9e13b",
+        "News headline": "DigitalOcean: Deep Value Tech Stock, Pure-Play Cloud Computing Provider | $AMZN $MSFT $DOCN",
+        "Date": "2023-07-07T21:10:19",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "41c00bbd01dcdb5a3d1d083f5cf3427d2e4ee79f4f6c4dea743cdd0214b53f10",
+        "News headline": "Tech Moves: Allen Institute for Immunology hires EVP; Microsoft CVP to depart; and more",
+        "Date": "2023-07-07T21:02:13",
+        "Ticker": "MSFT",
+        "Stock name": "MSFT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "31d4c9bccc6d9063fda5a2278230dc0b3e301f253759eda2c260386106e04e0d",
+        "News headline": "Amazon CEO Andy Jassy on making AI chips, Prime Video spend, speeding up shipping",
+        "Date": "2023-07-07T17:15:36",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "b2798de89803bde979f1afe0ab429865d0e81d5a67d17edb5b67d46610d523e2",
+        "News headline": "Guru Fundamental Report for MSFT - Nasdaq",
+        "Date": "2023-07-09T13:11:00",
+        "Ticker": "MSFT",
+        "Stock name": "MSFT",
         "Source": "google_news"
     },
     {
-        "Id": "b648a4e8de45ef16f1955940ac824442cd25689b7ee5029c09a35ac382cc4122",
-        "News headline": "Technology Sector Update for 07/07/2023: BABA, META, AAPL",
-        "Date": "2023-07-07T21:00:25.147536",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "84c18390f95416fe3e6065e9fc4b39e6c0bef82679fcc89fee3740f661a1e1a1",
+        "News headline": "Top 10 Best Stocks To Buy Now 2023,2025,2030-Short And Long Term - InvestingCube",
+        "Date": "2023-07-09T13:42:25",
+        "Ticker": "KO",
+        "Stock name": "KO",
         "Source": "google_news"
     },
     {
-        "Id": "9cd8a6c3269c2c41a365a18dd6b20c6c08d27a4f65937841d301f0e5a9135634",
-        "News headline": "A￼pple is Warren Buffett’s biggest investment coup ever",
-        "Date": "2023-07-08T20:00:25.159259",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "d36a66974c2732d0cd8bee9a9bd50de797074e6451b928fc581ed5c080017744",
+        "News headline": "Weekly Preview: Earnings to Watch This Week 7-9-23 (C, DAL, JPM, WFC) - Nasdaq",
+        "Date": "2023-07-09T10:04:25",
+        "Ticker": "NKE",
+        "Stock name": "NKE",
         "Source": "google_news"
     },
     {
-        "Id": "7553884ad036c1dbb61246a863ddae9a10c2224a0e98dc230982bb6589476bf8",
-        "News headline": "2 Top Stocks to Buy for the Next Bull Market",
-        "Date": "2023-07-08T14:00:25.654790",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "6748357ca9e3c43e21c884039abf1158af71f3c12a8b73be7e9d9dc04468741b",
+        "News headline": "How To Grow Your Dividend Income By 50%-100% - Forbes",
+        "Date": "2023-07-09T14:53:00",
+        "Ticker": "PG",
+        "Stock name": "PG",
         "Source": "google_news"
     },
     {
-        "Id": "bbe3158e9024a63207401689dc8ba89f48de5ef8228a5ab528436843bb13bdbb",
-        "News headline": "3 Growth Stocks to Make Your 'Get Rich' Dreams Come True",
-        "Date": "2023-07-07T21:00:25.674151",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "6985069d05b9cb8555ce9333278551a1986a5263e8c9c23372bdb81c8b79aa2b",
+        "News headline": "20 Stocks Set to Profit As AI Brings More Upside: Goldman Sachs - Business Insider",
+        "Date": "2023-07-09T10:00:00",
+        "Ticker": "V",
+        "Stock name": "V",
         "Source": "google_news"
     },
     {
-        "Id": "ea0130a1f1c83f9cd4e6dad371396e98ad49ad667012c935d2c55ea412fab023",
-        "News headline": "Stocks May Head Higher This Year As Bulls Have History on ...",
-        "Date": "2023-07-08T14:00:25.684907",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "975ef1aacf3558ba75bac5a3b5a7ddc2b842cce93d9cdbb43f8ac55a11a39556",
+        "News headline": "Microsoft Co. (NASDAQ:MSFT) Shares Sold by Clarius Group LLC - Defense World",
+        "Date": "2023-07-09T08:59:36",
+        "Ticker": "MSFT",
+        "Stock name": "MSFT",
         "Source": "google_news"
     },
     {
-        "Id": "cd6291345d572d2059ecb97f9285ebb601a0beacf7f9a0094cc9d4cee888cda8",
-        "News headline": "Hot Stocks Alert: 7 Companies to Watch for Share Buybacks",
-        "Date": "2023-07-07T21:00:25.704293",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "2f7dda35e8de54907f775aab505a2c522052d478aeb34c291eda9de25cd18fb8",
+        "News headline": "What Will Dynatrace Inc. (NYSE: DT) Be Like In 2023 - Stocks Register",
+        "Date": "2023-07-08T18:52:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
         "Source": "google_news"
     },
     {
-        "Id": "7c253cc719150a87dc03a515680483629e2bbafb9e426e22b80a962d6cb85173",
-        "News headline": "14 Best NASDAQ Dividend Stocks To Buy",
-        "Date": "2023-07-07T21:00:25.714021",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "91209ca40517c1dd7e447e46f626ec493769649a95c63cefe5d1de2a0edbc6a7",
+        "News headline": "A look at Google's Med-PaLM 2, an AI chatbot that answers medical questions, and more; sources: testing began in April with customers including the Mayo Clinic (Wall Street Journal)",
+        "Date": "2023-07-09T16:20:15",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ddbb3aa446a5811a5303301ab39617205a650a032fb3230b75d98ea1f2a9f2e2",
+        "News headline": "Google’s medical AI chatbot is already being tested in hospitals",
+        "Date": "2023-07-09T00:01:05",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "2960cd5c93176f8dec47c6ede514ce02464630eb7143be6fc464050c5c7941b7",
+        "News headline": "Is Alphabet Stock a Buy Now? - There are compelling reasons to own this digital ads giant. ...",
+        "Date": "2023-07-08T14:45:00",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "c98f7a1a479bfb05a801837f9b01cc7f339a2a0130d66acc837606b9eaf59d95",
+        "News headline": "QQQ: Prepare For A Steep Decline (Rating Downgrade) | $AMZN $BAC $GOOG $GOOGL $META",
+        "Date": "2023-07-08T11:31:23",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "5d07ab89b75e0aedcb3e6bfe082499d226bc0acc71a6561839e78233ec432a1e",
+        "News headline": "Comus Investment Q2 2023 Letter | $GOOG $GOOGL",
+        "Date": "2023-07-08T11:30:00",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "192984cc9b53aea0ad7f60a916c1a3d1aa698ac0eb9b71824cec3dc2629fa748",
+        "News headline": "Filing: Google says Indian antitrust body CCI's ruling on Android market abuse is wrongly backed by Amazon's arguments that Google hindered Fire OS development (Reuters)",
+        "Date": "2023-07-08T06:40:02",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "d23ad14535e8dbe9a3e4b74ee6f881efe52fcfab7903f808d4d19cd61568b728",
+        "News headline": "Android Circuit: Honor 90 Release, Nothing (2) Details, OnePlus President Interviewed",
+        "Date": "2023-07-07T23:54:29",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ba21644717fea13174be3e8acd6b95bdbb4f60b456419677a3120f87f453e365",
+        "News headline": "One Of Google's Most Powerful Advantages In The AI Revolution | $GOOG $GOOGL",
+        "Date": "2023-07-07T23:10:10",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "41c801cca70b4fef1e1116f81febb8ab17b90295f2dc493a7bac029342980c63",
+        "News headline": "Sonic the Hedgehog co-creator given suspended prison sentence for insider trading",
+        "Date": "2023-07-07T21:48:14",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "d86b3bf40d609e838a6a879e699777f0d552043322baeb77bbc53ee3d13e27a2",
+        "News headline": "Pixel Fold teardown reveals the guts of Google’s $1,800 phone",
+        "Date": "2023-07-07T20:39:22",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "e430ebe1fbbf326d473ffc6223587f0c83437c1ea82e411e01b8fef2cae951f8",
+        "News headline": "Google Calendar now lets users specify where they’re working from throughout the day",
+        "Date": "2023-07-07T19:11:13",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "4eb2cf3c97b8a0ffb6255517435a00a5950c4931a5baa4449897d4a9513109e4",
+        "News headline": "YouTube tests AI-generated quizzes on educational videos",
+        "Date": "2023-07-07T19:08:09",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "b2aa5975d964c298d538696c3be6750e858b68319f0f13d0ed667c9ad0e5b438",
+        "News headline": "YouTube Will Soon Launch A New Lock Screen Feature For Premium Users",
+        "Date": "2023-07-07T17:46:51",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "99de187cb301bfbca3a5879e8e6c89794af388aa6b92be4f58265642718c255b",
+        "News headline": "Guru Fundamental Report for GOOGL - Warren Buffett - Nasdaq",
+        "Date": "2023-07-09T13:11:00",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
         "Source": "google_news"
     },
     {
-        "Id": "d95f7cd0a57cf45cce0802f00f2e5c53e460291cfb0592a71cd32b9fd77a7498",
-        "News headline": "$100 Invested In This Stock 10 Years Ago Would Be Worth $1,300 Today - Apple (NASDAQ:AAPL)",
-        "Date": "2023-07-07T21:00:25.723919",
-        "Ticker": "AAPL",
-        "Stock name": "AAPL",
+        "Id": "5382ce0a2f56f27b15b037ce29eb64d1640331abac3398b96ad418769896480f",
+        "News headline": "2 Top Artificial Intelligence Stocks to Buy in July - Medium",
+        "Date": "2023-07-09T00:06:26",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "7bcffcc1e535d03bc83ace278a733cb12f399ca503da7210a390dea475072817",
+        "News headline": "Well Done LLC Sells 160 Shares of Alphabet Inc. (NASDAQ:GOOGL) - Defense World",
+        "Date": "2023-07-09T09:25:48",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "3c32e47f20b802489e0cf8356476ad263b3e4db537b9cb93b8a3af718690d599",
+        "News headline": "It’s time to break up Google’s monopoly - The Hill",
+        "Date": "2023-07-08T16:00:00",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "081113584d5485779e2db95a2f0bdf82813fa2e320e7b25366f8ea5c9850991f",
+        "News headline": "Google rolling out feature to set working locations in Calendar - Investing.com India",
+        "Date": "2023-07-09T07:17:38",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "d552e29ef5453fbcc9d619470936fe8b95f375d7db91cbece327a95845de9908",
+        "News headline": "Google will release the first mobile tensor processor, only in 2025 - Game News 24 - Game News 24",
+        "Date": "2023-07-09T10:34:45",
+        "Ticker": "GOOGL",
+        "Stock name": "GOOGL",
+        "Source": "google_news"
+    },
+    {
+        "Id": "f62f0c7b4f5f263634c510d9c2b9d9a8c69229947ec8d400414c992205abe0dd",
+        "News headline": "Top Wall Street analysts favor these stocks for the long haul",
+        "Date": "2023-07-09T12:59:31",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "3c38240597d17ae3ccdb05ab30d4ecd46994725fac913288b0b83cdb11ba49e4",
+        "News headline": "Costco: Too Dang Expensive, No Margin For Error | $AMZN $BBY $CASY $DDS $DG",
+        "Date": "2023-07-09T11:50:02",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "4a4a6a9999f0a03feab237efb6b71d8a15f23dfdd07bd2b4e2007764fd8f1681",
+        "News headline": "14 Best Target Circle Week Deals (2023): Robot Vacuums, Instant Pots, Stand Mixers",
+        "Date": "2023-07-09T11:00:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "93247ec1618f01cb45ec36b8b18b229557aa3d0a4123575e03a5306bf914b9e7",
+        "News headline": "Twitch plans to launch ephemeral stories in October and a Discovery Feed consisting of a personalized mix of streamers' clips this fall, both on its mobile app (Igor Bonifacic/Engadget)",
+        "Date": "2023-07-09T06:05:01",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "3d6bdc8925e691b11f644ca2158b2abb8dd8addc843131d4e3694e396063d729",
+        "News headline": ": Amazon, Best Buy, Walmart and Target July sales events could mark a turnaround in consumer spending, says Placer.ai",
+        "Date": "2023-07-08T14:55:00",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "f832471d2cf66c9091867bce20e53c1442fcbfe690acf4635217018daf7e42b0",
+        "News headline": ": Amazon has made $1.8 billion on Rivian’s stock in just 8 trading days",
+        "Date": "2023-07-08T14:07:52",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "700f666702b7d947fed89db2b62df1ce6307f0b6e15ab12a334f2b5a3c1b714e",
+        "News headline": "Prime members: Our favorite Amazon Fire TV Stick is on sale for $25 ($25 off)",
+        "Date": "2023-07-08T13:00:57",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "a8b7cf85405cec380cdce97bee8ce0b95f96cef54c0e291739c233ae09c6007e",
+        "News headline": "30 Best Early Amazon Prime Day Deals 2023: Pixel Phones, Amazon Devices, and Robot Vacuums",
+        "Date": "2023-07-08T13:00:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "0aab4ce9fc5a5173eb3023e4d6db6ce7b719b6301004d707d9ee7679900f73e2",
+        "News headline": ": 5 hacks to help you get the most out of Amazon Prime Day — and other summer sales",
+        "Date": "2023-07-08T12:01:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "a6a3453820eb7c6ef5f9fc02de1d5cd392b295dd88106a72e940a06703a4243f",
+        "News headline": "Instagram Threads Hits 70 Million As Tech Stars Join Twitter Clone: Here’s Who To Follow",
+        "Date": "2023-07-08T05:06:28",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ba6b4b83f20bd9dfd8a817c492080d9bd5fd2ee6c4488fa4eb5420476c000909",
+        "News headline": "Shein Takes on Amazon in the Business of Selling Everything",
+        "Date": "2023-07-08T05:00:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ea655c2bc8da31d31c7aff63c3c431ccfebcb1794cfd53a876d7e4c6a7ae034b",
+        "News headline": "Pinterest: Potential Amazon Boost | $AMZN $PINS",
+        "Date": "2023-07-07T23:08:29",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ca2a5497049862b61fbf01616354805a406ed66b59015877a2c1c8bd44a2b0c8",
+        "News headline": "Amazon Steps Up Competition in Healthcare With One Medical Discount",
+        "Date": "2023-07-07T23:06:44",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "0f672f9cfc459d4738559098fc863abd0fc8c52a79c99e639615729b47dc5199",
+        "News headline": "Up 50% This Year, Is Amazon Stock Still a Buy?",
+        "Date": "2023-07-07T23:00:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "817328660fcb19270a174a6e9dbccfb2177507f30d6173c72a8e63eea12b7f8b",
+        "News headline": ": Amazon has made $1.9 billion on Rivian’s stock in just 8 trading days",
+        "Date": "2023-07-07T20:24:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "b75a112a7e87abecf442cb4b2387a4d242e38abe42395e2c3d332078a51ade22",
+        "News headline": "Amazon to offer custom deal feeds for Prime Day",
+        "Date": "2023-07-07T19:00:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "202ad51f3d7180e001ca4192f6b76f6ac816578c89acbdfaace097bc4e42b497",
+        "News headline": "Twitter’s running busted ads for Amazon and Sky TV",
+        "Date": "2023-07-07T17:14:28",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "689ea88e8b6e6c0ff798d619b367450e56de6b5c18576e394c4dd9b0d36f57ac",
+        "News headline": "Guru Fundamental Report for AMZN - Nasdaq",
+        "Date": "2023-07-09T13:11:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "google_news"
+    },
+    {
+        "Id": "8bb15e18b30570127341a2d86af8079904c00bf678f92f6b2ea02bde327c07a6",
+        "News headline": "Prime Day Often Pushes Amazon Stock Price Down - Investopedia",
+        "Date": "2023-07-09T13:00:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "google_news"
+    },
+    {
+        "Id": "5c23002f867d708f85dd5ba718357c6f3173757bd2c3a8f0906f2b90f7a62d2b",
+        "News headline": "2 Roaring Stocks to Hold for the Next 20 Years - The Motley Fool",
+        "Date": "2023-07-08T16:00:00",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "2d2a91ba7d40713211be83fd57bbcbbc23ed56561e3eeb0029df88d1c22de428",
+        "News headline": "The Returns On Capital At Amazon.com (NASDAQ:AMZN) Don't Inspire Confidence - Yahoo Eurosport UK",
+        "Date": "2023-07-09T11:00:18",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "google_news"
+    },
+    {
+        "Id": "c277fe4431d9539c9b7bb726982faed52aadd4a955b91432ea5c9bba7e735db9",
+        "News headline": "My 1 Growth Stock to Buy and Hold in a Market Downturn - The Motley Fool",
+        "Date": "2023-07-09T13:15:00",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "4fdc254e3929fa553d606395a4e9ded7d16e1935f6a114ffc93029df99efc069",
+        "News headline": "Are We Heading for a Recession? Here's What Investors Should Do. - The Motley Fool",
+        "Date": "2023-07-09T09:30:00",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "google_news"
+    },
+    {
+        "Id": "5536dc44adf802a5bb6866b5bb29948755c762cfc88ee85df53441ff72b9351c",
+        "News headline": "Earnings Season Starts This Week - Here's What to Expect - Money Morning",
+        "Date": "2023-07-08T22:07:56",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "google_news"
+    },
+    {
+        "Id": "29c20c3cf22e9547cfba222c10e56b900f6134f357b3c583536a650d2b10356b",
+        "News headline": "AT&T: Bad Choice For Rational Investors (NYSE:T) - Seeking Alpha",
+        "Date": "2023-07-09T10:33:25",
+        "Ticker": "VZ",
+        "Stock name": "VZ",
+        "Source": "google_news"
+    },
+    {
+        "Id": "c59323c748f0620fecc6c6ee7da6a34ed556dbcbea8497ab1e14c8068a597883",
+        "News headline": "Ballast Inc. Buys 2669 Shares of Amazon.com, Inc. (NASDAQ:AMZN) - Defense World",
+        "Date": "2023-07-09T09:56:14",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "google_news"
+    },
+    {
+        "Id": "1a76268956a6513cae80e97bd7edfce8748ffb5c72d2b5082d0317708e2815c5",
+        "News headline": "Amazon.com, Inc. (NASDAQ:AMZN) Stake Lifted by Scott & Selber Inc. - Defense World",
+        "Date": "2023-07-09T09:08:39",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "google_news"
+    },
+    {
+        "Id": "ab3a6ffdc6950127b83085b8f06c3d978ec2bcf4a2e9205027457604216afe0b",
+        "News headline": "Ahead of Prime Day, Here's Founder Jeff Bezos' Net Worth - msnNOW",
+        "Date": "2023-07-08T17:03:49",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "google_news"
+    },
+    {
+        "Id": "341ebe65def8488ad9067f3caa7933edb30f58301e6932a9dbb2865823ffde67",
+        "News headline": "Apple Inc. (NASDAQ:AAPL) Shares Sold by Ronald Blue Trust Inc. - Defense World",
+        "Date": "2023-07-09T09:33:03",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "google_news"
+    },
+    {
+        "Id": "988b4843a7a818aae8f18fc8985ba0eb303efb33ecb9496712c801a7d1e86b1d",
+        "News headline": "Taxes: Last chance to claim your 2019 refund - AOL",
+        "Date": "2023-07-08T15:30:35",
+        "Ticker": "AMZN",
+        "Stock name": "AMZN",
+        "Source": "google_news"
+    },
+    {
+        "Id": "734ace65e83e5d0cddef17d71634c7261c496dd74798933387414d94323509f8",
+        "News headline": "This Waking Giant Could Become a $2 Trillion Stock by 2030",
+        "Date": "2023-07-09T11:40:00",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "0ef6ea883f17db3f1df35452e58596101d685a81185740b6cb49b8a4b29a45c6",
+        "News headline": "Instagram's Threads to get Twitter-like hashtags support, edit button and more",
+        "Date": "2023-07-09T10:58:48",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "9155c18f7a492e87969d72d92e210b02541ab5772ff1628918253da2198bbbde",
+        "News headline": "Sources: banking lobby group UK Finance claims 61% of all reported authorized push payment fraud by volume go through Meta platforms; ~£485M was stolen in 2022 (Financial Times)",
+        "Date": "2023-07-09T07:00:58",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "0a50778c98ef76522c0f458d2f887aea4f85d26d7011edf979faa038cf86def7",
+        "News headline": "Will Meta's New Social Media Platform Threads Be a Success? The App's Revenue Challenges and Opportunities",
+        "Date": "2023-07-09T06:42:53",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "9b5127abe01ca3060e211fae547f972aafc54ecbe6cf7ad8eb52844a7b71c4c1",
+        "News headline": "Meta’s Threads goes live, OpenAI launches GPT-4 and Pornhub blocks access",
+        "Date": "2023-07-08T22:15:45",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "4cb2bdaec4e7b1cfcf8d8f660b8eae699c546ecc70a319dc378728770b1c154f",
+        "News headline": "Meta Tells Threads Users To Be Patient As It Releases New List Of Exciting Features For Launch",
+        "Date": "2023-07-08T17:18:22",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ad1d096432167957d83ca7ce8fde4002fb86a5b43f189913445e1c61263fccfb",
+        "News headline": "The New Threads App By Meta Is Blowing Up By Nearing 100 Million Downloads And Here’s Why People Can't Get Enough",
+        "Date": "2023-07-08T17:10:23",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "3069475d116d817668c6a904239924cd2f5c5aba2d8f6b0be55f28798e1d315d",
+        "News headline": "Threads Is Not an Automatic Win for Meta",
+        "Date": "2023-07-08T16:00:00",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "2935d0e770d92fb262268fc1ebd52e08345cb7ba945c190631cee4402803f2f1",
+        "News headline": "Meta Platforms: Why Monetization Should Be A Priority For Threads | $META",
+        "Date": "2023-07-08T13:31:11",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "b0b9d0e2a7b442f00bc9444dfeffa22d286324c8c6bea1c4ad1dcae5ba0cfc6d",
+        "News headline": "How to Find Your Twitter Friends on Meta's Threads App",
+        "Date": "2023-07-08T13:00:00",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "24dace59d28825fe498d897cfe0dc8640dfe677e5361df5df36d77e921ef7d14",
+        "News headline": "‘Like Gen Z’s Takeover Of Twitter’: Creators React To Threads, Meta’s New Social App",
+        "Date": "2023-07-08T12:30:00",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "aa21e0cbe15cd5ab17fc0d573682214dd7e9cdea983bdd44ac880de077746a1a",
+        "News headline": "Is Meta Stock a Buy With Its \"Twitter Killer\" Threads App Topping 70 Million Users?",
+        "Date": "2023-07-08T11:55:00",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "287604b057aa6976d7a90f514b1a6fad289418db9368256f9eda7c75e7cbe8da",
+        "News headline": "Can Threads Take Down Twitter?",
+        "Date": "2023-07-08T11:00:00",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "338e996f88fe8a5df43fcff3b9811859e003bc40afbdca0905ef7b7205d06c22",
+        "News headline": "Meta's Threads had the perfect launch thanks to a TikTok-like feed where the follower graph doesn't matter, easy Instagram-Threads cross-posting tools, and more (Turner Novak/The Split)",
+        "Date": "2023-07-08T08:00:30",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "396857ad5c7b86744291dff9796d9498dcf0ac9eafe4a0d3c6c0d085d003dfd0",
+        "News headline": "Meta's Copycat Machine: Threads On The Horizon As Meta Continues Its \"Clone and Conquer\" Product Strategy",
+        "Date": "2023-07-08T07:59:45",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "13b9f08b5e7c2c6f3e9aac7fca6a78270b4833f19ee477ca045cd6764c3d58c7",
+        "News headline": "Meta's Threads: A New App Reshaping Communication beyond Photos and Videos",
+        "Date": "2023-07-08T07:44:44",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "fac26addfec93861df27bb6b744fb39b2c3bac6f31351d30829b2a27528a6aeb",
+        "News headline": "With the launch of Threads, Mark Zuckerberg appeared to have some of his swagger back as the public face of the platform's rollout, amid chaos at Musk's Twitter (Tim Higgins/Wall Street Journal)",
+        "Date": "2023-07-08T06:10:02",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "6967b69a888ba110d46739576bc72a17514db59c433919533880248b54079dcd",
+        "News headline": "Elon Musk Is Making Mark Zuckerberg Seem Cool Again",
+        "Date": "2023-07-08T05:00:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "13f817107962865173ab274abfa17d08e5eb118fa6e98650f9f56e6faa2b5ac3",
+        "News headline": "Mark Zuckerberg Trolls Elon Musk With A Spider-Man Meme",
+        "Date": "2023-07-08T03:12:53",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "0b553d9023d7258d52e690e4124c174c6416106199f8930a826f399ddcf29249",
+        "News headline": ": Meta’s Threads has hit 70 million signups, Mark Zuckerberg says",
+        "Date": "2023-07-08T01:05:47",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "c02b5bc148e45271896ae633d5de76605d2272841720875a3ce70a3d21f1274a",
+        "News headline": "Meta Reports 70 Million Threads Sign-ups in First 2 Days",
+        "Date": "2023-07-08T01:05:11",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "45570501fe0465390484d9506fb60dcbc9e88672e14c80211d5e71f0a9d50f2d",
+        "News headline": "BCE's media unit, Bell Media, to pause advertisements on Facebook and Instagram",
+        "Date": "2023-07-07T23:55:26",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "091f1f72f978792f8fa593902449e666dee4638affafca3e7ad31303f8f2c4cc",
+        "News headline": "Meta’s vision for Threads is more mega-mall than public square",
+        "Date": "2023-07-07T23:32:46",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "3af8cdf6d4d6f235ebe515b999d16123c0296c578bd03e153eedd9fe0bfc4f2f",
+        "News headline": "Meta launches a Threads beta program for Android users",
+        "Date": "2023-07-07T22:29:50",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "1bdd762814de79131b0af5f88b47861c7f46f7f2d73e1f7d275ad5f7b1e1a062",
+        "News headline": "Threads Won’t Promote Political Or Hard News Content — A Contrast From Twitter",
+        "Date": "2023-07-07T22:25:42",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "f8e35771a66af5447f166704a297c0a80e87cc1899426ea4fcc10190b6a0adb0",
+        "News headline": "Meta’s new Threads social network reaches 70M users",
+        "Date": "2023-07-07T21:46:38",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "a98995a19d961cadbdd697040605bc9eb1fae975828e178162890c7b3e3d3e73",
+        "News headline": ": White House press secretary says she’s ‘curious’ about Threads, but won’t talk about joining it",
+        "Date": "2023-07-07T21:07:00",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "528de82c50f622bf1e88b302885765edbcab4719ada428520381bc441af35d98",
+        "News headline": "Mark Zuckerberg vs Elon Musk: clash of the tech egos",
+        "Date": "2023-07-07T21:00:01",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "5ffe2387411906a8ed1f579e5d27f8c092024d7ef85a71888947eb7249b1540e",
+        "News headline": "‘More or Less’: Twitter Won’t Die! Long Live Threads!",
+        "Date": "2023-07-07T20:53:30",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "0c2a87afdb3449e727c1401c636bf70ed8e74fb31fc049f6bcc7ce5850d69770",
+        "News headline": "Meta Threads doesn't need the 'negativity' of hard news and politics, exec says",
+        "Date": "2023-07-07T20:45:49",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "1a57778e69950a5f15a799cf941fadb5a2a521b2e87a256d420c5194cf83ed01",
+        "News headline": "Adam Mosseri says Threads will not \"encourage\" politics and \"hard news\", as those verticals bring scrutiny not worth the \"incremental engagement or revenue\" (Jay Peters/The Verge)",
+        "Date": "2023-07-07T20:45:05",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "aa728ceada720e312dec53708f1689db0839f52380559650ba284e4f9fe47344",
+        "News headline": "Threads isn’t for news and politics, says Instagram’s boss",
+        "Date": "2023-07-07T20:16:38",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ac2bbb1419a3e07b39d603ee74e0dfaee951721d513bf3d8d9bb6a3e9cc7000e",
+        "News headline": "A New VC-Beloved Startup Rips a Page From Meta’s Playbook",
+        "Date": "2023-07-07T20:01:47",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "604e2ba007056cf38a6812c07049df26f7464015e5c20ac62a86869c91fbfe53",
+        "News headline": ": Meta’s Threads now has 70 million signups, says Mark Zuckerberg",
+        "Date": "2023-07-07T19:56:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "d4c8cac9079be22e52ad62a77a4c1e5199c30dc0fedc48e8838b522570e1a93c",
+        "News headline": "Threads: New Twitter rival looks like a shrewd move but Meta lacks credibility",
+        "Date": "2023-07-07T19:33:04",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "411abe9028c43794073d098cc8f2d71ceded7ee943e223b42cca15a1fcd245be",
+        "News headline": "Less than two days after launch, Mark Zuckerberg says Threads signups reached 70M, which is \"way beyond our expectations\" (Lauren Feiner/CNBC)",
+        "Date": "2023-07-07T19:30:00",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "2c0b4414801e446b8aa0045be17181a6882e8f4914382bce567d9187b4d3025d",
+        "News headline": "Mark Hulbert: Top investment newsletters are down on tech, Tesla or Meta Platforms. Here’s what they do like.",
+        "Date": "2023-07-07T19:06:19",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "319a2df0ef829207fc98b697dc398a78fc7e75cf10a33f5eae0d43f6d100e85e",
+        "News headline": "Twitter's desktop app sees surge in outages as Meta's Threads takes off",
+        "Date": "2023-07-07T19:00:55",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "bac1cda797fd74e62f6b22c49907221279b72fb6a2881b7eb0bfabbb25d1901a",
+        "News headline": "70 Million Sign-ups. 8 Reasons Why Threads Is Blowing Up",
+        "Date": "2023-07-07T18:48:04",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ff2145b309a9f8585e62df70571264ffa457407ad4c5e98d3a57efebf451eb41",
+        "News headline": "Martin Lewis warns over ‘first’ deepfake video scam ad circulating on Facebook",
+        "Date": "2023-07-07T17:47:23",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "6cc77fc897f33704b3370ab75a42a35f4c227dc821f119c420156d5c75ab5fcc",
+        "News headline": ": Meta’s Threads has quickly surpassed 50 million signups, reports say",
+        "Date": "2023-07-07T17:22:00",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "f2dda2a01a91308f3601bfc2cd0cdcf64edc070f7dcc2f3e649f823e41590aef",
+        "News headline": "On The Vergecast: It’s Threads all the way down.",
+        "Date": "2023-07-07T17:08:54",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "12038f47bfc9d8321980015421e1bef2a3da833dbb7099a619b819af6b9b6033",
+        "News headline": "Resetting FSU's WR recruiting board: Big-game hunting - 247Sports",
+        "Date": "2023-07-08T16:31:38",
+        "Ticker": "PG",
+        "Stock name": "PG",
+        "Source": "google_news"
+    },
+    {
+        "Id": "9d622f2f6ffd4f6b95ffe72f2990cb9d1bad2e18dd7990426cb1a56f773df5eb",
+        "News headline": "Max Collins & Ex Pancho Magno Reunite For Son's 3rd Birthday - PhilNews",
+        "Date": "2023-07-09T05:23:24",
+        "Ticker": "FB",
+        "Stock name": "FB",
+        "Source": "google_news"
+    },
+    {
+        "Id": "6f45b87569efa16cb89a3c347fdd4458201a810ff31ff4f7e4eb771d6a462bc8",
+        "News headline": "BYD's Global 'Plugin' Electric Car Sales Are Surging Higher In 2023, Targeted To Reach 3 Million | $TSLA $BYDDF $BYDDY",
+        "Date": "2023-07-09T11:46:54",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "fcfca20837a02cf1908c62c138ffe48f170f12037b1952fffecc4b518ae96ba9",
+        "News headline": "Great News for Tesla Stock and Nio Stock Investors",
+        "Date": "2023-07-09T11:00:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "407502bd75b2902419b6f5a6a99c731e25623a001133f07d59efd0fb1125539d",
+        "News headline": "Taylor Swift Beats Out Elon Musk—And BTS—On Twitter",
+        "Date": "2023-07-08T23:19:14",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "801678b337518d7e03d9c002cde94c3642326581b522a381d9d64761f63efd45",
+        "News headline": "Analyst: Tesla Stock Could Hit $300",
+        "Date": "2023-07-08T17:03:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "b03037a1071cbb27254a24188cd8e757695895966c27c14752460958a06827ee",
+        "News headline": "Is Nikola Corporation Stock a Buy Now?",
+        "Date": "2023-07-08T15:15:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "f9348e804654d8824d8e46cc8e311c2f59a3fd21b228389c9a93bd49ed34d1b9",
+        "News headline": "Five Charts Explain Tesla and Car Stocks In the Second Quarter 5 min read",
+        "Date": "2023-07-08T13:51:28",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "cb989594705ae7dc336720e1c8c27b18483fcc0e5404e56f9aac6049ef06a5de",
+        "News headline": "ARK Innovation ETF: Cathie Wood's Casino | $COIN $PATH $ROKU $TSLA $ZM",
+        "Date": "2023-07-08T07:18:15",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "06ba79bf6aa1b6b1cf9f3de346cd922d881ff8a97a52da421eac8019e366c733",
+        "News headline": "Tesla rolls out customer referral incentive globally as EV price war heats up",
+        "Date": "2023-07-08T07:02:14",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "3f8cb978a98a4dbf6315f8f425b4d5249d65866366221719399622d6096e7337",
+        "News headline": "Tesla Vs. Ford: Risky For Different Reasons | $FPD $GM $HMC $HNDAF $MBGAF",
+        "Date": "2023-07-08T02:00:46",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "d6412c9e57b055d90ad449a99f1a22c7a632fa366dca8fe837aaba92a5c2998a",
+        "News headline": "X Corp. sues Wachtell to recover most of the $90M fee the law firm received from Twitter for defeating Elon Musk's bid to walk away from his $44B Twitter buyout (Jonathan Stempel/Reuters)",
+        "Date": "2023-07-07T23:45:13",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "21da733ec7e8949a48070320cf4d6b8250ca03a175d31748cfff7cc4e12bc405",
+        "News headline": "Our big unanswered questions about the switch to Tesla-style EV plugs",
+        "Date": "2023-07-07T22:43:27",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "06f121964558641ff7acc91943ca37434c421917981e552ddf66340ec8ada596",
+        "News headline": "Elon Musk's Twitter sues top law firm Wachtell over $90 million fee for work under prior ownership",
+        "Date": "2023-07-07T22:35:32",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "f137cfb308678b918139ad894ea7b9e8ee8be319bff1ef5d05359f4a5360930a",
+        "News headline": "Musk sues law firm because he’s mad that Twitter paid $90 million bill",
+        "Date": "2023-07-07T22:14:42",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "930ed07b8988b35105e06745537f3fc2eac9dee8022df30f66136c454dcc7b6c",
+        "News headline": "Twitter Sues Wachtell Over $90 Million Payout for Musk's Buyout Deal",
+        "Date": "2023-07-07T21:55:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "6203dce9d136707d0b6e5ce2f54fec8467e0333d21d5dcd1c3aca3688f5010fb",
+        "News headline": "Stellantis: Revving Up For Success Even In Case Of A Recession | $TSLA $STLA",
+        "Date": "2023-07-07T20:19:59",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "2ce64f9423ea5dd54884aac4d9f6a8fb08169dd7b600a0e85b9ab44a68a8ef94",
+        "News headline": "Twitter Sues Wachtell Over Payment Tied to Delaware Suit on Musk's Acquisition",
+        "Date": "2023-07-07T20:15:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "58df25a45b62119342fd92a6841c847ba4ffa7b6d2f6ca82b4c23a6372cef4d6",
+        "News headline": "Why Rivian Stock Is Up a Staggering 70% Since June",
+        "Date": "2023-07-07T20:10:26",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "8fb1e36e30a46489b5cdef7ce3c3ef30688e020efdd8d64681cc99841df1e1a4",
+        "News headline": "These stocks, including Tesla, are this week's top performers as the S&P 500 falls",
+        "Date": "2023-07-07T19:54:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "507a1cd975b8925c0a7fed51a911cd984f515017e247d14fe4cfb08bf78395ef",
+        "News headline": "Mercedes-Benz is going to use Tesla’s EV charging too",
+        "Date": "2023-07-07T19:25:17",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "0f9764dbf1545400e0de75d57032ec890f1c9b81abd4469eae3eca25bf36523c",
+        "News headline": "By Remaking Twitter, Elon Musk Created an Opening for Rivals",
+        "Date": "2023-07-07T19:14:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "6c07c69052a3e73f5c81e2c3a2f51138fa421b7d2a6a0896f07625d1224a25c9",
+        "News headline": ": China extracts ‘commitment’ from Tesla, others to halt price wars: report",
+        "Date": "2023-07-07T18:25:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "cffdbd6721d33d002518d8383a9305ccb2254a001c07fdfaa1c6aa853f0fe917",
+        "News headline": "BYD: A 2-Horse EV Race With Tesla - Great Upside Remains | $TSLA $BYDDF $BYDDY",
+        "Date": "2023-07-07T18:00:07",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ac859dcb6a893f3747918edce0704fe104cebc4d3b17dc24d55509f10644ef24",
+        "News headline": "3 Momentum Stocks to Sell Before They Do Your Portfolio In - InvestorPlace",
+        "Date": "2023-07-08T19:42:40",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "edd858fa6b1a340d3cf3f6d3b3fdf8e0f4b710dc9fb7b2b6d51a7ae773bcee09",
+        "News headline": "Guru Fundamental Report for TSLA - Nasdaq",
+        "Date": "2023-07-09T13:13:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "36cfa2a4cf70a70cd5a48634cbd06872636796738986d63651e8b375a0b918fc",
+        "News headline": "Mercedes-Benz to adopt Tesla’s EV charging standard in North America - CNN",
+        "Date": "2023-07-08T18:43:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "e666d73f37311b4fd37b85e2a4433925eda317a1e88e577b3e897008648c0c52",
+        "News headline": "Lucid's CEO Overconfidence May Spell Doom for LCID Stock - InvestorPlace",
+        "Date": "2023-07-09T12:19:42",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "8988310f67de9b33c576a0bd648ae3e1f240c3b651c4a80d0103c74b076517bb",
+        "News headline": "Meta is in good shape — even without Threads and its strong debut - Morningstar",
+        "Date": "2023-07-08T16:30:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "ebfab97f383b8735c85e96717c2d90b1ae87ca0469a7b99f94dbeb146567aac9",
+        "News headline": "Tesla Gets More Bad News About Its Cars From Federal Regulators - jacksonprogress-argus",
+        "Date": "2023-07-08T21:28:16",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "beb33d27a6c331a75d5d768188a5332e19e2d2177ae430809c7d13d762c758ed",
+        "News headline": "Stock Funds Rally to 12.4% Gain for 2023 So Far - The Wall Street Journal",
+        "Date": "2023-07-09T15:00:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "5399c60f25e1fc0aa0555cc4c7caf4cd48447907205eb0d396cd58bdebfcfd04",
+        "News headline": "Tesla Has Disturbing News From Regulators on Its Electric Cars - TheStreet",
+        "Date": "2023-07-08T21:28:16",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "c5869b1aa21ba63330d47bf6ea95890bb670857adba0daa2ad836b7b346b4d47",
+        "News headline": "ETFs in Focus on Surging EV Sales - Yahoo Finance",
+        "Date": "2023-07-08T22:19:00",
+        "Ticker": "TSLA",
+        "Stock name": "TSLA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "b63c1967d365251db973425487cd610e58eeec7d12f1dac79bad0d0bb3d2019a",
+        "News headline": "Bill Gates says Warren Buffett taught him to value free time: Filling ‘every minute of your schedule’ doesn’t make you more serious",
+        "Date": "2023-07-09T15:00:01",
+        "Ticker": "BRK.B",
+        "Stock name": "BRK.B",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ea18838dd9ba272b4c476469bf125ddeb3f1d6c716634e2c76333a1b812b5b58",
+        "News headline": "Should You Buy This Tiny Warren Buffett Stock?",
+        "Date": "2023-07-09T12:54:00",
+        "Ticker": "BRK.B",
+        "Stock name": "BRK.B",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "f34d6aa3ce3cb158f05cf58740b5c332925070fc151e8885dfd148966d3ae39d",
+        "News headline": "If You Invested $2,000 in Berkshire Hathaway in 2017, This Is How Much You Would Have Today",
+        "Date": "2023-07-08T12:50:00",
+        "Ticker": "BRK.B",
+        "Stock name": "BRK.B",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "c85c2ff7cb181e8a1be0856ec85c82cf34d47b7d33532919c87dae9cedf7289a",
+        "News headline": "Trump Orders Dairy Queen Blizzards: Here Are The Other Stops On His 2024 Campaign Food Tour",
+        "Date": "2023-07-08T00:20:32",
+        "Ticker": "BRK.B",
+        "Stock name": "BRK.B",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "a7a5818af36ae579ca4ded0ce0756ca21781850c8f605f79f26c3377dbb5abd8",
+        "News headline": "Federal Agencies Investigate Medical Credit Cards and Installment Loans",
+        "Date": "2023-07-08T00:13:44",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "39daf2669c76cb86539a957dd4f5b369ff9970687f9250b96071b62bee174846",
+        "News headline": "Best Stock to Buy: Nikola vs. QuantumScape - Nasdaq",
+        "Date": "2023-07-09T07:45:00",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "199566d6cbb8356fd7621e68b7ab114aec01059b9b973f19d026df6730b269de",
+        "News headline": "Better Growth Stock: SentinelOne vs. Twilio - The Motley Fool",
+        "Date": "2023-07-09T11:10:00",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "3ad43f7f988fce96bec706cb10db4eeccc150ef8ba956674e5f75ad243a75dfd",
+        "News headline": "Taiwan Semiconductor (TSMC) Stock: Bear vs. Bull - The Motley Fool",
+        "Date": "2023-07-09T15:00:00",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "620bc49aac9c916e4b7f0fd0dad10bb9ee4a4a60745d9f047da829b1257a3acb",
+        "News headline": "3 Stocks Poised to Dominate the Second Half of 2023 - The Motley Fool",
+        "Date": "2023-07-09T12:30:00",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "b8bbb1b80b7fe49dae91a4df64cb9178b31dee197648344ed018e7fbacf540fd",
+        "News headline": "Bloom Energy Insiders Sell US$6.7m Of Stock, Possibly Signalling Caution - Simply Wall St",
+        "Date": "2023-07-09T12:24:55",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "bcc07d881f8e3602ddf00b12fe5c1016b201c536e9e7cc8aa24fe5d2ff126207",
+        "News headline": "GM Stock Value Up 3 Percent During Week Of July 3 - July 7, 2023 - GM Authority",
+        "Date": "2023-07-09T11:30:01",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "cb933db61fb0102454e1a326e12122c4b3a8f79a2aeb22ffaffdacc989e102b3",
+        "News headline": "Guru Fundamental Report for V - Warren Buffett - Nasdaq",
+        "Date": "2023-07-09T13:11:00",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "770a05a13bf02b060f9cc5a37cac218e943a6697ccc61c470ecc552ddbe2f884",
+        "News headline": "Better Buy: Uber vs. Lyft - The Motley Fool",
+        "Date": "2023-07-09T12:15:00",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "b6fa9a8badff40cbca9d92825c13067bbf14cab405864500f17c350f6a44d459",
+        "News headline": "UFC 290: Volkanovski vs. Rodriguez Fight Results - ESPN",
+        "Date": "2023-07-08T22:02:25",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "b977daa05bea1555b8e8bdffe6c115617fdcd68f1ba2b88d57778d88f1af779c",
+        "News headline": "Cryptocurrency versus the SEC: A fight for fair digital investing - Cointelegraph",
+        "Date": "2023-07-09T10:00:28",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "e8945ecfe87bc200f3445d3c26a6aa36fbd633a0c3ff1726e6468b1720257b30",
+        "News headline": "Rivian stock up 85% in two weeks could rally further: Wedbush's Ives - Invezz",
+        "Date": "2023-07-09T14:22:11",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "5a5ddf65a2d02a250b05bdb8fa4be7d3a6c66cbde20d303d598c615daba6ae5a",
+        "News headline": "The ‘High & Mighty’ of Nigeria’s Stock Market - THISDAY Newspapers",
+        "Date": "2023-07-09T03:24:16",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "bb71ba26379bebddcbd1ef75a8301c877d50ed601331caffc8ece4b3a018222f",
+        "News headline": "Ole Miss Rebels vs. LSU Tigers Game Predictions - Sports Illustrated",
+        "Date": "2023-07-09T11:00:00",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "a53ac006fe7216a7f88d74f4b5c8826c1c0638ad45e160492a486ae8d9123c33",
+        "News headline": "Don’t wait until Prime Day — these summer must-haves are already less than $25 on Amazon - Yahoo News UK",
+        "Date": "2023-07-09T01:34:07",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "75805f58f556542d9b9b74fcc69a586d98bac5feaf45c8b0d0d29fdbe557dd56",
+        "News headline": "Sabres Prospect Tier List - Die By The Blade",
+        "Date": "2023-07-08T20:41:16",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "02ba1336b800bd6aaca90ecc5c8f6ba46afc7201da706b59780e2bff1a9af5c7",
+        "News headline": "Wall Street Breakfast: The Week Ahead - Seeking Alpha",
+        "Date": "2023-07-09T07:09:09",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "36ab7387862e22040a2836b969c17c02a3561e7fba87a501b16da17ad042b3b2",
+        "News headline": "State Street: Good, But Not Good Enough (NYSE:STT) - Seeking Alpha",
+        "Date": "2023-07-09T04:46:18",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "dfd6172e5f15bdd727b5f1e0442597dbbe736cea618d96ebc92504b175a98b36",
+        "News headline": "Asset Dedication LLC Buys 937 Shares of Visa Inc. (NYSE:V) - Defense World",
+        "Date": "2023-07-09T10:31:10",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "9daccba6a0eca0a245cfb5ef3d2d6691d5a6dd36f798cf35578135115ef1ef33",
+        "News headline": "Markets This Week, 7/10-7/14, 2023: Banks and Inflation - TipRanks",
+        "Date": "2023-07-09T10:13:27",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "9b0d8fdb19fb57c35f61aaf75dc3d256cc2c74d559339a84a0ab2e394f3a7886",
+        "News headline": "Visa Inc. (NYSE:V) Shares Sold by TimeScale Financial Inc. - Defense World",
+        "Date": "2023-07-09T10:31:10",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "8c0886e5699f7b5b197b8df707618f203ccd5f7081604221824c8c1745fa6755",
+        "News headline": "Visa Inc. (NYSE:V) is Hendley & Co. Inc.'s 4th Largest Position - Defense World",
+        "Date": "2023-07-09T12:47:15",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "7ddb47672e106bf10cbbecf0b5226c5e03e12eb6afb256279fd7430d4742b143",
+        "News headline": "2005 Deluge: Leela Hotel's ₹5.8 Cr Claim of Damages Turned Down - msnNOW",
+        "Date": "2023-07-09T00:30:00",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "e8cffa00e71a8f5744a52ff49bf68b07566060e939c0d30e23afce5400a647fd",
+        "News headline": "Eurocash (EUSHY) versus Its Rivals Head to Head Review - Defense World",
+        "Date": "2023-07-09T05:53:17",
+        "Ticker": "V",
+        "Stock name": "V",
+        "Source": "google_news"
+    },
+    {
+        "Id": "ec8ee2df76dea3df3b0f01037325fbb4005594effdde7b7db16cb98d4ebae57f",
+        "News headline": "SPLV: Slowing Down Entering The Potential Storm For Stocks Ahead | $JNJ $MCD $PEP $SPY $XLP",
+        "Date": "2023-07-09T15:58:35",
+        "Ticker": "JNJ",
+        "Stock name": "JNJ",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "a6923c46c1d03c8a8dea9095fca8755d4da9fcf4bef22ea704335dfc2c17b75e",
+        "News headline": "Is Johnson & Johnson Stock a Buy?",
+        "Date": "2023-07-08T13:20:00",
+        "Ticker": "JNJ",
+        "Stock name": "JNJ",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ac21b451099f1512470c6559cb96b1b398f2304f9dc33a2dd947a1e42366cc5d",
+        "News headline": "Is Johnson & Johnson Stock a Buy Now? - The Motley Fool",
+        "Date": "2023-07-09T11:45:00",
+        "Ticker": "JNJ",
+        "Stock name": "JNJ",
+        "Source": "google_news"
+    },
+    {
+        "Id": "83ede1f4f6b3165293ba51e11af8c5471e36b62daa19fe91cfd4fc356a911a41",
+        "News headline": "Protagonist Therapeutics (NASDAQ:PTGX) Stock Price Down 2.6% - Defense World",
+        "Date": "2023-07-09T06:37:43",
+        "Ticker": "JNJ",
+        "Stock name": "JNJ",
+        "Source": "google_news"
+    },
+    {
+        "Id": "922145f5df8426f49bc9cd0b866a6dfe19c56bcf67a008f3b90d7562ca60f9e5",
+        "News headline": "Walmart Is About to Take Flight. Why the Stock Is a Buy. The world's largest retailer is using high-tech solutions like drones to transform its business.",
+        "Date": "2023-07-07T22:56:24",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "c4bcc9f27ae29b83f6b170db4791801c852676944682195d35e3216fac9351b2",
+        "News headline": "El Paso Walmart shooter sentenced to 90 consecutive life terms",
+        "Date": "2023-07-07T20:15:36",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "749f88d12b808320902b4f1d769d348bec9ff3f15601364a313632ff64ea17bf",
+        "News headline": "El Paso Walmart Mass Shooter Gets 90 Life Sentences",
+        "Date": "2023-07-07T19:48:00",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "ac15daea35c088c59f663d62dfc026923f93a9fd5994c5545ed19cfb6aa1b569",
+        "News headline": "Racist Gunman In 2019 Texas Walmart Shooting Given 90 Life Sentences—Could Still Face Death Penalty",
+        "Date": "2023-07-07T19:27:57",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "c0d14d1dcec50d4230a43762caca252b78d170d5e6c680dc9fd120c1fe0b62ad",
+        "News headline": "El Paso Walmart gunman who killed 23 gets multiple life sentences",
+        "Date": "2023-07-07T19:19:04",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "tickertick_news"
+    },
+    {
+        "Id": "0103b5c5756af699b29fe32345483d87061de1c370863e75a4127dc28bfb51db",
+        "News headline": "What's Wrong With Dollar General Stock? - The Motley Fool",
+        "Date": "2023-07-09T12:05:00",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "8eb899777e7da91abe495e2bf5d45a6b21027b1fbbf89c172ecda06a07972827",
+        "News headline": "Want to Retire As a Millionaire? Follow This Formula - msnNOW",
+        "Date": "2023-07-09T13:42:55",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "45499e36f6e18d42bcd7c6c4f93fdc26886e049e7b20a15a21471638a358992d",
+        "News headline": "Walmart customer makes ‘mind-boggling’ discovery after opening pick-up grocery order: ‘I hate [it]’ - Yahoo News",
+        "Date": "2023-07-09T11:45:00",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "d56f60150540c053111d486acfab074ef4e71850a0538fb598db630a2d846914",
+        "News headline": "Motley Fool: An underestimated automaker - The Spokesman Review",
+        "Date": "2023-07-09T07:05:24",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "6a14073cb09f9af92b016b596f9785cbc3addce8cdcddd9d7b79b8ef20cdaac6",
+        "News headline": "All Paramount Plus subscribers need to know about this deal - Digital Trends",
+        "Date": "2023-07-08T18:42:52",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "a51b471446123774981a776f8e60c1f418f458cd04b72f28e607df823419c3bc",
+        "News headline": "Flipkart, Myntra employees to get cash payouts worth $700 mn after separation of PhonePe: Report - Business Today",
+        "Date": "2023-07-09T09:25:02",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "9fd49be3a235fd633087b6f1c2aad60e7cae74c9489d0b25740b42dd4a339f44",
+        "News headline": "Hitting the Books: Amazon's unique 'threat' to digital commerce - Yahoo! Voices",
+        "Date": "2023-07-09T14:30:59",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "2fb6f0da6f762da6be8494366d53c47fff14ef4f962c012cc51cd63becc54148",
+        "News headline": "Target Brings Back Popular Deals (and One Very Special Offer) - TheStreet",
+        "Date": "2023-07-08T17:48:26",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "6ee6a641e0ccd23bb154877a6a8ac9e947d6b95abe5170817cf37443f2687464",
+        "News headline": "What Happened To OA Foods From Shark Tank? - Mashed",
+        "Date": "2023-07-08T22:00:00",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "922db57b214c436d41c553966ed07233a7e786d13cfaebb4ceae316be88ce0f2",
+        "News headline": "Tattooed Chef Confirms Plan To File For Bankruptcy Protection - Tasting Table",
+        "Date": "2023-07-08T18:09:00",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "3a2b2a674386bf1f928f9ffc1045e4cf8dec1e7d925caa78303880c863c7231f",
+        "News headline": "Y2K fashion has taken over. And Gen Z is loving it - KRDO",
+        "Date": "2023-07-09T06:29:15",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "75c2c0fe9f578f1249b9b638f392dd99d99e9281c77ff9839ce2e4b47c4fe7d2",
+        "News headline": "Will Smith Honors Jaden’s Birthday With A Not-So-Subtle Hint At Wanting Grandkids - Yahoo Canada Sports",
+        "Date": "2023-07-08T23:31:01",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "525c8c00de8484a423b4144b10acc57f8f7d3df59fa6f9dff3bf94afa2171ced",
+        "News headline": "10 Best Grocery Stores In America In 2023 - Eat This, Not That",
+        "Date": "2023-07-09T12:14:50",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "12727d1a21ecb0575d088d44939fc895d5f88b811df1167920d0c84bb1067cec",
+        "News headline": "Hawk ‘Adopted’ By Eagles Dies After Heartwarming Story Takes Dark Turn - Yahoo News",
+        "Date": "2023-07-08T18:49:19",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "27d00498f63c77823b1843489dec0d7a0ce858836427eb3d4042fb21a21c6b0e",
+        "News headline": "Archie Norman: M&S turnaround has taken too long - This is Money",
+        "Date": "2023-07-08T20:50:07",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "43144c188e4b23e8db9d1d8fe917f78dbaba53e59a287574242fc94d1b662691",
+        "News headline": "AP Business SummaryBrief at 2:03 a.m. EDT | National - WDRB",
+        "Date": "2023-07-09T06:03:40",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "cecedf545379796fd3879637de7137fe44a5fc666750763f1b9682ae223f28fb",
+        "News headline": "This Winn-Dixie sat shuttered for a year in a busy mall. Finally, the grocery’s opening - Yahoo Canada Shine On",
+        "Date": "2023-07-08T19:54:03",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "b51342b7d01786c44d9135356d7465f71998b4425ea9c92bd10aca3a73f99e79",
+        "News headline": "'I've Made Every Single Mistake When Flying With Kids. Here Are My Tips' - Yahoo Canada Shine On",
+        "Date": "2023-07-08T23:01:15",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "a22eee6f205404d909b39de0962865d3fc0b6534b0c61078d5da6da3c37e1955",
+        "News headline": "Sha'Carri Richardson Pulls Off Her Iconic Wig Before Winning 100-Meter Race - Yahoo Canada Shine On",
+        "Date": "2023-07-08T16:23:54",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "4b2d8bd6b53812ee4ec44a44bd4741b632b129e398e5bd80f1b8b5ac3220eefd",
+        "News headline": "Meet The Women Finding Same-Sex Love In Later Life - Yahoo Canada Shine On",
+        "Date": "2023-07-08T23:01:15",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "67807426c224203ebf7edd98847f4e5c2055ae9502f6db9c5e6c74463041c908",
+        "News headline": "Flipkart employees to get $700 million in a cash payout - CNBCTV18",
+        "Date": "2023-07-09T07:12:21",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "53dfd35078ce7118518ed6238e5e5854ea637ef4ce14c9e507ba3e89c22ea3e3",
+        "News headline": "'ElonJet' Creator Brings His Flight-Tracking Account To Twitter Competitor Threads - Yahoo Canada Shine On",
+        "Date": "2023-07-09T08:08:19",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "e21dfd62714fe35915c7691d3415e227c65ba7355c60787e95514c93e61a8ef9",
+        "News headline": "Blue singer Lee Ryan ‘assaulted on flight’ after putting feet on seat - Yahoo Canada Shine On",
+        "Date": "2023-07-09T10:17:57",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "1afbf1a18cafd1191de2146fe9c9e30375d11ce24dc373d54a2143e3fec9479e",
+        "News headline": "Trader Joe's Illegally Retaliated Against Pro-Union Workers: Federal Officials - Yahoo Canada Shine On",
+        "Date": "2023-07-08T20:53:19",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "6eec5136d607c0bb7d6da7c07ff34e7678ead54fac97895f480bcd220cb496be",
+        "News headline": "Actor Chris Chalk Makes Directorial Debut With Horror-Thriller ‘Our Deadly Vows,’ Now Playing In Theaters - Yahoo Canada Shine On",
+        "Date": "2023-07-08T20:43:15",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "924562e5101772a5297e01fa6e0b79953816b8658739aa4825489ba48fd3e58e",
+        "News headline": "How to shop Amazon Prime Day like a pro - AOL",
+        "Date": "2023-07-09T12:48:11",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "25ab6fd80a8dfbb1e8d1d6dc6ceab2b14502c8954895bbbf7c7ac0a0547d6020",
+        "News headline": "Reward Offered For Info About Escaped Inmate From New York - wyrk.com",
+        "Date": "2023-07-09T09:50:57",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "c469fcbe87a9728d0d0f35bf170a36b2c2465db987e3a7821fcf4a8bcb3e3d29",
+        "News headline": "You Can Turn Left On Red In New York? - Q105.7",
+        "Date": "2023-07-09T10:30:46",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "c33d7c8cfbf282ef4d48420c268c1bf3902ebfd5558bba55f1a07e871dcdff6c",
+        "News headline": "Kevin Hart's wellness brand, VitaHustle, is now available at Walmart nationwide - SparkChronicles - Spark Chronicles",
+        "Date": "2023-07-09T01:09:08",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "93b64c7dcb20eb4810204fc86b3668d4e75370941d050f0de3227df090043505",
+        "News headline": "Here Are the Earnings to Watch Next Week - EMEA Tribune, Breaking News, World News, Latest News, Top Headlines",
+        "Date": "2023-07-08T19:01:58",
+        "Ticker": "WMT",
+        "Stock name": "WMT",
+        "Source": "google_news"
+    },
+    {
+        "Id": "496ee6d7238194eff458a2d091d73e5bf990e1ceb71fab8695236ba630d609c1",
+        "News headline": "Sunday Boredom Busters: July 9th - KELOLAND.com",
+        "Date": "2023-07-08T21:15:00",
+        "Ticker": "PG",
+        "Stock name": "PG",
+        "Source": "google_news"
+    },
+    {
+        "Id": "451a0be5e2ccf40ef7ae4e3605eead8cf3cb364186ef570a239a7ca1d480e955",
+        "News headline": "NBA's Jerome returns to Charlottesville for third year of hoops camp - JerryRatcliffe.com",
+        "Date": "2023-07-09T00:31:06",
+        "Ticker": "PG",
+        "Stock name": "PG",
+        "Source": "google_news"
+    },
+    {
+        "Id": "188116abdba4b560f7cb97b7659423431fb828aa950ff6018f759647c994ecf3",
+        "News headline": "11 R-Rated Movies That Featured Child Actors - MovieWeb",
+        "Date": "2023-07-08T19:32:00",
+        "Ticker": "PG",
+        "Stock name": "PG",
+        "Source": "google_news"
+    },
+    {
+        "Id": "cb391c241f03b0d4371117ef8289f1196d0e084aca07e0dc68e42c6375294aba",
+        "News headline": "From the Archives: Generation Dab (2013) - High Times",
+        "Date": "2023-07-09T10:03:55",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "f50854ed410db077cb3bf4bfd1b659d0d727567b2996453bda752f5d38107cde",
+        "News headline": "मिलन सट्टा मटका फास्ट - The Free Media - The Free Media",
+        "Date": "2023-07-09T03:25:16",
+        "Ticker": "PG",
+        "Stock name": "PG",
+        "Source": "google_news"
+    },
+    {
+        "Id": "f0cf1ed5c10cd544f74f12b0946972ce73fb84cb85d339f37b7097a658a77307",
+        "News headline": "The 12 Best Westerns Of The 21st Century - Looper",
+        "Date": "2023-07-08T16:15:00",
+        "Ticker": "PG",
+        "Stock name": "PG",
+        "Source": "google_news"
+    },
+    {
+        "Id": "e1667ee379f6f916967cf01398f6e6fa75b04c8872a81cce162fc78bc7323664",
+        "News headline": "is Ajou University good? - Rebellion Research",
+        "Date": "2023-07-08T22:18:03",
+        "Ticker": "PG",
+        "Stock name": "PG",
+        "Source": "google_news"
+    },
+    {
+        "Id": "2b665c76a2037b064673508ca96a7d06932da334ca63ee1da5298817467045e5",
+        "News headline": "सट्टा मटका डॉट कॉम दिखाइए - The Free Media - The Free Media",
+        "Date": "2023-07-08T20:22:55",
+        "Ticker": "PG",
+        "Stock name": "PG",
+        "Source": "google_news"
+    },
+    {
+        "Id": "80cc12b8b5bc00d11c033b15eba9ff1be3bcbd3576c1bd64c3212a73d9b5c1b6",
+        "News headline": "is University of Castile a good school? - Rebellion Research",
+        "Date": "2023-07-08T22:48:03",
+        "Ticker": "PG",
+        "Stock name": "PG",
+        "Source": "google_news"
+    },
+    {
+        "Id": "5f5a2fed605c5c535e3677de3789ac20de88d4fafa6555dd5ec71e7678ed0311",
+        "News headline": "is Bowling Green University a good school? - Rebellion Research",
+        "Date": "2023-07-09T12:03:17",
+        "Ticker": "PG",
+        "Stock name": "PG",
+        "Source": "google_news"
+    },
+    {
+        "Id": "77a13f7b4465f741a1d925b007d40f6518d8ce1e59698016200b95e10404b787",
+        "News headline": "násilný Vlak prísny nr 10 minoxidil oba Náhľad Encommium - Magazine 99",
+        "Date": "2023-07-09T13:16:22",
+        "Ticker": "PG",
+        "Stock name": "PG",
+        "Source": "google_news"
+    },
+    {
+        "Id": "e1a0983702d61106c5f66e58f1f3f40ec2c08838702fcc05c92fcf2d6babf867",
+        "News headline": "11 R-Rated Movies With Child Actors - World Time Todays",
+        "Date": "2023-07-08T19:34:16",
+        "Ticker": "PG",
+        "Stock name": "PG",
+        "Source": "google_news"
+    },
+    {
+        "Id": "8cea4718bcf232463f3189fb84417c3cdd85a5ad78430ac8a9c3a14b1a807970",
+        "News headline": "Congress Asset Management Co. MA Increases Stake in Hecla Mining - Best Stocks",
+        "Date": "2023-07-08T21:42:56",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "c5bb9c813d7326cc1d38d593068f44ff675241df3c10adadbfdcc4d32d92c9b3",
+        "News headline": "Ant Group will buy back shares to ease investor pressure as China ends crackdown that derailed world’s biggest IPO - Fortune",
+        "Date": "2023-07-08T15:52:00",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "f2aceb1297deb999a4a0e5c070990769235ea7fab9d592995727dfcef0bff2f2",
+        "News headline": "ITV plc's (LON:ITV) Fundamentals Look Pretty Strong: Could The Market Be Wrong About The Stock? - Simply Wall St",
+        "Date": "2023-07-09T07:09:35",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "c76dbf256449fe1f0217376ad9e891ce7d0ca69db5aa1a5a87b2f1f98e28934c",
+        "News headline": "3 Cheap Blue-Chip Stocks to Buy Before They Bounce Back - InvestorPlace",
+        "Date": "2023-07-09T00:37:38",
+        "Ticker": "VZ",
+        "Stock name": "VZ",
+        "Source": "google_news"
+    },
+    {
+        "Id": "963b28bfdcb8a6362c859662135ef4c9119bc9ad5aac737e9de598748f0c0a0c",
+        "News headline": "DIS Stock Price Analysis: The Bearish Trend Is Not Stopping - The Coin Republic",
+        "Date": "2023-07-08T16:04:00",
+        "Ticker": "DIS",
+        "Stock name": "DIS",
+        "Source": "google_news"
+    },
+    {
+        "Id": "5525ca6c87efc0f20432edc61ecb0541dd8ce15df1fee8fb7bef7af13bb29fb6",
+        "News headline": "Costa, Kennedy, Pazak lead Division 1 winners at Numidia Dragway - NHRA.com",
+        "Date": "2023-07-09T05:48:24",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "6209aa5e4ea013c5d57d35f35d810fd7d84e5168fdc36dba292bb718b2cb04e6",
+        "News headline": "3 Tech Stocks With More Potential Than Any Cryptocurrency - The Motley Fool",
+        "Date": "2023-07-09T09:20:00",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "3e9a90524e54aef0474f9e4735084faae9fa1e207c37524f720725b6694403f0",
+        "News headline": "Top Wall Street analysts favor these stocks for the long haul - CNBC",
+        "Date": "2023-07-09T10:59:31",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "5e64d189c041350ce1ab45435dd63f162a969610bbc56f119038aa97b79326e9",
+        "News headline": "9 people shot in mass shooting in Cleveland, police say - WJCL News Savannah",
+        "Date": "2023-07-09T11:50:00",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "481dad768eb0f2c270443a6ff33c870e69be2bf3ea62b08db04278dacf192782",
+        "News headline": "ELAM: A top in stocks - Odessa American",
+        "Date": "2023-07-08T18:30:30",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "7de16cedb3f8fb6031a9afadbcc1eb3997abf18a8da6b765079ff337b0cda924",
+        "News headline": "Stocks rally on IMF euphoria - Newspaper - DAWN.COM - DAWN.com",
+        "Date": "2023-07-09T02:04:22",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "dc694f7c3db9cd62755f87e48d1d14fa01fb4f6475e613e6b119b921c9f1603c",
+        "News headline": "Virtu Financial, Inc. Reports Strong Q1 Earnings and Positive Outlook - Best Stocks",
+        "Date": "2023-07-08T21:53:07",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "c9ebf0e615c376750afdb72e3ad7cd332f636e1df65b0658c8425f1489c81531",
+        "News headline": "Framingham city councilor: You can't build your way to affordability - MetroWest Daily News",
+        "Date": "2023-07-09T08:55:12",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "3580a95bd9ffb11d8ba56602f6dafd17d7b6d4b7345a6152eda9f3aa4775dece",
+        "News headline": "From soup stock to supercrop: Japan shows off its seaweed savvy - TODAY",
+        "Date": "2023-07-09T00:00:00",
+        "Ticker": "MA",
+        "Stock name": "MA",
+        "Source": "google_news"
+    },
+    {
+        "Id": "cc274c3a010002ef8009a7bf8ebfaaf7d5b8b8cf25f945a8e795e74f6ae91d25",
+        "News headline": "Guru Fundamental Report for INTC - Benjamin Graham - Nasdaq",
+        "Date": "2023-07-09T13:11:00",
+        "Ticker": "INTC",
+        "Stock name": "INTC",
+        "Source": "google_news"
+    },
+    {
+        "Id": "4057b6dd3c545360db6727d0aa6f480c553107c49287a1250d01e90ee0f5795f",
+        "News headline": "Verizon Communications (NYSE:VZ) Shares Gap Down to $37.13 - Defense World",
+        "Date": "2023-07-09T06:15:32",
+        "Ticker": "VZ",
+        "Stock name": "VZ",
+        "Source": "google_news"
+    },
+    {
+        "Id": "3e5df3489ba2021ad23dbf9c4f967a0a40a928170826452625e041714a125e52",
+        "News headline": "New small hybrid hatchback has arrived - news.com.au",
+        "Date": "2023-07-08T19:03:33",
+        "Ticker": "VZ",
+        "Stock name": "VZ",
+        "Source": "google_news"
+    },
+    {
+        "Id": "07899c11862605dbc6ab9283d3879f89c7679b086489c4b712fe4fdb7179ab0a",
+        "News headline": "Trading Home Depot $HD With Integrated Risk Controls - Stock Traders Daily",
+        "Date": "2023-07-09T01:17:48",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "031b5a5a79bb2a35736385868d962ab97cb70b5bd236f44c530f420591ee83c0",
+        "News headline": "Rick Astley gets 'weekly' requests to use Never Gonna Give You Up - HDDailyNews",
+        "Date": "2023-07-09T10:12:29",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "dadc3cda9311f85f919b112eab12af5d1609fbc64f98ac3d6729603329547934",
+        "News headline": "Despite rain, Mid-Season Championship Night at Hawkeye Downs goes on for fans - The Gazette",
+        "Date": "2023-07-08T15:46:48",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "1fa9c0e63e30111d5b3a9e9cf49d37cb50f6a1fb78876f0862078bb85b03b84e",
+        "News headline": "Amazon TVs are £100 off ahead of Amazon Prime Day that's 'the perfect size' though there's one problem - My London",
+        "Date": "2023-07-09T08:44:42",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "ffc41b3e7017bcf701e7a4c302f27b6c79d57613ceda2938416b9bd529322c99",
+        "News headline": "UK to unveil new measures to support financial sector - 24 News HD",
+        "Date": "2023-07-09T06:14:00",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "b92fd542cba661227cdf0ef92d797aa90c4038665b972916014d4e2ed169b9a8",
+        "News headline": "Nokia T21, T10 & T20 enjoy huge discounts/Bundle offers in India, UK, US, Australia & European markets (weekly update) - Nokiapoweruser",
+        "Date": "2023-07-09T05:32:58",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "fb158caabce53c9bbee7d4ffb63ec63308c1d21b714adf2642050db915cf8f25",
+        "News headline": "The dynamics behind BJP-JDS bonhomie in Karnataka politics - The New Indian Express",
+        "Date": "2023-07-09T03:26:00",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "6ce9f3c8851650a4249dd3a4122e6a04accdc093243b3a6ab9140da141bd435e",
+        "News headline": "The 5 best Amazon deals you can get this Saturday — save up to 75% - Yahoo Canada Shine On",
+        "Date": "2023-07-08T19:14:09",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "d58de40f9f70cbc3df62f13443ede979a84fb8afed6fd51d59f81ce8c193f147",
+        "News headline": "Ethanol blending for cars is ignoring food security in India. Go for green hydrogen instead - ThePrint",
+        "Date": "2023-07-09T06:26:07",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "ee014479217ac5619891c892bdf3c45d818b3c7055767903c9a4253c14cd9c57",
+        "News headline": "poklad uhol Buďte opatrní cross nature explicitne audit cirkus - Magazine 99",
+        "Date": "2023-07-09T03:10:42",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "6ea4ae2b0a1803a81df2132803903ece513d75507ed409e597cecdac0531706e",
+        "News headline": "príliš veľa leninizmus naozaj kawaii rainbow tradícia voči prasknutie - Magazine 99",
+        "Date": "2023-07-09T06:07:14",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "90cb2f4e6cc46ad65442f5403af1c9c7a03ca039f0e5499c2855dd3fd5a1660a",
+        "News headline": "elastický bdelý šach laser jedi kompas meč vonkajšie - Magazine 99",
+        "Date": "2023-07-09T04:36:08",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "5afb363ac9a1017a88eda88251b372c405dace65dbba34d05f37dab4779e4404",
+        "News headline": "defilé drastický nešikovný pastere teleskop predchodca správy krásny - Magazine 99",
+        "Date": "2023-07-09T03:21:05",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "cd4455175591c1c16299a92560c3b7eef46a3f9650ab4ea32ba4470a6091ba4f",
+        "News headline": "The Ultimate Guide to Using a TikTok Downloader for Free Video Downloads - The Hear UP",
+        "Date": "2023-07-08T19:30:00",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "22e34aab628814e69a85d839615314576bf6a192700d8437066457636b05ed47",
+        "News headline": "Tips and tricks for Amazon Prime Day 2023: how you can save more in the summer sales - Ruetir",
+        "Date": "2023-07-08T22:30:40",
+        "Ticker": "HD",
+        "Stock name": "HD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "75bdc49d006350a141888d9b7a686c7207cacea979100555b0a96f3706d27b61",
+        "News headline": "Is It Worth Considering Bintulu Port Holdings Berhad (KLSE:BIPORT) For Its Upcoming Dividend? - Simply Wall St",
+        "Date": "2023-07-09T00:34:41",
+        "Ticker": "DIS",
+        "Stock name": "DIS",
+        "Source": "google_news"
+    },
+    {
+        "Id": "28ceb485b8e605c087ebb29ce045ed29c9bd5fcd87f95f0c47b5e25504066fb2",
+        "News headline": "Don't Buy Public Financial Holdings Limited (HKG:626) For Its Next Dividend Without Doing These Checks - Simply Wall St",
+        "Date": "2023-07-09T00:16:45",
+        "Ticker": "DIS",
+        "Stock name": "DIS",
+        "Source": "google_news"
+    },
+    {
+        "Id": "52ba67e6d4fca78f04f33427b35c61655557dfa2f674b87e8ecf653927f3d34c",
+        "News headline": "BYND DEADLINE: ROSEN, A RESPECTED AND LEADING FIRM, Encourages Beyond Meat, Inc. Investors with Losses to Secure Counsel Before Important July 10 Deadline in Securities Class Action - BYND - FOX 8 Local First",
+        "Date": "2023-07-08T16:00:00",
+        "Ticker": "DIS",
+        "Stock name": "DIS",
+        "Source": "google_news"
+    },
+    {
+        "Id": "68d99f5f41a075f7fee7f46749a31d6fd211fcfb9e0a6f574662e49c952ef538",
+        "News headline": "'Wife wants to give baby most unique name possible - she'll be a laughing stock' - The Mirror",
+        "Date": "2023-07-09T06:00:00",
+        "Ticker": "DIS",
+        "Stock name": "DIS",
+        "Source": "google_news"
+    },
+    {
+        "Id": "7d1dec94e7a39cf23f7578c3c79ee009f19d8edfcca25e19a345fb924b465d0c",
+        "News headline": "Missed all our net zero targets? No sweat. Rishi Sunak is 100% on it - The Guardian",
+        "Date": "2023-07-09T08:58:00",
+        "Ticker": "DIS",
+        "Stock name": "DIS",
+        "Source": "google_news"
+    },
+    {
+        "Id": "0e32bcb1789cea4f8d5a6cc2b5ac5445831f019b268ab006ed05ff3246cc46b2",
+        "News headline": "Letters: Affirmative action does not solve inequality — better schooling does - National Post",
+        "Date": "2023-07-09T09:32:04",
+        "Ticker": "DIS",
+        "Stock name": "DIS",
+        "Source": "google_news"
+    },
+    {
+        "Id": "519200163707f7735e9129c505ef8f656c61e3e94d5078c713ed21d9c2e59983",
+        "News headline": "Editor's take: The week that was — July 3-8 - DealStreetAsia",
+        "Date": "2023-07-09T01:31:10",
+        "Ticker": "DIS",
+        "Stock name": "DIS",
+        "Source": "google_news"
+    },
+    {
+        "Id": "8707ff676bd0cc43206601adaad6c252245b22da70007dbcbaf6877e5e4c6415",
+        "News headline": "Nam Kee Chicken Rice Brothers Are Unbothered By Comments On Tattoos, Say Good Service Is More Important - MS News",
+        "Date": "2023-07-09T09:01:23",
+        "Ticker": "DIS",
+        "Stock name": "DIS",
+        "Source": "google_news"
+    },
+    {
+        "Id": "d627b02f68bf9c9965901f0b4d0f09ae497685dc62ed1ef314d3bca01152fa0a",
+        "News headline": "ostrý predpoveď balkón titan the robot fake príliv podmorský škrabanec - Magazine 99",
+        "Date": "2023-07-09T07:52:50",
+        "Ticker": "DIS",
+        "Stock name": "DIS",
+        "Source": "google_news"
+    },
+    {
+        "Id": "5789470b20dfbd84a87c9f2e23bbd7afb4876226c9d142ed121fc279ea3c5451",
+        "News headline": "NFLX Stock Price Analysis: Bearish Accumulation a Threat? - The Coin Republic",
+        "Date": "2023-07-08T17:03:00",
+        "Ticker": "NFLX",
+        "Stock name": "NFLX",
+        "Source": "google_news"
+    },
+    {
+        "Id": "2dd55fb0326fd0960e481e4ec3e66fa62d3e9c2cf33a5048d540200a152bb8ff",
+        "News headline": "Guru Fundamental Report for NFLX - Nasdaq",
+        "Date": "2023-07-09T13:11:00",
+        "Ticker": "NFLX",
+        "Stock name": "NFLX",
+        "Source": "google_news"
+    },
+    {
+        "Id": "ab78be1ce654ff40695c8617e51f6a0216ceb316bb6b16d8b3e29e81fc7390ff",
+        "News headline": "Why Netflix Climbed 11.5% in June - The Motley Fool",
+        "Date": "2023-07-09T10:15:00",
+        "Ticker": "NFLX",
+        "Stock name": "NFLX",
+        "Source": "google_news"
+    },
+    {
+        "Id": "be013330f69bb94b7852429f65604f94d985f1f4e219fb8a6936958859ac9268",
+        "News headline": "Oceanwide to Sell Hawaii Project for $134M - The Real Deal",
+        "Date": "2023-07-09T11:00:00",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "65335c6ee5dfd4b12ee9d1f741cf4a109d983938710eaa41262580729e392d24",
+        "News headline": "UFC 290: Robbie Lawler caps legendary career with 1st-round KO of Niko Price - Yahoo News Canada",
+        "Date": "2023-07-09T02:00:00",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "97aef0706fde51a5678b7f0fa22320bc0c1795267804fc73df3513d361855a17",
+        "News headline": "Saira Banu misses her 22-inch waistline; shares an old photo on Instagram - India Today NE",
+        "Date": "2023-07-09T10:54:23",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "73e72392e945dcd8b95da328dd245c101e1fe1c172a8d60519622075e7c04cd0",
+        "News headline": "Anupam Kher to portray Rabindranath Tagore in next film, shares first look - Mathrubhumi English",
+        "Date": "2023-07-09T00:56:35",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "5ea3310efb3667ef7b9f8549a8fc80b208b18ce3e2dc5cb336c95cc942891fd0",
+        "News headline": "‘The f*** you gonna do’: UFC champ erupts in bizarre N-word rant as fuse lit for Syd showdown - Fox Sports",
+        "Date": "2023-07-09T06:17:38",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "146f8d47ca759704a6e0e41fa7ed83ecbcd02a441a193e8f46cb5c937a07d0a6",
+        "News headline": "‘Get back up’: Aussie backflips on retirement after gutting loss as rival shares classy response - Fox Sports",
+        "Date": "2023-07-09T02:12:03",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "abccffefa6472a940dbb606d276a1f761bc79d9edad3ea1eaa28466c0181c0d2",
+        "News headline": "Attention Must Be Paid: Richard Loo - The-Solute",
+        "Date": "2023-07-08T22:00:39",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "d4d38181307ecaedd413ee39d17dd0b07c08f79ffc0b89ff65bebb50a7e28e1d",
+        "News headline": "Danish Pandor: For me, surely the definition of success has changed - Hindustan Times",
+        "Date": "2023-07-09T07:57:29",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "616b174c391053a6a64638a0649035d49106370470e8e64d7f910e4a3b6c036c",
+        "News headline": "Bobby@ 50 - The Tribune India",
+        "Date": "2023-07-09T05:22:00",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "a877bee7e335a0dc598378bd39eefb23de475ab9d5a945d766c0e331be231ede",
+        "News headline": "Dodgers' Betts hits 10th leadoff homer to tie major league mark for most in first half of season - Yahoo News Canada",
+        "Date": "2023-07-09T04:35:00",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "1d804896eca6ad98a0a99b6b03a197d1046d9d5e8f3fc851ebf63d2d972fdb0d",
+        "News headline": "PHOTOS: Best images from Thunder’s 91-80 summer league win over Mavericks - Yahoo Sports",
+        "Date": "2023-07-09T00:17:00",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "def96a37bbb71f83e909903df8cb524cc37339bfb7a57426b5e42cac0aa5ab4c",
+        "News headline": "The Sikh Neighbours at Our Hajj Farewell - Kashmir Observer",
+        "Date": "2023-07-08T16:08:00",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "5cf4bb400ee004d2a5e6a3075341865f8d1991443df4e0c2d6dfd144036dff83",
+        "News headline": "Upcoming events in Napa Valley - Napa Valley Register",
+        "Date": "2023-07-09T11:30:00",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "859133a881517d1a6dc03f44e9564e604774cd1ddbef4be57f903b4f38618a87",
+        "News headline": "Defeat of Congress in Rajasthan evident, party in 'bye-bye' mode: Prime Minister Narendra Modi - Indiatimes.com",
+        "Date": "2023-07-09T03:43:00",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "4004c2700a70d67197d77875bbc038cc6a88393a6aa396e1706ffd560d029c62",
+        "News headline": "Never date someone broke? Here’s our favorite response - ANCX",
+        "Date": "2023-07-09T02:58:33",
+        "Ticker": "KO",
+        "Stock name": "KO",
+        "Source": "google_news"
+    },
+    {
+        "Id": "81c216829c5ddd1295bebc4dc82720a651ea1bfbae1119d1ce3aa76ce19bb6ee",
+        "News headline": "NIKE, Inc. (NYSE:NKE) Shares Sold by McAdam LLC - Defense World",
+        "Date": "2023-07-09T10:42:47",
+        "Ticker": "NKE",
+        "Stock name": "NKE",
+        "Source": "google_news"
+    },
+    {
+        "Id": "9fdddaf128a412febc01ac18be05ccda5c0a3a08da9d39465b9e6e2c737e5609",
+        "News headline": "Teenager 'embarrassed' after being turned away from McDonald's without having ID - Daily Record",
+        "Date": "2023-07-09T09:04:14",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "cd756fd639600f595b73c81e6f2644965582a7c78e740f6a536101637517ffe4",
+        "News headline": "How To Pair Fast Food And Wine Like A Sophisticated Sommelier - Mashed",
+        "Date": "2023-07-09T15:03:53",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "3c6622c5d73d19e7648121a2d8ab6fe0397250798b08ad1b534f76631a32f6e0",
+        "News headline": "Rain News Live Updates: At least 14 killed as monsoon fury batters northern India; Amit Shah speaks to LGs of Delhi and JK, takes stock of rain situation - Times of India",
+        "Date": "2023-07-09T12:09:03",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "1a360e1d131f87ff66275067a697a61a86893219b5a31df2bd74721769629ba9",
+        "News headline": "Aberdeen's Shiprow Village to host popular street food pop up this summer - Aberdeen Live",
+        "Date": "2023-07-09T08:09:30",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "bcab91d225b5cc053aa3abe2e934d9668c4e5a9ae33fd4b5d9d7968d258d618e",
+        "News headline": "King's Cross wine bar co-owned by Idris Elba gets slapped with one-star hygiene score - The Mirror",
+        "Date": "2023-07-08T18:12:15",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "3c44e0ff57baa0e2c6f18eb25eb84204f881d4af2ae96a5f750bf4225b2d6052",
+        "News headline": "Huge rise in soldiers seeking mental health support as cost of living crisis blamed - The Mirror",
+        "Date": "2023-07-08T16:53:09",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "1c37e8c65cefbdfe80b37e6edb7840f211da36e060207f9b03dabe6dcfc29f5f",
+        "News headline": "Danny Dyer plans to wind up his wife by leaving £500,000 to his bulldog Debbie - The Mirror",
+        "Date": "2023-07-08T20:01:14",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "775cf0f11b294e3152b9c9c86a0f63b31be49a7af936e2e672a9b978ccf63f7e",
+        "News headline": "I tried Aldi's £3 dupe of a £56 Diptyque candle and it made my living room smell amazing - Liverpool Echo",
+        "Date": "2023-07-09T04:00:00",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "f9c807bfb93c2375e1781326f4559d3f609959afc51ed6cf7b1168a723a350b5",
+        "News headline": "The Bear Characters Ranked By Likability - Looper",
+        "Date": "2023-07-08T18:15:00",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "ff4f8b7620a7e9603e351417836285f7fb232c7bed79af710f84b1eabfee573d",
+        "News headline": "'I run the world's first gourmet water bar with vegan H2O and aqua cocktails' - The Mirror",
+        "Date": "2023-07-09T07:15:00",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "5c8b401f7324c8e3334d979da5044c9524f96a37b118e3201a04e7d229f67932",
+        "News headline": "Food hygiene ratings for every shop and cafe at Beamish Museum - Chronicle Live",
+        "Date": "2023-07-09T05:00:00",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "685d3a8de85487258bfe29ab2630f8989876e1e18a0cafb595576ba1202a3e0a",
+        "News headline": "Pervert who preyed on schoolgirls had vile child abuse images on his phone - Liverpool Echo",
+        "Date": "2023-07-08T17:30:04",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
+        "Source": "google_news"
+    },
+    {
+        "Id": "87d5ac995d48457c1ac6e682c3aad05c929b49c77e7027faa79100b5809f9e01",
+        "News headline": "Businesses in Newcastle up for sale including a £350k repair garage and a £24k sandwich bar - Chronicle Live",
+        "Date": "2023-07-09T06:34:26",
+        "Ticker": "MCD",
+        "Stock name": "MCD",
         "Source": "google_news"
     }
 ]
