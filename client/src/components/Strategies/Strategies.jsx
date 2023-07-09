@@ -38,7 +38,7 @@ const FixedHeightPaper = styled(StyledPaper)({
 
 const Strategies = () => {
   const [collaborative, setcollaborative] = useState("");
-  const [aifundparams, setaifundparams] = useState("");
+  const [aifundbudget, setAiFundBudget] = useState("");
 
   const [strategyName, setstrategyName] = useState("");
   const [responseReceived, setResponseReceived] = useState(false);
@@ -56,13 +56,69 @@ const Strategies = () => {
   };
 
 
-  const handleAIFundSubmit = () => {
+  const handleAIFundSubmit = async () => {
+    setLoading(true);
+  
+    const headers = {
+      "x-auth-token": userData.token,
+    };
+  
+    const userID = userData.user.id;
+    const url = config.base_url + "/api/strategies/aifund/enable";
+  
+    try {
+      const response = await Axios.post(url, {userID, strategyName: "AI Fund", budget: aifundbudget}, {headers});
+    
+      if (response.status === 200) {
+        if (response.data.status === "success") {
+          setResponseReceived(true);
+          setOutput(response.data.orders); 
+        } else {
+          setError(response.data.message);
+        }
+      }
+      
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  
     setAiFundStrategyEnabled(true);
   };
-
-  const handleAIFundDisable = () => {
+  
+  
+  const handleAIFundDisable = async () => {
+    setLoading(true);
+  
+    const headers = {
+      "x-auth-token": userData.token,
+    };
+  
+    const userID = userData.user.id;
+    const url = config.base_url + "/api/strategies/aifund/disable";
+  
+    try {
+      const response = await Axios.post(url, {userID, strategyName: "AI Fund"}, {headers});
+    
+      if (response.status === 200) {
+        if (response.data.status === "success") {
+          setResponseReceived(true);
+          setOutput(response.data.orders); 
+        } else {
+          setError(response.data.message);
+        }
+      }
+      
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  
     setAiFundStrategyEnabled(false);
   };
+  
 
 
 
@@ -103,6 +159,8 @@ const Strategies = () => {
 };
 
 
+
+
 return (
   <Container sx={{ pt: 8, pb: 8 }}>
     <Typography variant="subtitle1">Add a trading strategy for automated trading</Typography>
@@ -125,12 +183,10 @@ return (
                 Here you can setup your AI fund strategy:
               </Typography>
               <TextField
-                  multiline
-                  rows={4}
                   variant="outlined"
-                  label="Set up the parameters for your AI fund strategy here"
-                  value={aifundparams}
-                  onChange={(e) => setaifundparams(e.target.value)}
+                  label="Enter here the amount of money you want to invest in this strategy"
+                  value={aifundbudget}
+                  onChange={(e) => setAiFundBudget(e.target.value)}
                   fullWidth
                   margin="normal"
                 />

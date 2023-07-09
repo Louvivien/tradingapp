@@ -270,6 +270,130 @@ exports.createCollaborative = async (req, res) => {
   };
  
 
+  exports.enableAIFund = async (req, res) => {
+    return new Promise(async (resolve, reject) => {
+      try {
+  
+        // console.log ('req.body', req.body);
+        // let input = req.body.collaborative;
+        let UserID = req.body.userID;
+        // console.log ('UserID', UserID);
+        //We will use those 2 variables to create a new portfolio
+        let strategyName = req.body.strategyName;
+        // let strategy = input;
+  
+
+  
+  
+        // Function to get the results from the scoring model
+        
+        // go here
+        // /Users/vivien/Documents/tradingapp/server/data/scoreResults.json
+        // get the 5 highest scoring assets and get the tickers
+
+     
+        //Check if a portfolio with the same name already exists
+        //if it does, get the 
+
+
+
+
+
+  
+        //send the orders to the trading platform
+  
+        console.log('Order: ', JSON.stringify(parsedJson, null, 2));
+  
+        const alpacaConfig = await setAlpaca(UserID);
+        console.log("config key done");
+  
+        const alpacaApi = new Alpaca(alpacaConfig);
+        console.log("connected to alpaca");
+  
+        //send the orders to alpaca
+        let orderPromises = parsedJson.map(asset => {
+          let symbol = asset['Asset ticker'];
+          if (!/^[A-Za-z]+$/.test(symbol)) {
+            symbol = asset['Asset ticker'].match(/^[A-Za-z]+/)[0];
+          }
+          let qty = Math.floor(asset['Quantity']);
+  
+          if (qty > 0) {
+            return retry(() => {
+              return axios({
+                method: 'post',
+                url: alpacaConfig.apiURL + '/v2/orders',
+                headers: {
+                  'APCA-API-KEY-ID': alpacaConfig.keyId,
+                  'APCA-API-SECRET-KEY': alpacaConfig.secretKey
+                },
+                data: {
+                  symbol: symbol,
+                  qty: qty,
+                  side: 'buy',
+                  type: 'market',
+                  time_in_force: 'gtc'
+                }
+              }).then((response) => {
+                // console.log(response.data);
+                console.log(`Order of ${qty} shares for ${symbol} has been placed. Order ID: ${response.data.client_order_id}`);
+                return { qty: qty, symbol: symbol, orderID: response.data.client_order_id};
+              });
+            }, 5, 2000).catch((error) => { // Retry up to 5 times, with a delay of 2 seconds between attempts
+              console.error(`Failed to place order for ${symbol}: ${error}`)
+              return null;
+            })
+          } else {
+            console.log(`Quantity for ${symbol} is ${qty}. Order not placed.`);
+            return null;
+          }
+        })
+  
+        //get the response from alpaca
+        Promise.all(orderPromises).then(orders => {
+          // Filter out any null values
+          orders = orders.filter(order => order !== null);
+          
+          // If all orders failed, return an error message
+          if (orders.length === 0) {
+            console.error('Failed to place all orders.');
+            return res.status(400).json({
+              status: "fail",
+              message: "Failed to place orders. Try again.",
+            });
+          }
+        
+          // If some orders were successful, continue with the rest of the code
+          this.addPortfolio(strategy, strategyName, orders, UserID);
+          return res.status(200).json({
+            status: "success",
+            orders: orders,
+          });
+        }).catch(error => {
+          console.error(`Error: ${error}`);
+          return res.status(400).json({
+            status: "fail",
+            message: `Something unexpected happened: ${error.message}`,
+          });
+        });
+        
+  
+  
+  
+      } catch (error) {
+        console.error(`Error: ${error}`);
+        return res.status(200).json({
+          status: "fail",
+          message: `Something unexpected happened: ${error.message}`,
+        });
+      }
+  
+    });
+  
+    }
+
+
+
 exports.addPortfolio = async (strategyinput, strategyName, orders, UserID) => {
   console.log('strategyName', strategyName);
   console.log('orders', orders);
