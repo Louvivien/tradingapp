@@ -259,10 +259,9 @@ def main(ticker='AAPL', period=1):
     
     return news_data
 
-
 if __name__ == '__main__':
-    # Load the tickers from the stocks.json file
-    with open('stocks.json', 'r') as file:
+    # Load the tickers from the stocksData.json file
+    with open('../data/stocksData.json', 'r') as file:
         data = json.load(file)
         tickers = data['stocks']
 
