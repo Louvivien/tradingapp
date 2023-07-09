@@ -47,10 +47,21 @@ const Strategies = () => {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [value, setValue] = useState(0);
+  const [aiFundStrategyEnabled, setAiFundStrategyEnabled] = useState(false);
+
 
 
   const handleChange = (event, newValue) => {
     setValue(newValue);
+  };
+
+
+  const handleAIFundSubmit = () => {
+    setAiFundStrategyEnabled(true);
+  };
+
+  const handleAIFundDisable = () => {
+    setAiFundStrategyEnabled(false);
   };
 
 
@@ -103,38 +114,54 @@ return (
       <Tab label="AI Fund Strategy" />
       <Tab label="Collaborative Strategy" />
     </Tabs>
-
     {value === 0 && (
+      <StyledPaper>
+        <Box>
+          <Title>AI Fund Strategy</Title>
+          {!aiFundStrategyEnabled ? (
+            <>
+              <Typography color="textSecondary" align="left">Setup your AI fund strategy</Typography>
+              <Typography variant="body1" size="small">
+                Here you can setup your AI fund strategy:
+              </Typography>
+              <TextField
+                  multiline
+                  rows={4}
+                  variant="outlined"
+                  label="Set up the parameters for your AI fund strategy here"
+                  value={aifundparams}
+                  onChange={(e) => setaifundparams(e.target.value)}
+                  fullWidth
+                  margin="normal"
+                />
+              <br />
+              <Button variant="contained" color="primary" className={styles.submit} onClick={handleAIFundSubmit}>
+                Create this strategy
+              </Button>
+            </>
+          ) : (
+            <>
+              <div style={{border: '1px solid #ccc', padding: '10px', borderRadius: '5px'}}>
+                <p>This strategy is enabled, you can find the stocks from this strategy in your dashboard</p>
+                <p>It buys and sell stocks selected by AI based on a sentiment analysis of news headlines</p>
+                <p>Based on the sentiment analysis, a scoring is done of the stocks</p>
+                <p>The strategy buys only the stocks with the most positve headlines</p>
+                <p>The portfolio is automatically rebalanced every day base on market news headlines.</p>
+              </div>
+              <br />
+              <Button variant="contained" color="success" >
+                Strategy Enabled
+              </Button>
+              <Button variant="contained" color="error" onClick={handleAIFundDisable}>
+                X
+              </Button>
+            </>
 
-<FixedHeightPaper>
-
-      <Box>
-        <Title>AI Fund Strategy</Title>
-        <Typography color="textSecondary" align="left">Setup your AI fund strategy</Typography>
-        <Typography variant="body1" size="small">
-          Here you can setup your AI fund strategy:
-        </Typography>
-
-        <TextField
-            multiline
-            rows={4}
-            variant="outlined"
-            label="Set up the parameters for your AI fund strategy here"
-            value={aifundparams}
-            onChange={(e) => setaifundparams(e.target.value)}
-            fullWidth
-            margin="normal"
-          />
-        <br />
 
 
-        
-        <Button variant="contained" color="primary" className={styles.submit}>
-          Create this strategy
-        </Button>
-      </Box>
-      </FixedHeightPaper>
-
+          )}
+        </Box>
+      </StyledPaper>
     )}
 
     {value === 1 && (
