@@ -31,6 +31,18 @@ Product Management: Productboard, Notion
 
 Project Management: Jira
 
+## Hackathons
+Friday, May 26 2023 - 6:00 PM
+Anthropic AI Hackathon
+Build AI Apps with leading AI models!
+[Submitted project](https://lablab.ai/event/anthropic-ai-hackathon/ai-traders/ai-trading-app)
+
+Friday, July 7 2023 - 6:00 PM
+Google Cloud Vertex AI Hackathon
+Be the first to build an AI App on Google’s AI models!
+[Submitted project](https://lablab.ai/event/google-vertex-ai-hackathon/ai-traders/ai-traders)
+
+
 ## Installation
 Make sure you have NodeJS installed. You can check your Node.js version by running the command node -v in your terminal. If your version is older than 14.20.1, you will need to update Node.js. Please make sure that node -v gives you a version after 14.20.1 before doing anything else. 
 
