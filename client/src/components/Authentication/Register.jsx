@@ -79,63 +79,65 @@ const Register = () => {
         justify="center"
         style={{ minHeight: "100vh" }}
       >
-        <Box width="70vh" boxShadow={1}>
-          <Card className={styles.paper}>
-            <CardContent>
-              <Typography component="h1" variant="h5">
-                Register
-              </Typography>
-              <form className={styles.form} onSubmit={onSubmit}>
-                <TextField
-                  variant="outlined"
-                  margin="normal"
-                  required
-                  fullWidth
-                  id="username"
-                  label="Username"
-                  name="username"
-                  autoComplete="username"
-                  error={usernameError.length > 0 ? true : false}
-                  helperText={usernameError}
-                  value={username}
-                  onChange={onChangeUsername}
-                />
-                <TextField
-                  variant="outlined"
-                  margin="normal"
-                  required
-                  fullWidth
-                  name="password"
-                  label="Password"
-                  type="password"
-                  id="password"
-                  autoComplete="current-password"
-                  error={passwordError.length > 0 ? true : false}
-                  helperText={passwordError}
-                  value={password}
-                  onChange={onChangePassword}
-                />
-                <Box display="flex" justifyContent="center">
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    color="primary"
-                    className={styles.submit}
-                  >
-                    Register
-                  </Button>
-                </Box>
-              </form>
-              <Grid container justify="center">
-                <Grid item>
-                  <Link href="/login" variant="body2">
-                    Already have an account?
-                  </Link>
+        <Grid item xs={12} sm={8} md={6} lg={4}>
+          <Box boxShadow={1}>
+            <Card className={styles.paper}>
+              <CardContent>
+                <Typography component="h1" variant="h5">
+                  Register
+                </Typography>
+                <form className={styles.form} onSubmit={onSubmit}>
+                  <TextField
+                    variant="outlined"
+                    margin="normal"
+                    required
+                    fullWidth
+                    id="username"
+                    label="Username"
+                    name="username"
+                    autoComplete="username"
+                    error={usernameError.length > 0 ? true : false}
+                    helperText={usernameError}
+                    value={username}
+                    onChange={onChangeUsername}
+                  />
+                  <TextField
+                    variant="outlined"
+                    margin="normal"
+                    required
+                    fullWidth
+                    name="password"
+                    label="Password"
+                    type="password"
+                    id="password"
+                    autoComplete="current-password"
+                    error={passwordError.length > 0 ? true : false}
+                    helperText={passwordError}
+                    value={password}
+                    onChange={onChangePassword}
+                  />
+                  <Box display="flex" justifyContent="center">
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      color="primary"
+                      className={styles.submit}
+                    >
+                      Register
+                    </Button>
+                  </Box>
+                </form>
+                <Grid container justify="center">
+                  <Grid item>
+                    <Link href="/login" variant="body2">
+                      Already have an account?
+                    </Link>
+                  </Grid>
                 </Grid>
-              </Grid>
-            </CardContent>
-          </Card>
-        </Box>
+              </CardContent>
+            </Card>
+          </Box>
+        </Grid>
       </Grid>
     </div>
   );

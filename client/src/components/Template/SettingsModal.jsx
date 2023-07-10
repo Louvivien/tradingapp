@@ -107,112 +107,114 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
       justify="center"
       style={{ minHeight: "100vh", marginTop: "95px" }} 
       >
-      <Box width="60vh" boxShadow={1}>
-        <Card>
-          <CardHeader
-            action={
-              <IconButton aria-label="Close" onClick={handleClick}>
-                <CloseIcon />
-              </IconButton>
-            }
-          />
-          <CardContent>
-            <Typography component="h1" variant="h6" align="center">
-              Settings
-            </Typography>
-            <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
-              <TextField
-                variant="outlined"
-                margin="normal"
-                fullWidth
-                disabled
-                id="Username"
-                label="Username"
-                name="Username"
-                autoComplete="Username"
-                value={userData.user.username}
-              />
-              {/* <TextField
-                variant="outlined"
-                margin="normal"
-                fullWidth
-                disabled
-                id="balance"
-                label="Cash Balance"
-                name="balance"
-                autoComplete="balance"
-                value={userData.user.balance}
-              /> */}
-               <TextField
-                variant="outlined"
-                margin="normal"
-                fullWidth
-                id="ALPACA_API_KEY_ID"
-                label="ALPACA_API_KEY_ID"
-                name="ALPACA_API_KEY_ID"
-                autoComplete="ALPACA_API_KEY_ID"
-                value={ALPACA_API_KEY_ID}
-                onChange={handleApiKeyChange}
-
+      <Grid item xs={12} sm={8} md={6} lg={4}>
+        <Box boxShadow={1}>
+          <Card>
+            <CardHeader
+              action={
+                <IconButton aria-label="Close" onClick={handleClick}>
+                  <CloseIcon />
+                </IconButton>
+              }
+            />
+            <CardContent>
+              <Typography component="h1" variant="h6" align="center">
+                Settings
+              </Typography>
+              <form className={styles.form} onSubmit={(e) => e.preventDefault()}>
+                <TextField
+                  variant="outlined"
+                  margin="normal"
+                  fullWidth
+                  disabled
+                  id="Username"
+                  label="Username"
+                  name="Username"
+                  autoComplete="Username"
+                  value={userData.user.username}
                 />
-              <TextField
-                variant="outlined"
-                margin="normal"
-                fullWidth
-                id="ALPACA_API_SECRET_KEY"
-                label="ALPACA_API_SECRET_KEY"
-                name="ALPACA_API_SECRET_KEY"
-                autoComplete="ALPACA_API_SECRET_KEY"
-                value={ALPACA_API_SECRET_KEY}
-                onChange={handleApiSecretKeyChange}
+                {/* <TextField
+                  variant="outlined"
+                  margin="normal"
+                  fullWidth
+                  disabled
+                  id="balance"
+                  label="Cash Balance"
+                  name="balance"
+                  autoComplete="balance"
+                  value={userData.user.balance}
+                /> */}
+                 <TextField
+                  variant="outlined"
+                  margin="normal"
+                  fullWidth
+                  id="ALPACA_API_KEY_ID"
+                  label="ALPACA_API_KEY_ID"
+                  name="ALPACA_API_KEY_ID"
+                  autoComplete="ALPACA_API_KEY_ID"
+                  value={ALPACA_API_KEY_ID}
+                  onChange={handleApiKeyChange}
 
-                />
-            </form>
-            <br />
-            <Box display="flex" justifyContent="center">
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                className={styles.reset}
-                onClick={handleEditOn}
-              >
-                Edit My Account
-              </Button>
-            </Box>
-            {activateSafetyButton && (
-              <div>
-                <Typography component="p" variant="caption" align="center">
-                  This is a permanent change. If you are sure press Edit.
-                </Typography>
-                <Box display="flex" justifyContent="center">
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    color="primary"
-                    className={styles.reset}
-                    onClick={editAccount}
-                  >
-                    Edit
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    color="primary"
-                    className={styles.confirm}
-                    onClick={handleEditOff}
-                  >
-                    Cancel
-                  </Button>
-                </Box>
-              </div>
-            )}
+                  />
+                <TextField
+                  variant="outlined"
+                  margin="normal"
+                  fullWidth
+                  id="ALPACA_API_SECRET_KEY"
+                  label="ALPACA_API_SECRET_KEY"
+                  name="ALPACA_API_SECRET_KEY"
+                  autoComplete="ALPACA_API_SECRET_KEY"
+                  value={ALPACA_API_SECRET_KEY}
+                  onChange={handleApiSecretKeyChange}
 
-            <br />
-            <br />
-          </CardContent>
-        </Card>
-      </Box>
+                  />
+              </form>
+              <br />
+              <Box display="flex" justifyContent="center">
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                  className={styles.reset}
+                  onClick={handleEditOn}
+                >
+                  Edit My Account
+                </Button>
+              </Box>
+              {activateSafetyButton && (
+                <div>
+                  <Typography component="p" variant="caption" align="center">
+                    This is a permanent change. If you are sure press Edit.
+                  </Typography>
+                  <Box display="flex" justifyContent="center">
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      color="primary"
+                      className={styles.reset}
+                      onClick={editAccount}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      type="submit"
+                      variant="contained"
+                      color="primary"
+                      className={styles.confirm}
+                      onClick={handleEditOff}
+                    >
+                      Cancel
+                    </Button>
+                  </Box>
+                </div>
+              )}
+
+              <br />
+              <br />
+            </CardContent>
+          </Card>
+        </Box>
+      </Grid>
     </Grid>
   );
 };
