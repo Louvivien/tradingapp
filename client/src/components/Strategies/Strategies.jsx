@@ -13,6 +13,7 @@ import {
   Paper,
   Button,
   Tab,
+  Alert,
   Tabs
 } from "@mui/material";
 import { styled } from "@mui/system";
@@ -250,7 +251,7 @@ return (
     )}
 
     {value === 1 && (
-      <FixedHeightPaper>
+      <StyledPaper>
         
     <Box>
       <Title>Collaborative strategy</Title>
@@ -281,8 +282,15 @@ return (
           </div>  
 
         ) : (
+          
 
         <div>
+          <br />
+          <Alert severity="warning">We are currently experiencing technical{" "}         
+          <Link href="https://github.com/Louvivien/tradingapp/issues/4" target="_blank" rel="noopener noreferrer">
+          issues
+      </Link> with this feature </Alert>
+          <br />
     <Typography variant="body1" size="small">
       Here you can copy paste a strategy from{" "}  
       <Link href="https://www.composer.trade/" target="_blank" rel="noopener noreferrer">
@@ -325,7 +333,7 @@ return (
         )}
 
     </Box>
-      </FixedHeightPaper>
+    </StyledPaper>
     )}
 
   </Container>
