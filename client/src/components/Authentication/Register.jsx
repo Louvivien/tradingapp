@@ -22,6 +22,7 @@ const Register = () => {
   const [usernameError, setUsernameError] = useState("");
   const [password, setPassword] = useState("");
   const [passwordError, setPasswordError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const onChangeUsername = (e) => {
     const newUsername = e.target.value;
@@ -33,7 +34,6 @@ const Register = () => {
       setUsernameError("");
     }
   };
-
 
   const onChangePassword = (e) => {
     const newPassword = e.target.value;
@@ -48,23 +48,31 @@ const Register = () => {
 
   const onSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     if (!usernameError && !passwordError) {
       const newUser = { username, password };
       const url = config.base_url + "/api/auth/register";
-      const registerRes = await Axios.post(url, newUser);
-
-      if (registerRes.data.status === "fail") {
-        if (!registerRes.data.type) {
-          setPasswordError(registerRes.data.message);
-          setUsernameError(registerRes.data.message);
-        } else if (registerRes.data.type === "username") {
-          setUsernameError(registerRes.data.message);
-        } else if (registerRes.data.type === "password") {
-          setPasswordError(registerRes.data.message);
+      try {
+        const registerRes = await Axios.post(url, newUser);
+        if (registerRes.data.status === "fail") {
+          if (!registerRes.data.type) {
+            setPasswordError(registerRes.data.message);
+            setUsernameError(registerRes.data.message);
+          } else if (registerRes.data.type === "username") {
+            setUsernameError(registerRes.data.message);
+          } else if (registerRes.data.type === "password") {
+            setPasswordError(registerRes.data.message);
+          }
+        } else {
+          navigate("/login");
         }
-      } else {
-        navigate("/login");
+      } catch (error) {
+        console.error(error);
+      } finally {
+        setLoading(false);
       }
+    } else {
+      setLoading(false);
     }
   };
 
@@ -117,14 +125,18 @@ const Register = () => {
                     onChange={onChangePassword}
                   />
                   <Box display="flex" justifyContent="center">
-                    <Button
-                      type="submit"
-                      variant="contained"
-                      color="primary"
-                      className={styles.submit}
-                    >
-                      Register
-                    </Button>
+                    {loading ? (
+                      <Typography variant="body1">Registering...</Typography>
+                    ) : (
+                      <Button
+                        type="submit"
+                        variant="contained"
+                        color="primary"
+                        className={styles.submit}
+                      >
+                        Register
+                      </Button>
+                    )}
                   </Box>
                 </form>
                 <Grid container justify="center">
