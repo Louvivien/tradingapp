@@ -118,7 +118,12 @@ def main():
         if not proxy_list:
             print("No more proxy URLs left in the list.")
             break
-        url = random.choice([url for url in proxy_list if not url.startswith("USELESS:")])
+        filtered_proxy_list = [url for url in proxy_list if not url.startswith("USELESS:")]
+        if filtered_proxy_list:  # Check if the list is not empty
+            url = random.choice(filtered_proxy_list)
+        else:
+            print("No valid proxy URLs left in the list.")
+            break  # or continue, or return, or raise an exception, depending on what you want to do in this case
         proxies = get_proxies(url)
         if proxies is None:  # If get_proxies returned None, skip this iteration
             continue
