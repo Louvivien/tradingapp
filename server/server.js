@@ -8,6 +8,8 @@ const Alpaca = require('@alpacahq/alpaca-trade-api');
 const cors = require("cors");
 const cron = require('node-cron');
 const { spawn } = require('child_process');
+const { startProxies, scheduleNewsFromStocksList, scheduleSentimentVertex } = require('./scheduler');
+
 
 
 const app = express();
@@ -122,64 +124,11 @@ setAlpaca().then(alpacaConfig => {
 
 
 // Scheduler
-
-// Function to run the proxy machine
-function startProxies(scriptPath) {
-  console.log(`Starting proxy machine ${scriptPath}...`);
-  const python = spawn('python', [scriptPath]);
-  
-  python.stdout.on('data', (data) => {
-    console.log(`stdout: ${data}`);
-  });
-  
-  python.stderr.on('data', (data) => {
-    console.error(`stderr: ${data}`);
-  });
-  
-  python.on('close', (code) => {
-    console.log(`Python Script at ${scriptPath} finished with code ${code}`);
-  });
-}
-
 // Run Python scripts when the server starts
 startProxies('./scripts/proxy/proxies.py');
-
-
-// Schedule news_fromstockslist.py to run every day at 1:00 AM
-cron.schedule('0 1 * * *', () => {
-  console.log('Running news_fromstockslist.py...');
-  const python = spawn('python', ['./scripts//news_fromstockslist.py']);
-  
-  python.stdout.on('data', (data) => {
-    console.log(`stdout: ${data}`);
-  });
-  
-  python.stderr.on('data', (data) => {
-    console.error(`stderr: ${data}`);
-  });
-  
-  python.on('close', (code) => {
-    console.log(`news_fromstockslist.py finished with code ${code}`);
-  });
-});
-
-// Schedule sentiment_vertex.py to run every day at 1:30 AM
-cron.schedule('30 1 * * *', () => {
-  console.log('Running sentiment_vertex.py...');
-  const python = spawn('python', ['./scripts/sentiment_vertex.py']);
-  
-  python.stdout.on('data', (data) => {
-    console.log(`stdout: ${data}`);
-  });
-  
-  python.stderr.on('data', (data) => {
-    console.error(`stderr: ${data}`);
-  });
-  
-  python.on('close', (code) => {
-    console.log(`sentiment_vertex.py finished with code ${code}`);
-  });
-});
+// Schedule tasks
+scheduleNewsFromStocksList();
+scheduleSentimentVertex();
 
 
 
