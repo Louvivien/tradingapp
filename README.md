@@ -19,7 +19,7 @@ Credit for UI: [OktarianTB](https://github.com/OktarianTB/stock-trading-simulato
 Update: trailing orders removed
 
 ## Stack
-Backend: NodeJS with Python Scripts, Material 5, AI: ChatGPT, Claude, Vertex
+Backend: NodeJS with Python Scripts, Material 5, AI: ChatGPT (collaborative strategy feature), Claude & Vertex (AI Fund feature)
 
 Frontend: React
 
