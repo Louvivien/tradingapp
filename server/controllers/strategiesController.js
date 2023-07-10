@@ -730,8 +730,8 @@ else {
 exports.rebalanceAIFund = async (req, res) => {
   return new Promise(async (resolve, reject) => {
     try {
-      let UserID = req.body.userID;
-      let strategyName = req.body.strategyName;
+      let UserID = "6477cf0011fcccfa0365bc87";
+      let strategyName = "AI Fund";
       let strategy = "AiFund";
 
 
