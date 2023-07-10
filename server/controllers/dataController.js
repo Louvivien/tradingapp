@@ -219,7 +219,6 @@ exports.getPortfolioData = async (req, res) => {
   try {
     const response = await alpacaApi.get(alpacaConfig.apiURL+'/v2/account/portfolio/history?period=12M');
 
-
     return res.status(200).json({
       status: 'success',
       data: response.data,

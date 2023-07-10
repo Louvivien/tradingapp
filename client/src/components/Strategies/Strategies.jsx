@@ -231,7 +231,7 @@ return (
                 <p>It buys and sell stocks selected by AI based on a sentiment analysis of news headlines</p>
                 <p>Based on the sentiment analysis, a scoring is done of the stocks</p>
                 <p>The strategy buys only the stocks with the most positve headlines</p>
-                <p>The portfolio is automatically rebalanced every day base on market news headlines.</p>
+                <p>The portfolio is automatically rebalanced every day based on market news headlines.</p>
               </div>
               <br />
               <Button variant="contained" color="success" className={styles.submit} >
