@@ -27,7 +27,7 @@ Data: MongoDB
 
 Devops: Github, Vercel, Render, Google Cloud Build, Gitguardian
 
-Product Management: Productboard, Notion
+Product Management: Notion
 
 Project Management: Jira
 
@@ -144,7 +144,6 @@ Implement other brokers: deGiro
 Fix bugs: currently a blocking bug on the collaborative strategy feature
 
 ## Links
-Roadmap: [Productboard](https://roadmap.productboard.com/21c090eb-9351-42c4-a248-b59747aa299f)
 
 Discord: [Discord](https://discord.gg/Neu7KBrhV3)
 
