@@ -9,6 +9,9 @@ import PsychologyIcon from '@mui/icons-material/Psychology';
 
 
 const Navbar = ({ currentPage, setCurrentPage }) => {
+ 
+ 
+ 
   const onNewsButtonClick = (e) => {
     e.preventDefault();
     setCurrentPage("news");

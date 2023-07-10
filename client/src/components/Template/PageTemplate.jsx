@@ -83,8 +83,6 @@ const PageTemplate = () => {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [purchasedStocks, setPurchasedStocks] = useState([]);
   const [accountBalance, setAccountBalance] = useState([]);
-  const [orderList, setOrderList] = useState([]);
-  const [portfolios, setPortfolios] = useState([]);
 
   
 
@@ -106,50 +104,9 @@ const PageTemplate = () => {
     }
   };
 
-   //Function to get the list of orders from the server using Alpacas API
-  const getOrderList = async () => {
-    const url = config.base_url + `/api/order/${userData.user.id}`;
-    const headers = {
-      "x-auth-token": userData.token,
-    };
-
-    const response = await Axios.get(url, {
-      headers,
-    });
-
-    if (response.data.status === "success") {
-      setOrderList(response.data.orders);
-      
-    }
-  };
-
-
-  // Function to get the Strategy Portfolios from the server using MangoDB
-  const getPortfolio = async () => {
-    try {
-      const url = config.base_url + `/api/strategies/portfolios/${userData.user.id}`;
-      const headers = {
-        "x-auth-token": userData.token,
-      };
-  
-      const response = await Axios.get(url, { headers });
-  
-      if (response.data.status === "success") {
-        setPortfolios(response.data.portfolios);
-        console.log("Portfolios ", response.data.portfolios);
-      }
-    } catch (error) {
-      console.error('Error fetching portfolios:', error);
-    }
-  };
-  
-
-
 
   useEffect(() => {
     getPurchasedStocks();
-    getOrderList();
-    getPortfolio();
   }, []);
   
 
@@ -247,12 +204,10 @@ const PageTemplate = () => {
         {currentPage === "dashboard" && (
 
             //we pass the data to the Dashboard component
-          <Dashboard
-            purchasedStocks={purchasedStocks}
-            accountBalance={accountBalance}
-            orderList={orderList}
-            portfolios={portfolios}
-          />
+        <Dashboard
+          userData={userData}
+          setUserData={setUserData}
+        />
 
 
 

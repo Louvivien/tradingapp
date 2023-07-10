@@ -1,4 +1,6 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
+import Axios from "axios";
+import config from "../../config/Config";
 import styles from "../Template/PageTemplate.module.css";
 import clsx from "clsx";
 import { styled } from "@mui/system";
@@ -21,7 +23,77 @@ const FixedHeightPaper = styled(StyledPaper)({
   height: 350,
 });
 
-const Dashboard = ({ accountBalance, purchasedStocks, orderList, portfolios }) => {
+  const Dashboard = ({ userData, setUserData }) => {
+    const [purchasedStocks, setPurchasedStocks] = useState([]);
+    const [accountBalance, setAccountBalance] = useState([]);
+    const [orderList, setOrderList] = useState([]);
+    const [portfolios, setPortfolios] = useState([]);
+
+
+ //Function to get the list of purchased stocks from the server using Alpacas API
+  const getPurchasedStocks = async () => {
+    const url = config.base_url + `/api/stock/${userData.user.id}`;
+    const headers = {
+      "x-auth-token": userData.token,
+    };
+
+    const response = await Axios.get(url, {
+      headers,
+    });
+
+    if (response.data.status === "success") {
+      setPurchasedStocks(response.data.stocks);
+      // console.log("response.data.stocks ", response.data.stocks);
+      setAccountBalance(response.data.cash);
+    }
+  };
+
+   //Function to get the list of orders from the server using Alpacas API
+  const getOrderList = async () => {
+    const url = config.base_url + `/api/order/${userData.user.id}`;
+    const headers = {
+      "x-auth-token": userData.token,
+    };
+
+    const response = await Axios.get(url, {
+      headers,
+    });
+
+    if (response.data.status === "success") {
+      setOrderList(response.data.orders);
+      
+    }
+  };
+
+
+  // Function to get the Strategy Portfolios from the server using MangoDB
+  const getPortfolio = async () => {
+    try {
+      const url = config.base_url + `/api/strategies/portfolios/${userData.user.id}`;
+      const headers = {
+        "x-auth-token": userData.token,
+      };
+  
+      const response = await Axios.get(url, { headers });
+  
+      if (response.data.status === "success") {
+        setPortfolios(response.data.portfolios);
+          // eslint-disable-next-line no-console
+        console.log("Portfolios ", response.data.portfolios);
+      }
+    } catch (error) {
+        // eslint-disable-next-line no-console
+      console.error('Error fetching portfolios:', error);
+    }
+  };
+
+  useEffect(() => {
+    getPurchasedStocks();
+    getOrderList();
+    getPortfolio();
+  }, []);
+
+
   return (
     <Container maxWidth="lg" className={styles.container}>
       <Grid container spacing={3} marginTop="15px">

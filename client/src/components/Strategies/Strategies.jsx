@@ -49,6 +49,35 @@ const Strategies = () => {
   const [value, setValue] = useState(0);
   const [aiFundStrategyEnabled, setAiFundStrategyEnabled] = useState(false);
 
+  useEffect(() => {
+    const fetchStrategies = async () => {
+      const headers = {
+        "x-auth-token": userData.token,
+      };
+
+      const userID = userData.user.id;
+      const url = config.base_url + `/api/strategies/all/${userID}`;
+
+      try {
+        const response = await Axios.get(url, { headers });
+
+        if (response.status === 200) {
+          if (response.data.status === "success") {
+            const aiFundStrategy = response.data.strategies.find(strategy => strategy.strategy_id === "01");
+            if (aiFundStrategy) {
+              setAiFundStrategyEnabled(true);
+            }
+          } else {
+            setError(response.data.message);
+          }
+        }
+      } catch (err) {
+        setError(err.message);
+      }
+    };
+
+    fetchStrategies();
+  }, []); // Empty array means this effect runs once on component mount
 
 
   const handleChange = (event, newValue) => {
@@ -65,8 +94,6 @@ const Strategies = () => {
   
     const userID = userData.user.id;
     const url = config.base_url + "/api/strategies/aifund/enable";
-  
-    setAiFundStrategyEnabled(true); // Set the state immediately
   
     try {
       const response = await Axios.post(url, {userID, strategyName: "AI Fund", budget: aifundbudget}, {headers});
@@ -85,7 +112,10 @@ const Strategies = () => {
     } finally {
       setLoading(false);
     }
+  
+    setAiFundStrategyEnabled(true);
   };
+  
   
   const handleAIFundDisable = async () => {
     setLoading(true);
@@ -96,8 +126,6 @@ const Strategies = () => {
   
     const userID = userData.user.id;
     const url = config.base_url + "/api/strategies/aifund/disable";
-  
-    setAiFundStrategyEnabled(false); // Set the state immediately
   
     try {
       const response = await Axios.post(url, {userID, strategyName: "AI Fund"}, {headers});
@@ -116,6 +144,8 @@ const Strategies = () => {
     } finally {
       setLoading(false);
     }
+  
+    setAiFundStrategyEnabled(false);
   };
   
 
@@ -303,3 +333,4 @@ return (
 };
 
 export default Strategies;
+
