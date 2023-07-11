@@ -1481,7 +1481,7 @@ const getPricesData = async (stocks, marketOpen, userId) => {
         },
       });
 
-      console.log("response.data: ",response.data);
+      // console.log("response.data: ",response.data);
       // console.log("response.data.quote.ap: ",response.data.quote.ap);
       // console.log("response.data.trade.p: ",response.data.trade.p);
 
