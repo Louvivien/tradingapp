@@ -123,12 +123,12 @@ setAlpaca().then(alpacaConfig => {
 });
 
 
-// // Scheduler
-// // Run Python scripts when the server starts
-// startProxies('./scripts/proxy/proxies.py');
-// // Schedule tasks
-// scheduleNewsFromStocksList();
-// scheduleSentimentVertex();
+// Scheduler
+// Run Python scripts when the server starts
+startProxies('./scripts/proxy/proxies.py');
+// Schedule tasks
+scheduleNewsFromStocksList();
+scheduleSentimentVertex();
 
 
 
