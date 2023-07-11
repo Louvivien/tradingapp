@@ -423,6 +423,7 @@ const isMarketOpen = async (userId) => {
         'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
       },
     });
+    // console.log("response.data.is_open: ", response.data.is_open);
     return response.data.is_open;
   } catch (error) {
     console.error('Error fetching market status:', error);
@@ -450,7 +451,13 @@ const getPricesData = async (stocks, marketOpen, userId) => {
         },
       });
 
-      const currentPrice = marketOpen ? response.data.quote.ap : response.data.trade.p;
+      console.log("response.data: ",response.data);
+      // console.log("response.data.quote.ap: ",response.data.quote.ap);
+      // console.log("response.data.trade.p: ",response.data.trade.p);
+
+
+
+      const currentPrice = marketOpen ? response.data.quote.bp : response.data.trade.p;
       const date = marketOpen ? response.data.quote.t : response.data.trade.t;
 
 

@@ -1114,6 +1114,8 @@ exports.getPortfolios = async (req, res) => {
         let name;
         let avgCost = stock.avgCost;
 
+
+
         stocksData.forEach((stockData) => {
           if (stockData.ticker.toLowerCase() === stock.symbol.toLowerCase()) {
             currentDate = stockData.date;
@@ -1445,12 +1447,13 @@ const retry = (fn, retriesLeft = 5, interval = 1000) => {
 const isMarketOpen = async (userId) => {
   try {
     const alpacaConfig = await setAlpaca(userId);
-    const response = await axios.get(alpacaConfig.apiURL+'/v2/clock', {
+    const response = await Axios.get(alpacaConfig.apiURL+'/v2/clock', {
       headers: {
         'APCA-API-KEY-ID': alpacaConfig.keyId,
         'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
       },
     });
+    // console.log("response.data.is_open: ", response.data.is_open);
     return response.data.is_open;
   } catch (error) {
     console.error('Error fetching market status:', error);
@@ -1458,7 +1461,7 @@ const isMarketOpen = async (userId) => {
   }
 };
 
-//this is also in strockController can be put in utils
+//this is also in strategiesController can be put in utils
 const getPricesData = async (stocks, marketOpen, userId) => {
   try {
     const alpacaConfig = await setAlpaca(userId);
@@ -1466,30 +1469,36 @@ const getPricesData = async (stocks, marketOpen, userId) => {
     const promises = stocks.map(async (stock) => {
       let url;
       if (marketOpen) {
-        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/quotes/latest`;
+        url = `https://data.alpaca.markets/v2/stocks/${stock.ticker}/quotes/latest`;
       } else {
-        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/trades/latest`;
+        url = `https://data.alpaca.markets/v2/stocks/${stock.ticker}/trades/latest`;
       }
 
-      const response = await axios.get(url, {
+      const response = await Axios.get(url, {
         headers: {
           'APCA-API-KEY-ID': alpacaConfig.keyId,
           'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
         },
       });
 
-      const currentPrice = marketOpen ? response.data.quote.ap : response.data.trade.p;
+      console.log("response.data: ",response.data);
+      // console.log("response.data.quote.ap: ",response.data.quote.ap);
+      // console.log("response.data.trade.p: ",response.data.trade.p);
+
+
+
+      const currentPrice = marketOpen ? response.data.quote.bp : response.data.trade.p;
       const date = marketOpen ? response.data.quote.t : response.data.trade.t;
 
 
       const alpacaApi = new Alpaca(alpacaConfig);
 
-      const asset = await alpacaApi.getAsset(stock.symbol);
+      const asset = await alpacaApi.getAsset(stock.ticker);
       const assetName = asset.name;
       
 
       return {
-        ticker: stock.symbol,
+        ticker: stock.ticker,
         date: date,
         adjClose: currentPrice,
         name: assetName, 
