@@ -275,7 +275,7 @@ exports.createCollaborative = async (req, res) => {
 
 
 
-  //stil it does not use all the budget it seems
+  //still it does not use all the budget it seems
  
   exports.enableAIFund = async (req, res) => {
     return new Promise(async (resolve, reject) => {
@@ -370,38 +370,42 @@ exports.createCollaborative = async (req, res) => {
           orderList[i]['Quantity'] = quantity;
           }
           
-          // If there's remaining budget, distribute it to the assets again
-          while (remainingBudget > 0) {
-          let budgetUsed = false;
-          for (let i = 0; i < orderList.length; i++) {
-            let asset = orderList[i];
-            let symbol = asset['Asset ticker'];
-            let currentPrice = asset['Current Price'];
-          
-            // Calculate the quantity to buy with the remaining budget
-            let quantity = Math.floor(remainingBudget / currentPrice);
-          
-            // If quantity is 0, continue to the next asset
-            if (quantity === 0) continue;
-          
-            // Update the remaining budget
-            remainingBudget -= quantity * currentPrice;
-          
-            // Update the order list with the additional quantity
-            orderList[i]['Quantity'] += quantity;
-          
-            // Set budgetUsed to true
-            budgetUsed = true;
-          
-            // If there's no remaining budget, break the loop
-            if (remainingBudget <= 0) {
-              break;
-            }
+      // Sort the orderList by price in ascending order
+      orderList.sort((a, b) => a['Current Price'] - b['Current Price']);
+
+      // If there's remaining budget, distribute it to the assets again
+      while (remainingBudget > 0) {
+        let budgetUsed = false;
+        for (let i = 0; i < orderList.length; i++) {
+          let asset = orderList[i];
+          let symbol = asset['Asset ticker'];
+          let currentPrice = asset['Current Price'];
+
+          // Calculate the quantity to buy with the remaining budget
+          let quantity = Math.floor(remainingBudget / currentPrice);
+
+          // If quantity is 0, continue to the next asset
+          if (quantity === 0) continue;
+
+          // Update the remaining budget
+          remainingBudget -= quantity * currentPrice;
+
+          // Update the order list with the additional quantity
+          orderList[i]['Quantity'] += quantity;
+
+          // Set budgetUsed to true
+          budgetUsed = true;
+
+          // If there's no remaining budget, break the loop
+          if (remainingBudget <= 0) {
+            break;
           }
-          
-          // If no budget was used in a full loop through the orderList, break the while loop
-          if (!budgetUsed) break;
-          }
+        }
+
+        // If no budget was used in a full loop through the orderList, break the while loop
+        if (!budgetUsed) break;
+      }
+
           
         
               // Send the orders to the trading platform
