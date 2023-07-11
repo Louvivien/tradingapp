@@ -1461,17 +1461,20 @@ const isMarketOpen = async (userId) => {
   }
 };
 
-//this is also in strategiesController can be put in utils
+//this is also in strategiesController can be put in utils 
+//not exactly here it is symbol not ticker
 const getPricesData = async (stocks, marketOpen, userId) => {
   try {
     const alpacaConfig = await setAlpaca(userId);
 
     const promises = stocks.map(async (stock) => {
+      // console.log('Stock ticker:', stock.symbol);
+
       let url;
       if (marketOpen) {
-        url = `https://data.alpaca.markets/v2/stocks/${stock.ticker}/quotes/latest`;
+        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/quotes/latest`;
       } else {
-        url = `https://data.alpaca.markets/v2/stocks/${stock.ticker}/trades/latest`;
+        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/trades/latest`;
       }
 
       const response = await Axios.get(url, {
@@ -1493,12 +1496,12 @@ const getPricesData = async (stocks, marketOpen, userId) => {
 
       const alpacaApi = new Alpaca(alpacaConfig);
 
-      const asset = await alpacaApi.getAsset(stock.ticker);
+      const asset = await alpacaApi.getAsset(stock.symbol);
       const assetName = asset.name;
       
 
       return {
-        ticker: stock.ticker,
+        ticker: stock.symbol,
         date: date,
         adjClose: currentPrice,
         name: assetName, 
