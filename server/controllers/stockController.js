@@ -457,7 +457,7 @@ const getPricesData = async (stocks, marketOpen, userId) => {
 
 
 
-      const currentPrice = marketOpen ? response.data.quote.bp : response.data.trade.p;
+      const currentPrice = marketOpen ? response.data.quote.ap : response.data.trade.p;
       const date = marketOpen ? response.data.quote.t : response.data.trade.t;
 
 

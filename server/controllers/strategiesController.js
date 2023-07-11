@@ -272,6 +272,10 @@ exports.createCollaborative = async (req, res) => {
       });
     }
   };
+
+
+
+  //stil it does not use all the budget it seems
  
   exports.enableAIFund = async (req, res) => {
     return new Promise(async (resolve, reject) => {
@@ -351,81 +355,54 @@ exports.createCollaborative = async (req, res) => {
           }
   
           console.log(`Current price of ${symbol} is ${currentPrice}`);
-  
+
           // Calculate the quantity based on the score of the asset
           let assetScore = topAssets.find(a => a.Ticker === originalSymbol).Score; // Use the original symbol here
           let allocatedBudget = (assetScore / totalScore) * budget;
-  
+          
           // Calculate the quantity to buy
           let quantity = Math.floor(allocatedBudget / currentPrice);
-  
+          
           // Update the remaining budget
           remainingBudget -= quantity * currentPrice;
-  
+          
           // Update the order list with the calculated quantity
           orderList[i]['Quantity'] = quantity;
-        }
-  
-        // If there's remaining budget, distribute it to the assets again
-        if (remainingBudget > 0) {
-                for (let i = 0; i < orderList.length; i++) {
-                  let asset = orderList[i];
-                  let symbol = asset['Asset ticker'];
-                  let currentPrice = 0;
-
-                  // Get the last price for the stock using the Alpaca API
-                  const alpacaUrl = `https://data.alpaca.markets/v2/stocks/${symbol}/quotes/latest`;
-                  const alpacaResponse = await Axios.get(alpacaUrl, {
-                    headers: {
-                      'APCA-API-KEY-ID': alpacaConfig.keyId,
-                      'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-                    },
-                  });
-                  currentPrice = alpacaResponse.data.quote.ap;
-
-                  // If the current price is still 0, get the adjClose from the past day
-                  if (currentPrice === 0) {
-  
-                    // Get the historical stock data for the given ticker from the Tiingo API
-                    const startDate = new Date();
-                    startDate.setFullYear(startDate.getFullYear() - 2);
-                    const year = startDate.getFullYear();
-                    const month = startDate.getMonth() + 1;
-                    const day = startDate.getDate();
+          }
           
-                    let url = `https://api.tiingo.com/tiingo/daily/${symbol}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY1}`;
-                    let response;
-                    try {
-                      response = await Axios.get(url);
-                    } catch (error) {
-                      if (symbol.includes('.')) {
-                        symbol = symbol.replace('.', '-');
-                        url = `https://api.tiingo.com/tiingo/daily/${symbol}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY1}`;
-                        response = await Axios.get(url);
-                      } else {
-                        throw error;
-                      }
-                    }
-                    const data = response.data;
-                    currentPrice = data[data.length - 1].adjClose;
-                  }
-
-                  // Calculate the quantity to buy with the remaining budget
-                  let quantity = Math.floor(remainingBudget / currentPrice);
-
-                  // Update the remaining budget
-                  remainingBudget -= quantity * currentPrice;
-
-                  // Update the order list with the additional quantity
-                  orderList[i]['Quantity'] += quantity;
-
-                  // If there's no remaining budget, break the loop
-                  if (remainingBudget <= 0) {
-                    break;
-                  }
-                }
-              }
-
+          // If there's remaining budget, distribute it to the assets again
+          while (remainingBudget > 0) {
+          let budgetUsed = false;
+          for (let i = 0; i < orderList.length; i++) {
+            let asset = orderList[i];
+            let symbol = asset['Asset ticker'];
+            let currentPrice = asset['Current Price'];
+          
+            // Calculate the quantity to buy with the remaining budget
+            let quantity = Math.floor(remainingBudget / currentPrice);
+          
+            // If quantity is 0, continue to the next asset
+            if (quantity === 0) continue;
+          
+            // Update the remaining budget
+            remainingBudget -= quantity * currentPrice;
+          
+            // Update the order list with the additional quantity
+            orderList[i]['Quantity'] += quantity;
+          
+            // Set budgetUsed to true
+            budgetUsed = true;
+          
+            // If there's no remaining budget, break the loop
+            if (remainingBudget <= 0) {
+              break;
+            }
+          }
+          
+          // If no budget was used in a full loop through the orderList, break the while loop
+          if (!budgetUsed) break;
+          }
+          
         
               // Send the orders to the trading platform
               console.log('Order: ', JSON.stringify(orderList, null, 2));
@@ -1490,7 +1467,7 @@ const getPricesData = async (stocks, marketOpen, userId) => {
 
 
 
-      const currentPrice = marketOpen ? response.data.quote.bp : response.data.trade.p;
+      const currentPrice = marketOpen ? response.data.quote.ap : response.data.trade.p;
       const date = marketOpen ? response.data.quote.t : response.data.trade.t;
 
 
@@ -1549,138 +1526,4 @@ const getPricesData = async (stocks, marketOpen, userId) => {
 //   return request;
 // });
 
-
-        //Check if a portfolio with the same name already exists
-            //if it does, get the tickers of the stocks in this portfolio
-            //and compare it with the ones from the scoring model
-
-            //if they are the same, do nothing
-            //if some are in the scoring model but not in the portfolio, add them to the buying list
-            //if some are in the portfolio but not in the scoring model, add them to the selling list
-
-
-                    //if the portfolio exists, get the current value of the portfolio
-          //then check the unitary value of each stocks that are in the selling list
-          //then check the unitary value of each stocks that are in the buying list
-          //allocate the budget to each buy stock so that you try to buy all the stocks in the buying list
-
-
-
-
-
-// exports.updatePortfolio = async (strategyinput, strategyName, orders, UserID) => {
-//   console.log('strategyName', strategyName);
-//   console.log('orders', orders);
-//   console.log('UserID', UserID);
-
-//   try {
-//     const numberOfOrders = orders.length;
-//     console.log('numberOfOrders', numberOfOrders);
-
-//     const alpacaConfig = await setAlpaca(UserID);
-//     const alpacaApi = new Alpaca(alpacaConfig);
-
-// // Check if the market is open
-// const clock = await alpacaApi.getClock();
-// if (!clock.is_open) {
-//             console.log('Market is closed.');
-
-//             const strategy_id = crypto.randomBytes(16).toString("hex");
-//             console.log('strategy_id:', strategy_id);
-
-//             // Find the existing strategy
-
-
-//             // update the existing portfolio
-
-
-//             // Save the portfolio
-//             await portfolio.save();
-
-//             console.log(`Portfolio for strategy ${strategyName} has been updated. Market is closed so the orders are not filled yet.`);
-//             return;
-//           }
-
-// else {        
-  
-//               console.log('Market is open.');
-//               // Function to get the orders if market is open
-//               const getOrders = async () => {
-//                 const ordersResponse = await axios({
-//                   method: 'get',
-//                   url: alpacaConfig.apiURL + '/v2/orders',
-//                   headers: {
-//                     'APCA-API-KEY-ID': alpacaConfig.keyId,
-//                     'APCA-API-SECRET-KEY': alpacaConfig.secretKey
-//                   },
-//                   params: {
-//                     limit: numberOfOrders,
-//                     status: 'all',
-//                     nested: true
-//                   }
-//                 });
-
-//                 console.log('ordersResponse', ordersResponse.data);
-
-//                 // Check if all orders are filled
-//                 const filledOrders = ordersResponse.data.filter(order => order.filled_qty !== '0');
-//                       if (!filledOrders || filledOrders.length !== numberOfOrders) {
-//                         // If not all orders are closed or not all orders have been filled, throw an error to trigger a retry
-//                         throw new Error("Not all orders are closed or filled yet.");
-//                       }
-//                       return filledOrders;
-//                     };
-
-
-//               let ordersResponse;
-//               try {
-//                 ordersResponse = await retry(getOrders, 5, 4000);
-
-//               } catch (error) {
-//                 console.error(`Error: ${error}`);
-//                 throw error;
-//               }
-
-
-//                 // Create an object to store orders by symbol
-//                 const ordersBySymbol = {};
-
-//                 ordersResponse.forEach((order) => {
-//                   if (order.side === 'buy' && !ordersBySymbol[order.symbol]) {
-//                     ordersBySymbol[order.symbol] = {
-//                       symbol: order.symbol,
-//                       avgCost: order.filled_avg_price,
-//                       filled_qty: order.filled_qty,
-//                       orderID: order.client_order_id
-//                     };
-//                   }
-//                 });
-
-
-//               console.log('ordersBySymbol:', ordersBySymbol);
-//               const strategy_id = crypto.randomBytes(16).toString("hex");
-//               console.log('strategy_id:', strategy_id);
-            
-
-//               // Find the existing strategy
-
-
-
-
-//               // Update the existing portfolio
-
-
-
-//               // Save the portfolio
-//               await portfolio.save();
-
-//               console.log(`Portfolio for strategy ${strategyName} has been updated.`);
-
-
-//   }} catch (error) {
-//     console.error(`Error: ${error}`);
-//   }
-
-
-// }
 
