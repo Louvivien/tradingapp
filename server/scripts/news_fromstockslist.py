@@ -58,7 +58,6 @@ def generate_id(title, date):
 # # TickerTick API
 # Rate limit:
 # All endpoints have a rate limit of 10 requests per minute from the same IP address. The service enforces this. More precisely, an IP will be blocked for one minute if more than 10 requests are sent within any 1 minute time window.
-
 def fetch_tickertick_news(ticker='AAPL', period=1, proxies=None):
     try:
         logging.info("Fetching data from TickerTick API...")
@@ -69,7 +68,8 @@ def fetch_tickertick_news(ticker='AAPL', period=1, proxies=None):
         last_id = None
         tickertick_news = []
 
-        for i in range(len(proxies)):
+        i = 0
+        while i < len(proxies):
             try:
                 if last_id:
                     url = base_url + params + f'&last={last_id}'
@@ -81,6 +81,7 @@ def fetch_tickertick_news(ticker='AAPL', period=1, proxies=None):
                 
                 if not tickertick_news_raw:
                     logging.info(f"No results from TickerTick API with proxy {proxy}. Possibly a 429 status code. Switching proxy...")
+                    i += 1
                     continue
 
                 for news in tickertick_news_raw:
@@ -99,13 +100,16 @@ def fetch_tickertick_news(ticker='AAPL', period=1, proxies=None):
                     })
                 last_id = tickertick_news_raw[-1]['id']
                 logging.info(f"Fetching next 100 articles. Last ID: {last_id}")
+                i += 1
             except Exception as e:
                 logging.info(f"An error occurred while fetching data from TickerTick API with proxy {proxy}: {e}")
                 logging.info("Retrying with a different proxy...")
+                i += 1
     except Exception as e:
         logging.info(f"An error occurred while fetching data from TickerTick API: {e}")
         return []
     return []
+
 
 
 

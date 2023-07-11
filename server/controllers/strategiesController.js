@@ -290,7 +290,8 @@ exports.createCollaborative = async (req, res) => {
         let orderList = topAssets.map(asset => {
           return {
             'Asset ticker': asset.Ticker,
-            'Quantity': 0 // Quantity will be calculated later
+            'Quantity': 0, // Quantity will be calculated later
+            'Current Price': 0 // Current price will be updated later
           };
         });
   
@@ -319,6 +320,8 @@ exports.createCollaborative = async (req, res) => {
             },
           });
           currentPrice = alpacaResponse.data.quote.ap;
+          asset['Current Price'] = currentPrice; // Update the current price in the order list
+
   
           // If the current price is still 0, get the adjClose from the past day
           if (currentPrice === 0) {
@@ -363,45 +366,103 @@ exports.createCollaborative = async (req, res) => {
           orderList[i]['Quantity'] = quantity;
         }
   
-        // If there's remaining budget, you could distribute it to the assets again
-        // or you could keep it as cash.
+        // If there's remaining budget, distribute it to the assets again
+        if (remainingBudget > 0) {
+                for (let i = 0; i < orderList.length; i++) {
+                  let asset = orderList[i];
+                  let symbol = asset['Asset ticker'];
+                  let currentPrice = 0;
+
+                  // Get the last price for the stock using the Alpaca API
+                  const alpacaUrl = `https://data.alpaca.markets/v2/stocks/${symbol}/quotes/latest`;
+                  const alpacaResponse = await Axios.get(alpacaUrl, {
+                    headers: {
+                      'APCA-API-KEY-ID': alpacaConfig.keyId,
+                      'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+                    },
+                  });
+                  currentPrice = alpacaResponse.data.quote.ap;
+
+                  // If the current price is still 0, get the adjClose from the past day
+                  if (currentPrice === 0) {
   
-        // Send the orders to the trading platform
-        console.log('Order: ', JSON.stringify(orderList, null, 2));
-  
-        // Send the orders to alpaca
-        let orderPromises = orderList.map(asset => {
-          let symbol = asset['Asset ticker'];
-          let qty = Math.floor(asset['Quantity']);
-  
-          if (qty > 0) {
-            return retry(() => {
-              return axios({
-                method: 'post',
-                url: alpacaConfig.apiURL + '/v2/orders',
-                headers: {
-                  'APCA-API-KEY-ID': alpacaConfig.keyId,
-                  'APCA-API-SECRET-KEY': alpacaConfig.secretKey
-                },
-                data: {
-                  symbol: symbol,
-                  qty: qty,
-                  side: 'buy',
-                  type: 'market',
-                  time_in_force: 'gtc'
+                    // Get the historical stock data for the given ticker from the Tiingo API
+                    const startDate = new Date();
+                    startDate.setFullYear(startDate.getFullYear() - 2);
+                    const year = startDate.getFullYear();
+                    const month = startDate.getMonth() + 1;
+                    const day = startDate.getDate();
+          
+                    let url = `https://api.tiingo.com/tiingo/daily/${symbol}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY1}`;
+                    let response;
+                    try {
+                      response = await Axios.get(url);
+                    } catch (error) {
+                      if (symbol.includes('.')) {
+                        symbol = symbol.replace('.', '-');
+                        url = `https://api.tiingo.com/tiingo/daily/${symbol}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY1}`;
+                        response = await Axios.get(url);
+                      } else {
+                        throw error;
+                      }
+                    }
+                    const data = response.data;
+                    currentPrice = data[data.length - 1].adjClose;
+                  }
+
+                  // Calculate the quantity to buy with the remaining budget
+                  let quantity = Math.floor(remainingBudget / currentPrice);
+
+                  // Update the remaining budget
+                  remainingBudget -= quantity * currentPrice;
+
+                  // Update the order list with the additional quantity
+                  orderList[i]['Quantity'] += quantity;
+
+                  // If there's no remaining budget, break the loop
+                  if (remainingBudget <= 0) {
+                    break;
+                  }
                 }
-              }).then((response) => {
-                console.log(`Order of ${qty} shares for ${symbol} has been placed. Order ID: ${response.data.client_order_id}`);
-                return { qty: qty, symbol: symbol, orderID: response.data.client_order_id};
-              });
-            }, 5, 2000).catch((error) => {
-              console.error(`Failed to place order for ${symbol}: ${error}`)
-              return null;
-            })
-          } else {
-            console.log(`Quantity for ${symbol} is ${qty}. Order not placed.`);
-            return null;
-          }
+              }
+
+        
+              // Send the orders to the trading platform
+              console.log('Order: ', JSON.stringify(orderList, null, 2));
+        
+              // Send the orders to alpaca
+              let orderPromises = orderList.map(asset => {
+                let symbol = asset['Asset ticker'];
+                let qty = Math.floor(asset['Quantity']);
+        
+                if (qty > 0) {
+                  return retry(() => {
+                    return axios({
+                      method: 'post',
+                      url: alpacaConfig.apiURL + '/v2/orders',
+                      headers: {
+                        'APCA-API-KEY-ID': alpacaConfig.keyId,
+                        'APCA-API-SECRET-KEY': alpacaConfig.secretKey
+                      },
+                      data: {
+                        symbol: symbol,
+                        qty: qty,
+                        side: 'buy',
+                        type: 'market',
+                        time_in_force: 'gtc'
+                      }
+                    }).then((response) => {
+                      console.log(`Order of ${qty} shares for ${symbol} has been placed. Order ID: ${response.data.client_order_id}`);
+                      return { qty: qty, symbol: symbol, orderID: response.data.client_order_id};
+                    });
+                  }, 5, 2000).catch((error) => {
+                    console.error(`Failed to place order for ${symbol}: ${error}`)
+                    return null;
+                  })
+                } else {
+                  console.log(`Quantity for ${symbol} is ${qty}. Order not placed.`);
+                  return null;
+                }
         })
   
         // Get the response from alpaca
@@ -884,6 +945,42 @@ exports.rebalanceAIFund = async (req, res) => {
           // Update the order list with the calculated quantity
           orderList[i]['Quantity'] = quantity;
         }
+
+        // If there's remaining budget, distribute it to the assets again
+        if (remainingBudget > 0) {
+          // Sort the order list by asset price in ascending order
+          orderList.sort((a, b) => a['Current Price'] - b['Current Price']);
+        
+          while (remainingBudget > orderList[0]['Current Price']) {
+            for (let i = 0; i < orderList.length; i++) {
+              let asset = orderList[i];
+              let symbol = asset['Asset ticker'];
+              let currentPrice = asset['Current Price'];
+        
+              // Calculate the quantity to buy with the remaining budget
+              let quantity = Math.floor(remainingBudget / currentPrice);
+        
+              // If quantity is 0, continue to the next asset
+              if (quantity === 0) continue;
+        
+              // Update the remaining budget
+              remainingBudget -= quantity * currentPrice;
+        
+              // Update the order list with the additional quantity
+              orderList[i]['Quantity'] += quantity;
+        
+              // If there's no remaining budget, break the loop
+              if (remainingBudget <= 0) {
+                break;
+              }
+            }
+          }
+        }
+
+
+
+
+
       }
 
       // Send the orders to alpaca

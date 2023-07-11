@@ -1,5 +1,4 @@
 {
-    "_comment": "This is a list of 20 major US stocks from different industries",
-    "stocks": ["AAPL", "MSFT", "GOOGL", "AMZN", "META", "TSLA", "BRK.B", "V", "JNJ", "WMT", "PG", "MA", "INTC", "VZ", "HD", "DIS", "NFLX", "KO", "NKE", "MCD"]
+    "_comment": "This is a list of 100 major US stocks from different industries",
+    "stocks": ["AAPL", "MSFT", "AMZN", "META", "GOOGL", "GOOG", "TSLA", "BRK.B", "NVDA", "JPM", "JNJ", "V", "PG", "UNH", "DIS", "HD", "MA", "PYPL", "BAC", "CMCSA", "XOM", "INTC", "NFLX", "ADBE", "CSCO", "VZ", "KO", "NKE", "MRK", "PEP", "PFE", "WMT", "T", "ABT", "CRM", "MCD", "COST", "ABBV", "ACN", "MDT", "NEE", "DHR", "AVGO", "QCOM", "LLY", "TXN", "UNP", "AMGN", "LIN", "BMY", "LOW", "ORCL", "HON", "IBM", "SBUX", "CVX", "BA", "GS", "MMM", "CAT", "RTX", "GE", "UPS", "CHTR", "TMO", "FIS", "BLK", "USB", "GILD", "INTU", "ISRG", "MDLZ", "BKNG", "TJX", "SYK", "SPGI", "MO", "ZTS", "CCI", "AXP", "ANTM", "CB", "PLD", "ADP", "DUK", "CL", "CME", "PNC", "NOW", "SO", "BDX", "MS", "ITW", "TFC", "ADI", "AMT", "DE", "MU", "NSC", "GM", "GPN", "VRTX", "CI", "LRCX", "ILMN", "EW"]
 }
-
