@@ -1453,9 +1453,9 @@ const getPricesData = async (stocks, marketOpen, userId) => {
 
       let url;
       if (marketOpen) {
-        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/quotes/latest`;
-      } else {
         url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/trades/latest`;
+      } else {
+        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}//bars?timeframe=1D&limit=1`;
       }
 
       const response = await Axios.get(url, {
@@ -1471,8 +1471,9 @@ const getPricesData = async (stocks, marketOpen, userId) => {
 
 
 
-      const currentPrice = marketOpen ? response.data.quote.ap : response.data.trade.p;
-      const date = marketOpen ? response.data.quote.t : response.data.trade.t;
+      const currentPrice = marketOpen ? response.data.trade.p : response.data.bars.c 
+
+      const date = marketOpen ? response.data.trade.t : response.data.bars.t;
 
 
       const alpacaApi = new Alpaca(alpacaConfig);
