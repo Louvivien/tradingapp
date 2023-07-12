@@ -1,121 +1,730 @@
 [
     {
         "ID": 1,
-        "Date": "2023-07-09T20:10:24.759852",
-        "Stock Name": "AMZN",
-        "Ticker": "AMZN",
-        "Score": 55.26
+        "Date": "2023-07-12T19:46:30.502542",
+        "Stock Name": "MSFT",
+        "Ticker": "MSFT",
+        "Score": 53.61
     },
     {
         "ID": 2,
-        "Date": "2023-07-09T20:10:24.760031",
-        "Stock Name": "AAPL",
-        "Ticker": "AAPL",
-        "Score": 56.25
+        "Date": "2023-07-12T19:46:30.502655",
+        "Stock Name": "NVDA",
+        "Ticker": "NVDA",
+        "Score": 72.0
     },
     {
         "ID": 3,
-        "Date": "2023-07-09T20:10:24.760040",
-        "Stock Name": "META",
-        "Ticker": "META",
-        "Score": 57.14
-    },
-    {
-        "ID": 4,
-        "Date": "2023-07-09T20:10:24.760044",
-        "Stock Name": "MSFT",
-        "Ticker": "MSFT",
-        "Score": 40.0
-    },
-    {
-        "ID": 5,
-        "Date": "2023-07-09T20:10:24.760048",
-        "Stock Name": "PG",
-        "Ticker": "PG",
-        "Score": 15.38
-    },
-    {
-        "ID": 6,
-        "Date": "2023-07-09T20:10:24.760052",
-        "Stock Name": "V",
-        "Ticker": "V",
-        "Score": 41.67
-    },
-    {
-        "ID": 7,
-        "Date": "2023-07-09T20:10:24.760056",
-        "Stock Name": "GOOGL",
-        "Ticker": "GOOGL",
-        "Score": 41.18
-    },
-    {
-        "ID": 8,
-        "Date": "2023-07-09T20:10:24.760073",
-        "Stock Name": "WMT",
-        "Ticker": "WMT",
-        "Score": 53.12
-    },
-    {
-        "ID": 9,
-        "Date": "2023-07-09T20:10:24.760079",
-        "Stock Name": "TSLA",
-        "Ticker": "TSLA",
-        "Score": 59.46
-    },
-    {
-        "ID": 10,
-        "Date": "2023-07-09T20:10:24.760083",
-        "Stock Name": "BRK.B",
-        "Ticker": "BRK.B",
+        "Date": "2023-07-12T19:46:30.502659",
+        "Stock Name": "AAPL",
+        "Ticker": "AAPL",
         "Score": 60.0
     },
     {
+        "ID": 4,
+        "Date": "2023-07-12T19:46:30.502662",
+        "Stock Name": "AVGO",
+        "Ticker": "AVGO",
+        "Score": 73.91
+    },
+    {
+        "ID": 5,
+        "Date": "2023-07-12T19:46:30.502665",
+        "Stock Name": "AMZN",
+        "Ticker": "AMZN",
+        "Score": 59.43
+    },
+    {
+        "ID": 6,
+        "Date": "2023-07-12T19:46:30.502667",
+        "Stock Name": "ADBE",
+        "Ticker": "ADBE",
+        "Score": 75.0
+    },
+    {
+        "ID": 7,
+        "Date": "2023-07-12T19:46:30.502670",
+        "Stock Name": "COST",
+        "Ticker": "COST",
+        "Score": 60.0
+    },
+    {
+        "ID": 8,
+        "Date": "2023-07-12T19:46:30.502672",
+        "Stock Name": "SO",
+        "Ticker": "SO",
+        "Score": 60.56
+    },
+    {
+        "ID": 9,
+        "Date": "2023-07-12T19:46:30.502675",
+        "Stock Name": "GOOG",
+        "Ticker": "GOOG",
+        "Score": 52.63
+    },
+    {
+        "ID": 10,
+        "Date": "2023-07-12T19:46:30.502677",
+        "Stock Name": "GM",
+        "Ticker": "GM",
+        "Score": 43.4
+    },
+    {
         "ID": 11,
-        "Date": "2023-07-09T20:10:24.760087",
-        "Stock Name": "MA",
-        "Ticker": "MA",
-        "Score": 58.33
+        "Date": "2023-07-12T19:46:30.502680",
+        "Stock Name": "NOW",
+        "Ticker": "NOW",
+        "Score": 60.0
     },
     {
         "ID": 12,
-        "Date": "2023-07-09T20:10:24.760091",
-        "Stock Name": "HD",
-        "Ticker": "HD",
-        "Score": 29.41
+        "Date": "2023-07-12T19:46:30.502683",
+        "Stock Name": "V",
+        "Ticker": "V",
+        "Score": 41.46
     },
     {
         "ID": 13,
-        "Date": "2023-07-09T20:10:24.760096",
-        "Stock Name": "JNJ",
-        "Ticker": "JNJ",
-        "Score": 25.0
+        "Date": "2023-07-12T19:46:30.502685",
+        "Stock Name": "TXN",
+        "Ticker": "TXN",
+        "Score": 50.0
     },
     {
         "ID": 14,
-        "Date": "2023-07-09T20:10:24.760101",
-        "Stock Name": "DIS",
-        "Ticker": "DIS",
-        "Score": 30.0
+        "Date": "2023-07-12T19:46:30.502687",
+        "Stock Name": "LLY",
+        "Ticker": "LLY",
+        "Score": 40.0
     },
     {
         "ID": 15,
-        "Date": "2023-07-09T20:10:24.760105",
-        "Stock Name": "NFLX",
-        "Ticker": "NFLX",
-        "Score": 66.67
+        "Date": "2023-07-12T19:46:30.502693",
+        "Stock Name": "META",
+        "Ticker": "META",
+        "Score": 58.43
     },
     {
         "ID": 16,
-        "Date": "2023-07-09T20:10:24.760110",
-        "Stock Name": "KO",
-        "Ticker": "KO",
-        "Score": 18.75
+        "Date": "2023-07-12T19:46:30.502696",
+        "Stock Name": "QCOM",
+        "Ticker": "QCOM",
+        "Score": 50.0
     },
     {
         "ID": 17,
-        "Date": "2023-07-09T20:10:24.760126",
+        "Date": "2023-07-12T19:46:30.502698",
+        "Stock Name": "JPM",
+        "Ticker": "JPM",
+        "Score": 60.78
+    },
+    {
+        "ID": 18,
+        "Date": "2023-07-12T19:46:30.502708",
+        "Stock Name": "CRM",
+        "Ticker": "CRM",
+        "Score": 68.57
+    },
+    {
+        "ID": 19,
+        "Date": "2023-07-12T19:46:30.502711",
+        "Stock Name": "BA",
+        "Ticker": "BA",
+        "Score": 67.8
+    },
+    {
+        "ID": 20,
+        "Date": "2023-07-12T19:46:30.502713",
+        "Stock Name": "MA",
+        "Ticker": "MA",
+        "Score": 44.44
+    },
+    {
+        "ID": 21,
+        "Date": "2023-07-12T19:46:30.502716",
+        "Stock Name": "GOOGL",
+        "Ticker": "GOOGL",
+        "Score": 57.14
+    },
+    {
+        "ID": 22,
+        "Date": "2023-07-12T19:46:30.502718",
+        "Stock Name": "LRCX",
+        "Ticker": "LRCX",
+        "Score": 50.0
+    },
+    {
+        "ID": 23,
+        "Date": "2023-07-12T19:46:30.502720",
+        "Stock Name": "WMT",
+        "Ticker": "WMT",
+        "Score": 31.03
+    },
+    {
+        "ID": 24,
+        "Date": "2023-07-12T19:46:30.502723",
+        "Stock Name": "INTC",
+        "Ticker": "INTC",
+        "Score": 50.0
+    },
+    {
+        "ID": 25,
+        "Date": "2023-07-12T19:46:30.502725",
+        "Stock Name": "NFLX",
+        "Ticker": "NFLX",
+        "Score": 60.87
+    },
+    {
+        "ID": 26,
+        "Date": "2023-07-12T19:46:30.502728",
+        "Stock Name": "DIS",
+        "Ticker": "DIS",
+        "Score": 48.39
+    },
+    {
+        "ID": 27,
+        "Date": "2023-07-12T19:46:30.502730",
+        "Stock Name": "T",
+        "Ticker": "T",
+        "Score": 55.77
+    },
+    {
+        "ID": 28,
+        "Date": "2023-07-12T19:46:30.502732",
+        "Stock Name": "CSCO",
+        "Ticker": "CSCO",
+        "Score": 62.96
+    },
+    {
+        "ID": 29,
+        "Date": "2023-07-12T19:46:30.502735",
+        "Stock Name": "SPGI",
+        "Ticker": "SPGI",
+        "Score": 71.43
+    },
+    {
+        "ID": 30,
+        "Date": "2023-07-12T19:46:30.502737",
+        "Stock Name": "MS",
+        "Ticker": "MS",
+        "Score": 45.61
+    },
+    {
+        "ID": 31,
+        "Date": "2023-07-12T19:46:30.502740",
         "Stock Name": "MCD",
         "Ticker": "MCD",
-        "Score": 23.08
+        "Score": 31.03
+    },
+    {
+        "ID": 32,
+        "Date": "2023-07-12T19:46:30.502742",
+        "Stock Name": "CL",
+        "Ticker": "CL",
+        "Score": 56.25
+    },
+    {
+        "ID": 33,
+        "Date": "2023-07-12T19:46:30.502744",
+        "Stock Name": "LOW",
+        "Ticker": "LOW",
+        "Score": 51.22
+    },
+    {
+        "ID": 34,
+        "Date": "2023-07-12T19:46:30.502747",
+        "Stock Name": "GE",
+        "Ticker": "GE",
+        "Score": 55.56
+    },
+    {
+        "ID": 35,
+        "Date": "2023-07-12T19:46:30.502749",
+        "Stock Name": "TSLA",
+        "Ticker": "TSLA",
+        "Score": 44.44
+    },
+    {
+        "ID": 36,
+        "Date": "2023-07-12T19:46:30.502754",
+        "Stock Name": "BRK.B",
+        "Ticker": "BRK.B",
+        "Score": 64.71
+    },
+    {
+        "ID": 37,
+        "Date": "2023-07-12T19:46:30.502757",
+        "Stock Name": "GS",
+        "Ticker": "GS",
+        "Score": 55.26
+    },
+    {
+        "ID": 38,
+        "Date": "2023-07-12T19:46:30.502761",
+        "Stock Name": "BAC",
+        "Ticker": "BAC",
+        "Score": 48.57
+    },
+    {
+        "ID": 39,
+        "Date": "2023-07-12T19:46:30.502774",
+        "Stock Name": "CB",
+        "Ticker": "CB",
+        "Score": 63.64
+    },
+    {
+        "ID": 40,
+        "Date": "2023-07-12T19:46:30.502777",
+        "Stock Name": "INTU",
+        "Ticker": "INTU",
+        "Score": 50.0
+    },
+    {
+        "ID": 41,
+        "Date": "2023-07-12T19:46:30.502779",
+        "Stock Name": "BLK",
+        "Ticker": "BLK",
+        "Score": 76.19
+    },
+    {
+        "ID": 42,
+        "Date": "2023-07-12T19:46:30.502782",
+        "Stock Name": "IBM",
+        "Ticker": "IBM",
+        "Score": 63.33
+    },
+    {
+        "ID": 43,
+        "Date": "2023-07-12T19:46:30.502784",
+        "Stock Name": "JNJ",
+        "Ticker": "JNJ",
+        "Score": 56.52
+    },
+    {
+        "ID": 44,
+        "Date": "2023-07-12T19:46:30.502787",
+        "Stock Name": "TMO",
+        "Ticker": "TMO",
+        "Score": 100.0
+    },
+    {
+        "ID": 45,
+        "Date": "2023-07-12T19:46:30.502789",
+        "Stock Name": "BMY",
+        "Ticker": "BMY",
+        "Score": 86.67
+    },
+    {
+        "ID": 46,
+        "Date": "2023-07-12T19:46:30.502791",
+        "Stock Name": "FIS",
+        "Ticker": "FIS",
+        "Score": 59.26
+    },
+    {
+        "ID": 47,
+        "Date": "2023-07-12T19:46:30.502794",
+        "Stock Name": "AMT",
+        "Ticker": "AMT",
+        "Score": 33.33
+    },
+    {
+        "ID": 48,
+        "Date": "2023-07-12T19:46:30.502796",
+        "Stock Name": "PG",
+        "Ticker": "PG",
+        "Score": 50.0
+    },
+    {
+        "ID": 49,
+        "Date": "2023-07-12T19:46:30.502798",
+        "Stock Name": "MDT",
+        "Ticker": "MDT",
+        "Score": 71.43
+    },
+    {
+        "ID": 50,
+        "Date": "2023-07-12T19:46:30.502800",
+        "Stock Name": "USB",
+        "Ticker": "USB",
+        "Score": 45.61
+    },
+    {
+        "ID": 51,
+        "Date": "2023-07-12T19:46:30.502803",
+        "Stock Name": "DE",
+        "Ticker": "DE",
+        "Score": 39.39
+    },
+    {
+        "ID": 52,
+        "Date": "2023-07-12T19:46:30.502805",
+        "Stock Name": "UNH",
+        "Ticker": "UNH",
+        "Score": 46.15
+    },
+    {
+        "ID": 53,
+        "Date": "2023-07-12T19:46:30.502808",
+        "Stock Name": "ABBV",
+        "Ticker": "ABBV",
+        "Score": 83.33
+    },
+    {
+        "ID": 54,
+        "Date": "2023-07-12T19:46:30.502810",
+        "Stock Name": "PNC",
+        "Ticker": "PNC",
+        "Score": 66.67
+    },
+    {
+        "ID": 55,
+        "Date": "2023-07-12T19:46:30.502813",
+        "Stock Name": "HD",
+        "Ticker": "HD",
+        "Score": 45.0
+    },
+    {
+        "ID": 56,
+        "Date": "2023-07-12T19:46:30.502827",
+        "Stock Name": "CAT",
+        "Ticker": "CAT",
+        "Score": 41.67
+    },
+    {
+        "ID": 57,
+        "Date": "2023-07-12T19:46:30.502830",
+        "Stock Name": "PYPL",
+        "Ticker": "PYPL",
+        "Score": 66.67
+    },
+    {
+        "ID": 58,
+        "Date": "2023-07-12T19:46:30.502832",
+        "Stock Name": "AXP",
+        "Ticker": "AXP",
+        "Score": 53.33
+    },
+    {
+        "ID": 59,
+        "Date": "2023-07-12T19:46:30.502835",
+        "Stock Name": "CME",
+        "Ticker": "CME",
+        "Score": 62.07
+    },
+    {
+        "ID": 60,
+        "Date": "2023-07-12T19:46:30.502837",
+        "Stock Name": "CMCSA",
+        "Ticker": "CMCSA",
+        "Score": 100.0
+    },
+    {
+        "ID": 61,
+        "Date": "2023-07-12T19:46:30.502839",
+        "Stock Name": "CHTR",
+        "Ticker": "CHTR",
+        "Score": 100.0
+    },
+    {
+        "ID": 62,
+        "Date": "2023-07-12T19:46:30.502844",
+        "Stock Name": "XOM",
+        "Ticker": "XOM",
+        "Score": 56.52
+    },
+    {
+        "ID": 63,
+        "Date": "2023-07-12T19:46:30.502846",
+        "Stock Name": "MDLZ",
+        "Ticker": "MDLZ",
+        "Score": 80.0
+    },
+    {
+        "ID": 64,
+        "Date": "2023-07-12T19:46:30.502848",
+        "Stock Name": "SBUX",
+        "Ticker": "SBUX",
+        "Score": 35.71
+    },
+    {
+        "ID": 65,
+        "Date": "2023-07-12T19:46:30.502851",
+        "Stock Name": "VRTX",
+        "Ticker": "VRTX",
+        "Score": 60.0
+    },
+    {
+        "ID": 66,
+        "Date": "2023-07-12T19:46:30.502854",
+        "Stock Name": "KO",
+        "Ticker": "KO",
+        "Score": 38.89
+    },
+    {
+        "ID": 67,
+        "Date": "2023-07-12T19:46:30.502857",
+        "Stock Name": "NKE",
+        "Ticker": "NKE",
+        "Score": 40.0
+    },
+    {
+        "ID": 68,
+        "Date": "2023-07-12T19:46:30.502859",
+        "Stock Name": "MRK",
+        "Ticker": "MRK",
+        "Score": 50.0
+    },
+    {
+        "ID": 69,
+        "Date": "2023-07-12T19:46:30.502862",
+        "Stock Name": "PEP",
+        "Ticker": "PEP",
+        "Score": 56.52
+    },
+    {
+        "ID": 70,
+        "Date": "2023-07-12T19:46:30.502864",
+        "Stock Name": "DUK",
+        "Ticker": "DUK",
+        "Score": 31.91
+    },
+    {
+        "ID": 71,
+        "Date": "2023-07-12T19:46:30.502866",
+        "Stock Name": "UPS",
+        "Ticker": "UPS",
+        "Score": 37.7
+    },
+    {
+        "ID": 72,
+        "Date": "2023-07-12T19:46:30.502869",
+        "Stock Name": "PFE",
+        "Ticker": "PFE",
+        "Score": 75.0
+    },
+    {
+        "ID": 73,
+        "Date": "2023-07-12T19:46:30.502871",
+        "Stock Name": "ABT",
+        "Ticker": "ABT",
+        "Score": 66.67
+    },
+    {
+        "ID": 74,
+        "Date": "2023-07-12T19:46:30.502873",
+        "Stock Name": "CI",
+        "Ticker": "CI",
+        "Score": 47.37
+    },
+    {
+        "ID": 75,
+        "Date": "2023-07-12T19:46:30.502875",
+        "Stock Name": "CVX",
+        "Ticker": "CVX",
+        "Score": 23.81
+    },
+    {
+        "ID": 76,
+        "Date": "2023-07-12T19:46:30.502878",
+        "Stock Name": "ADP",
+        "Ticker": "ADP",
+        "Score": 57.14
+    },
+    {
+        "ID": 77,
+        "Date": "2023-07-12T19:46:30.502880",
+        "Stock Name": "ACN",
+        "Ticker": "ACN",
+        "Score": 100.0
+    },
+    {
+        "ID": 78,
+        "Date": "2023-07-12T19:46:30.502883",
+        "Stock Name": "NEE",
+        "Ticker": "NEE",
+        "Score": 38.89
+    },
+    {
+        "ID": 79,
+        "Date": "2023-07-12T19:46:30.502886",
+        "Stock Name": "DHR",
+        "Ticker": "DHR",
+        "Score": 25.0
+    },
+    {
+        "ID": 80,
+        "Date": "2023-07-12T19:46:30.502888",
+        "Stock Name": "UNP",
+        "Ticker": "UNP",
+        "Score": 33.33
+    },
+    {
+        "ID": 81,
+        "Date": "2023-07-12T19:46:30.502890",
+        "Stock Name": "HON",
+        "Ticker": "HON",
+        "Score": 69.23
+    },
+    {
+        "ID": 82,
+        "Date": "2023-07-12T19:46:30.502893",
+        "Stock Name": "AMGN",
+        "Ticker": "AMGN",
+        "Score": 75.0
+    },
+    {
+        "ID": 83,
+        "Date": "2023-07-12T19:46:30.502895",
+        "Stock Name": "LIN",
+        "Ticker": "LIN",
+        "Score": 60.0
+    },
+    {
+        "ID": 84,
+        "Date": "2023-07-12T19:46:30.502897",
+        "Stock Name": "GPN",
+        "Ticker": "GPN",
+        "Score": 100.0
+    },
+    {
+        "ID": 85,
+        "Date": "2023-07-12T19:46:30.502901",
+        "Stock Name": "ORCL",
+        "Ticker": "ORCL",
+        "Score": 87.5
+    },
+    {
+        "ID": 86,
+        "Date": "2023-07-12T19:46:30.502954",
+        "Stock Name": "TFC",
+        "Ticker": "TFC",
+        "Score": 100.0
+    },
+    {
+        "ID": 87,
+        "Date": "2023-07-12T19:46:30.502956",
+        "Stock Name": "MMM",
+        "Ticker": "MMM",
+        "Score": 42.86
+    },
+    {
+        "ID": 88,
+        "Date": "2023-07-12T19:46:30.502961",
+        "Stock Name": "BKNG",
+        "Ticker": "BKNG",
+        "Score": 100.0
+    },
+    {
+        "ID": 89,
+        "Date": "2023-07-12T19:46:30.502964",
+        "Stock Name": "ZTS",
+        "Ticker": "ZTS",
+        "Score": 66.67
+    },
+    {
+        "ID": 90,
+        "Date": "2023-07-12T19:46:30.502966",
+        "Stock Name": "RTX",
+        "Ticker": "RTX",
+        "Score": 44.44
+    },
+    {
+        "ID": 91,
+        "Date": "2023-07-12T19:46:30.502969",
+        "Stock Name": "MU",
+        "Ticker": "MU",
+        "Score": 62.5
+    },
+    {
+        "ID": 92,
+        "Date": "2023-07-12T19:46:30.502971",
+        "Stock Name": "GILD",
+        "Ticker": "GILD",
+        "Score": 100.0
+    },
+    {
+        "ID": 93,
+        "Date": "2023-07-12T19:46:30.502973",
+        "Stock Name": "ADI",
+        "Ticker": "ADI",
+        "Score": 25.0
+    },
+    {
+        "ID": 94,
+        "Date": "2023-07-12T19:46:30.502976",
+        "Stock Name": "ISRG",
+        "Ticker": "ISRG",
+        "Score": 33.33
+    },
+    {
+        "ID": 95,
+        "Date": "2023-07-12T19:46:30.502979",
+        "Stock Name": "TJX",
+        "Ticker": "TJX",
+        "Score": 37.5
+    },
+    {
+        "ID": 96,
+        "Date": "2023-07-12T19:46:30.502981",
+        "Stock Name": "SYK",
+        "Ticker": "SYK",
+        "Score": 100.0
+    },
+    {
+        "ID": 97,
+        "Date": "2023-07-12T19:46:30.502983",
+        "Stock Name": "MO",
+        "Ticker": "MO",
+        "Score": 34.15
+    },
+    {
+        "ID": 98,
+        "Date": "2023-07-12T19:46:30.502986",
+        "Stock Name": "CCI",
+        "Ticker": "CCI",
+        "Score": 71.43
+    },
+    {
+        "ID": 99,
+        "Date": "2023-07-12T19:46:30.502990",
+        "Stock Name": "PLD",
+        "Ticker": "PLD",
+        "Score": 33.33
+    },
+    {
+        "ID": 100,
+        "Date": "2023-07-12T19:46:30.502993",
+        "Stock Name": "BDX",
+        "Ticker": "BDX",
+        "Score": 66.67
+    },
+    {
+        "ID": 101,
+        "Date": "2023-07-12T19:46:30.502995",
+        "Stock Name": "ITW",
+        "Ticker": "ITW",
+        "Score": 66.67
+    },
+    {
+        "ID": 102,
+        "Date": "2023-07-12T19:46:30.502998",
+        "Stock Name": "NSC",
+        "Ticker": "NSC",
+        "Score": 75.0
+    },
+    {
+        "ID": 103,
+        "Date": "2023-07-12T19:46:30.503000",
+        "Stock Name": "ILMN",
+        "Ticker": "ILMN",
+        "Score": 36.36
+    },
+    {
+        "ID": 104,
+        "Date": "2023-07-12T19:46:30.503002",
+        "Stock Name": "EW",
+        "Ticker": "EW",
+        "Score": 40.0
     }
 ]

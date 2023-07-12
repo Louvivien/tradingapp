@@ -23,6 +23,13 @@ const Purchases = ({ purchasedStocks }) => {
     setSaleOpen(true);
   };
 
+let totalQuantity = 0;
+let totalPurchaseTotal = 0;
+let totalCurrentTotal = 0;
+let totalDifference = 0;
+let allStocksHaveAvgCost = true;
+
+
   return (
     <React.Fragment>
       <div style={{ minHeight: "200px" }}>
@@ -43,6 +50,19 @@ const Purchases = ({ purchasedStocks }) => {
           
           <TableBody>
           {purchasedStocks.filter(stock => stock.purchasePrice).map((row) => {
+
+            if (row.purchasePrice === null) {
+              allStocksHaveAvgCost = false;
+            } else {
+              totalQuantity += Number(row.quantity);
+              totalPurchaseTotal += Number(row.quantity) * Number(row.purchasePrice);
+              totalCurrentTotal += Number(row.quantity) * Number(row.currentPrice);
+              totalDifference += (row.currentPrice - row.purchasePrice) / row.currentPrice;
+            }
+
+
+
+
               const difference =
                 (row.currentPrice - row.purchasePrice) / row.currentPrice;
               const purchaseTotal =
@@ -94,6 +114,40 @@ const Purchases = ({ purchasedStocks }) => {
                   </TableRow>
                 );
               })}
+
+              {allStocksHaveAvgCost && (
+                <TableRow>
+                  <TableCell>Total</TableCell>
+                  <TableCell></TableCell>
+                  <TableCell>{totalQuantity}</TableCell>
+                  <TableCell></TableCell>
+                  <TableCell align="right">${roundNumber(totalPurchaseTotal).toLocaleString()}</TableCell>
+                  <TableCell></TableCell>
+                  <TableCell
+                    align="right"
+                    className={
+                      totalCurrentTotal >= totalPurchaseTotal
+                        ? styles.positive
+                        : styles.negative
+                    }
+                  >
+                    ${roundNumber(totalCurrentTotal).toLocaleString()}
+                  </TableCell>
+                  <TableCell
+                    align="right"
+                    className={
+                      totalDifference >= 0 ? styles.positive : styles.negative
+                    }
+                  >
+                    {Math.abs(totalDifference * 100).toFixed(2)}%
+                  </TableCell>
+                </TableRow>
+              )}
+
+
+
+
+
             </TableBody>
 
             
