@@ -22,8 +22,10 @@
   background: linear-gradient(315deg, #3a61e2 0%, #a65ca8 100%);
   background-size: 400% 400%;
   animation: gradient 10s ease infinite;
-  height: 100%;
+  height: 100vh;
   width: 100%;
+  display: grid;
+  place-content: center;
 }
 
 @keyframes gradient {

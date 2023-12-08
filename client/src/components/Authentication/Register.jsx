@@ -80,12 +80,10 @@ const Register = () => {
     <div className={styles.background}>
       <CssBaseline />
       <Grid
-        container
         spacing={0}
         direction="column"
         alignItems="center"
         justify="center"
-        style={{ minHeight: "100vh" }}
       >
         <Grid item xs={12} sm={8} md={6} lg={4}>
           <Box boxShadow={1}>
