@@ -47,10 +47,10 @@
 }
 
 .content {
-  margin-top: 25px;
+  padding-top: 25px;
   flex-grow: 1;
   height: 100vh;
-  overflow: auto;
+  overflow-y: scroll;
 }
 
 .reset {

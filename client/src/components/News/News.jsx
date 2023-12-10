@@ -90,19 +90,19 @@ const NewsCards = ({ cards }) => {
     <Grid container spacing={4}>
       {cards.map((card) => (
         <Grid item key={card.id} xs={12} sm={6} md={4}>
-          <StyledCard>
-            <Link href={card.url} target="_blank" rel="noopener noreferrer">
+          <Link href={card.url} target="_blank" rel="noopener noreferrer">
+            <StyledCard>
               <StyledCardMedia
                 image={card.image}
                 title={card.headline}
               />
-            </Link>
-            <StyledCardContent>
-              <Typography gutterBottom variant="h6" component="h4">
-                {card.headline}
-              </Typography>
-            </StyledCardContent>
-          </StyledCard>
+              <StyledCardContent>
+                <Typography gutterBottom variant="h6" component="h4" >
+                  {card.headline}
+                </Typography>
+              </StyledCardContent>
+            </StyledCard>
+          </Link>
         </Grid>
       ))}
     </Grid>

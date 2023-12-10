@@ -84,9 +84,9 @@ const PageTemplate = () => {
   const [purchasedStocks, setPurchasedStocks] = useState([]);
   const [accountBalance, setAccountBalance] = useState([]);
 
-  
 
- //Function to get the list of purchased stocks from the server using Alpacas API
+
+  //Function to get the list of purchased stocks from the server using Alpacas API
   const getPurchasedStocks = async () => {
     const url = config.base_url + `/api/stock/${userData.user.id}`;
     const headers = {
@@ -108,7 +108,7 @@ const PageTemplate = () => {
   useEffect(() => {
     getPurchasedStocks();
   }, []);
-  
+
 
   const logout = () => {
     setUserData({
@@ -119,7 +119,7 @@ const PageTemplate = () => {
     navigate("/login");
   };
 
-  
+
   const handleDrawerOpen = () => {
     setOpen(true);
   };
@@ -144,7 +144,7 @@ const PageTemplate = () => {
     <div className={styles.root}>
       <CssBaseline />
       <StyledAppBar
-        position="absolute"
+        position="fixed"
         open={open}
         className={clsx(styles.appBarBackground)}
       >
@@ -177,37 +177,37 @@ const PageTemplate = () => {
             Hello,{" "}
             {userData.user.username
               ? userData.user.username.charAt(0).toUpperCase() +
-                userData.user.username.slice(1)
+              userData.user.username.slice(1)
               : ""}
           </Typography>
         </Toolbar>
       </StyledAppBar>
       <StyledDrawer variant="permanent" open={open}>
-  <div className={styles.toolbarIcon}>
-    <IconButton onClick={handleDrawerClose}>
-      <ChevronLeftIcon />
-    </IconButton>
-  </div>
-  <Divider />
-  <List>
-    <Navbar currentPage={currentPage} setCurrentPage={setCurrentPage} />
-  </List>
-  <Divider />
-  <List>
-    <SecondNavbar logout={logout} openSettings={openSettings} />
-  </List>
-</StyledDrawer>
+        <div className={styles.toolbarIcon}>
+          <IconButton onClick={handleDrawerClose}>
+            <ChevronLeftIcon />
+          </IconButton>
+        </div>
+        <Divider />
+        <List>
+          <Navbar currentPage={currentPage} setCurrentPage={setCurrentPage} />
+        </List>
+        <Divider />
+        <List>
+          <SecondNavbar logout={logout} openSettings={openSettings} />
+        </List>
+      </StyledDrawer>
 
 
       <main className={styles.content}>
         <div className={styles.appBarSpacer} />
         {currentPage === "dashboard" && (
 
-            //we pass the data to the Dashboard component
-        <Dashboard
-          userData={userData}
-          setUserData={setUserData}
-        />
+          //we pass the data to the Dashboard component
+          <Dashboard
+            userData={userData}
+            setUserData={setUserData}
+          />
 
 
 
@@ -230,7 +230,7 @@ const PageTemplate = () => {
       </main>
     </div>
   );
-  
+
 };
 
 export default PageTemplate;
