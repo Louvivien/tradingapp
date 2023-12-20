@@ -4,14 +4,14 @@ https://raw.githubusercontent.com/ShiftyTR/Proxy-List/master/proxy.txt
 https://raw.githubusercontent.com/Zaeem20/FREE_PROXIES_LIST/master/https.txt
 https://raw.githubusercontent.com/roosterkid/openproxylist/main/HTTPS_RAW.txt
 USELESS:https://raw.githubusercontent.com/tahaluindo/Free-Proxies/main/proxies/working.txt
-https://raw.githubusercontent.com/batsura-vs/proxy_master_proxy/main/all.txt
+USELESS:https://raw.githubusercontent.com/batsura-vs/proxy_master_proxy/main/all.txt
 https://raw.githubusercontent.com/prxchk/proxy-list/main/http.txt
 https://raw.githubusercontent.com/andigwandi/free-proxy/main/proxy_list.txt
 https://raw.githubusercontent.com/hookzof/socks5_list/master/proxy.txt
-https://raw.githubusercontent.com/UptimerBot/proxy-list/master/proxies/http.txt
+USELESS:https://raw.githubusercontent.com/UptimerBot/proxy-list/master/proxies/http.txt
 USELESS:https://raw.githubusercontent.com/Bardiafa/Proxy-Leecher/main/good.txt
 USELESS:https://raw.githubusercontent.com/zuoxiaolei/proxys/main/proxys/proxys.txt
 https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt
 https://raw.githubusercontent.com/Anonym0usWork1221/Free-Proxies/main/proxy_files/https_proxies.txt
 https://raw.githubusercontent.com/yemixzy/proxy-list/main/proxies/http.txt
-https://raw.githubusercontent.com/mertguvencli/http-proxy-list/main/proxy-list/data.txt
+USELESS:https://raw.githubusercontent.com/mertguvencli/http-proxy-list/main/proxy-list/data.txt

@@ -18,21 +18,62 @@ exports.getStockMetaData = async (req, res) => {
 };
 
 
+
+// Does not work since Yahoo Finance API is no longer available
+      // exports.getStockInfo = async (req, res) => {
+      //   const { ticker } = req.params;
+      //   const apiUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=summaryDetail%2CsummaryProfile%2CdefaultKeyStatistics%2CassetProfile%2Cprice`;
+
+      //   try {
+      //     const response = await Axios.get(apiUrl);
+      //     const data = response.data.quoteSummary.result[0];
+
+      //     const stockInfo = {
+      //       description: data.assetProfile.longBusinessSummary || "N/A",
+      //       name: data.price.longName || "N/A",
+      //       exchangeCode: data.price.exchangeName || "N/A",
+      //       startDate: data.assetProfile.startDate || "N/A",
+      //       endDate: "N/A",
+      //       ticker: ticker
+      //     };
+
+      //     return res.status(200).json({
+      //       status: "success",
+      //       data: stockInfo
+      //     });
+      //   } catch (error) {
+      //     console.error(error);
+      //     return res.status(500).json({
+      //       status: "error",
+      //       message: "Failed to retrieve stock information"
+      //     });
+      //   }
+      // };
+
+
 exports.getStockInfo = async (req, res) => {
   const { ticker } = req.params;
-  const apiUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${ticker}?modules=summaryDetail%2CsummaryProfile%2CdefaultKeyStatistics%2CassetProfile%2Cprice`;
+  const apiUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}`;
 
   try {
     const response = await Axios.get(apiUrl);
-    const data = response.data.quoteSummary.result[0];
+    const result = response.data.chart.result[0];
+    const meta = result.meta;
 
     const stockInfo = {
-      description: data.assetProfile.longBusinessSummary || "N/A",
-      name: data.price.longName || "N/A",
-      exchangeCode: data.price.exchangeName || "N/A",
-      startDate: data.assetProfile.startDate || "N/A",
-      endDate: "N/A",
-      ticker: ticker
+      description: "N/A", // Not available in the new API: to be found somewhere?
+      name: meta.symbol || "N/A",
+      exchangeCode: meta.exchangeName || "N/A",
+      startDate: new Date(meta.firstTradeDate * 1000).toISOString().split('T')[0] || "N/A", // Converting Unix timestamp to ISO format
+      endDate: "N/A", // Not available in the new API: to be found somewhere?
+      ticker: ticker,
+      currency: meta.currency || "N/A",
+      instrumentType: meta.instrumentType || "N/A",
+      regularMarketPrice: meta.regularMarketPrice || "N/A",
+      previousClose: meta.previousClose || "N/A",
+      timezone: meta.timezone || "N/A",
+      exchangeTimezoneName: meta.exchangeTimezoneName || "N/A"
+      // Add more fields as needed
     };
 
     return res.status(200).json({
