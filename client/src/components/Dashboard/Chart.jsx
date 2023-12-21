@@ -34,16 +34,14 @@ const Chart = () => {
   }, [userData.token, userData.user.id]);
 
 
-  return (
+  return chartData ? (
     <React.Fragment>
-      {chartData && (
-        <div style={{ minHeight: "240px" }}>
-          <Title>Portfolio Performance Chart</Title>
-          <LineChart pastDataPeriod={chartData.data} duration={"12 months"} />
-        </div>
-      )}
+      <Title>Portfolio Performance Chart</Title>
+      <div style={{ minHeight: "240px" }}>
+        <LineChart pastDataPeriod={chartData.data} duration={"12 months"} />
+      </div>
     </React.Fragment>
-  );
+  ) : <></>
 };
 
 export default Chart;
