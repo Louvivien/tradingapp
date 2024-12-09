@@ -273,6 +273,9 @@ exports.getStockForUser = async (req, res) => {
         'APCA-API-KEY-ID': alpacaConfig.keyId,
         'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
       },
+    }).catch((error) => {
+      console.error('Error fetching account information:', error.message);
+      throw new Error('Account API call failed.');
     });
     const cashBalance = accountInfo.data.cash;
 
@@ -284,8 +287,10 @@ exports.getStockForUser = async (req, res) => {
         'APCA-API-KEY-ID': alpacaConfig.keyId,
         'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
       },
+    }).catch((error) => {
+      console.error('Error fetching positions:', error.message);
+      throw new Error('Positions API call failed.');
     });
-
 
 
     //how the order history is calculated
@@ -437,12 +442,19 @@ const getPricesData = async (stocks, marketOpen, userId) => {
     const alpacaConfig = await setAlpaca(userId);
 
     const promises = stocks.map(async (stock) => {
-      let url;
-      if (marketOpen) {
-        url = `https://data.alpaca.markets/v2/stocks/${stock.ticker}/trades/latest`;
-      } else {
-        url = `https://data.alpaca.markets/v2/stocks/${stock.ticker}//bars?timeframe=1D&limit=1`;
+      if (!stock.ticker || stock.ticker.trim() === '') {
+        console.error('Invalid stock ticker:', stock);
+        return null; // Skip invalid tickers
       }
+
+      const ticker = stock.ticker.trim(); // Clean ticker
+      const url = marketOpen
+        ? `https://data.alpaca.markets/v2/stocks/${ticker}/trades/latest`
+        : `https://data.alpaca.markets/v2/stocks/${ticker}/bars?timeframe=1D&limit=1`;
+
+
+
+      console.log('Fetching data from:', url);
 
       const response = await Axios.get(url, {
         headers: {
@@ -450,36 +462,37 @@ const getPricesData = async (stocks, marketOpen, userId) => {
           'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
         },
       });
+      // console.log("url: ",url),
 
       // console.log("response.data: ",response.data);
       // console.log("response.data.quote.ap: ",response.data.quote.ap);
       // console.log("response.data.trade.p: ",response.data.trade.p);
 
-
-
-      const currentPrice = marketOpen ? response.data.trade.p : response.data.bars.c 
-
-      const date = marketOpen ? response.data.trade.t : response.data.bars.t;
-
+      const currentPrice = marketOpen ? response.data.trade.p : response.data.bars[0]?.c;
+      const date = marketOpen ? response.data.trade.t : response.data.bars[0]?.t;
 
       const alpacaApi = new Alpaca(alpacaConfig);
-
-      const asset = await alpacaApi.getAsset(stock.ticker);
-      const assetName = asset.name;
-      
+      const asset = await alpacaApi.getAsset(ticker);
+      const assetName = asset?.name || 'Unknown';
 
       return {
-        ticker: stock.ticker,
-        date: date,
+        ticker,
+        date,
         adjClose: currentPrice,
-        name: assetName, 
-
+        name: assetName,
       };
     });
 
-    return Promise.all(promises);
+    const results = await Promise.all(promises);
+    return results.filter(Boolean); // Exclude null results
   } catch (error) {
+    console.error('Error in getPricesData:', error.message);
+    if (error.response) {
+      console.error('API Response:', error.response.status, error.response.data);
+    }
     return [];
   }
 };
 
+
+  

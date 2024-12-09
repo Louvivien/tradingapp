@@ -1180,12 +1180,29 @@ exports.getPortfolios = async (req, res) => {
 
   } catch (error) {
     console.error('Error fetching portfolios:', error);
-    return res.status(200).json({
+    if (error.response) {
+      // This provides more details about the error response from the Alpaca API or other sources
+      console.error('Response data:', error.response.data);
+      console.error('Response status:', error.response.status);
+      console.error('Response headers:', error.response.headers);
+    } else if (error.request) {
+      console.error('Request data:', error.request);
+    } else {
+      console.error('Error message:', error.message);
+    }
+    return res.status(500).json({
       status: "fail",
-      message: "Something unexpected happened.",
+      message: "Something unexpected happened. Please check logs for details.",
     });
   }
 };
+
+
+
+
+
+
+
 
 exports.getStrategies = async (req, res) => {
   try {
@@ -1455,7 +1472,7 @@ const getPricesData = async (stocks, marketOpen, userId) => {
       if (marketOpen) {
         url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/trades/latest`;
       } else {
-        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}//bars?timeframe=1D&limit=1`;
+        url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/bars?timeframe=1D&limit=1`;
       }
 
       const response = await Axios.get(url, {

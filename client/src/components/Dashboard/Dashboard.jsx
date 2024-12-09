@@ -43,9 +43,14 @@ const FixedHeightPaper = styled(StyledPaper)({
 
     if (response.data.status === "success") {
       setPurchasedStocks(response.data.stocks);
-      // console.log("response.data.stocks ", response.data.stocks);
+       console.log("response.data.stocks ", response.data.stocks);
       setAccountBalance(response.data.cash);
     }
+    else {  
+      setPurchasedStocks([]);
+        console.log("response.data.stocks ", response.data.stocks);
+      setAccountBalance(0);
+    } 
   };
 
    //Function to get the list of orders from the server using Alpacas API

@@ -82,6 +82,7 @@ here  /tradingapp/server/config/ you have an example file. Rename it .env and ch
 
 there /tradingapp/client/  you have an example file. Rename it .env and change the keys with yours
 
+check REACT_APP_BASE_URL_DEV=http://localhost:3000 and make sure it's the right port
 
 Please make sure you have created a .env in the server AND in the client or it will not work
 
