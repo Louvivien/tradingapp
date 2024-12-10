@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 STORAGE_DIR=/opt/render/project/.render
 
 if [[ ! -d $STORAGE_DIR/chrome ]]; then
@@ -10,31 +9,31 @@ if [[ ! -d $STORAGE_DIR/chrome ]]; then
   wget -P ./ https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
   dpkg -x ./google-chrome-stable_current_amd64.deb $STORAGE_DIR/chrome
   rm ./google-chrome-stable_current_amd64.deb
-  cd $HOME/project/src # Make sure we return to where we were
+  cd $HOME/project/src || exit 1 # Make sure we return to where we were
 else
   echo "...Using Chrome from cache"
 fi
 
-# be sure to add Chromes location to the PATH as part of your Start Command
-# export PATH="${PATH}:/opt/render/project/.render/chrome/opt/google/chrome"
+# Add Chrome's location to the PATH
+export PATH="${PATH}:/opt/render/project/.render/chrome/opt/google/chrome"
 
-# install node modules
+# Install Node.js dependencies
 echo "Installing Node.js dependencies..."
 yarn install
 
-# navigate to scripts directory
-cd scripts
+# Navigate to scripts directory (under server)
+cd server/scripts || { echo "scripts directory not found"; exit 1; }
 
 # Check Python version
 python3 --version 
 
-# upgrade pip in the virtual environment
+# Upgrade pip in the virtual environment
 echo "Upgrading pip in the virtual environment..."
 /opt/render/project/src/.venv/bin/python -m pip install --upgrade pip
 
-# install python packages
+# Install Python dependencies
 echo "Installing Python dependencies..."
-pip3 install -r requirements.txt
+pip3 install -r requirements.txt || { echo "requirements.txt not found"; exit 1; }
 
-# navigate back to server directory
-cd ..
+# Navigate back to server directory
+cd ../..

@@ -13,5 +13,5 @@ USELESS:https://raw.githubusercontent.com/Bardiafa/Proxy-Leecher/main/good.txt
 USELESS:https://raw.githubusercontent.com/zuoxiaolei/proxys/main/proxys/proxys.txt
 USELESS:https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt
 USELESS:https://raw.githubusercontent.com/Anonym0usWork1221/Free-Proxies/main/proxy_files/https_proxies.txt
-https://raw.githubusercontent.com/yemixzy/proxy-list/main/proxies/http.txt
+USELESS:https://raw.githubusercontent.com/yemixzy/proxy-list/main/proxies/http.txt
 USELESS:https://raw.githubusercontent.com/mertguvencli/http-proxy-list/main/proxy-list/data.txt
