@@ -82,6 +82,8 @@ server/config/googlecredentials.json
 *.env
 *.env.production
 *.env.development
+client/.env
+server/config/.env
 
 
 

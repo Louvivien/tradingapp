@@ -9,7 +9,7 @@ import Title from "../Template/Title.jsx";
 import SaleModal from "./SaleModal";
 import styles from "./Dashboard.module.css";
 
-const Purchases = ({ purchasedStocks }) => {
+const Purchases = ({ purchasedStocks = [] }) => {
   const [saleOpen, setSaleOpen] = useState(false);
   const [stock, setStock] = useState(undefined);
   
@@ -49,7 +49,7 @@ let allStocksHaveAvgCost = true;
           </TableHead>
           
           <TableBody>
-          {purchasedStocks.filter(stock => stock.purchasePrice).map((row) => {
+          {purchasedStocks?.filter(stock => stock.purchasePrice).map((row) => {
 
             if (row.purchasePrice === null) {
               allStocksHaveAvgCost = false;

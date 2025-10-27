@@ -13,6 +13,4 @@ router.route("/prices/:ticker/full").get(getStockHistoricData);
 router.route("/random").get(getRandomStockData);
 router.route("/portfolio/:userId").get(auth, getPortfolioData);
 
-
-
 module.exports = router;

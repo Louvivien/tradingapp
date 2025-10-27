@@ -2,7 +2,7 @@ const User = require("../models/userModel");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const Alpaca = require('@alpacahq/alpaca-trade-api');
-const setAlpaca = require('../config/alpaca');
+const { getAlpacaConfig } = require('../config/alpacaConfig');
 
 
 
@@ -98,7 +98,7 @@ exports.loginUser = async (req, res) => {
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
 
     //connect to alpaca when signedin
-    const alpacaConfig = await setAlpaca(user._id); 
+    const alpacaConfig = await getAlpacaConfig(user._id); 
     const alpacaApi = new Alpaca(alpacaConfig);
 
     // get user's balance from Alpaca

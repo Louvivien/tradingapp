@@ -1,6 +1,6 @@
 const User = require("../models/userModel");
 const Stock = require("../models/stockModel");
-const setAlpaca = require('../config/alpaca');
+const { getAlpacaConfig } = require('../config/alpacaConfig');
 const Alpaca = require('@alpacahq/alpaca-trade-api');
 const Axios = require("axios");
 
@@ -10,70 +10,81 @@ const Axios = require("axios");
 exports.purchaseStock = async (req, res) => {    
   try {
     const { userId, ticker, quantity, price } = req.body;
-    // console.log(req.body);
     
     if (req.user !== userId) {
-      return res.status(200).json({
+      return res.status(401).json({
         status: "fail",
-        message: "Credentials couldn't be validated.",
+        message: "Unauthorized access",
       });
     }
 
     const user = await User.findById(userId);
-    // console.log(user);
-
-
     if (!user) {
-      return res.status(200).json({
+      return res.status(404).json({
         status: "fail",
-        message: "Credentials couldn't be validated.",
+        message: "User not found",
       });
     }
 
     const totalPrice = quantity * price;
     if (user.balance - totalPrice < 0) {
-      return res.status(200).json({
+      return res.status(400).json({
         status: "fail",
-        message: `You don't have enough cash to purchase this stock.`,
+        message: `Insufficient balance. Required: $${totalPrice}, Available: $${user.balance}`,
       });
     }
 
-    const alpacaConfig = await setAlpaca(userId);
-    console.log("config key done");
+    const alpacaConfig = await getAlpacaConfig(userId, 'paper');
+    if (!alpacaConfig.hasValidKeys) {
+      return res.status(403).json({
+        status: 'fail',
+        message: alpacaConfig.error || 'Invalid API keys. Please check your Alpaca account settings.',
+      });
+    }
 
-    const alpacaApi = new Alpaca(alpacaConfig);
-    console.log("connected to alpaca");
+    const tradingKeys = alpacaConfig.getTradingKeys();
+    console.log('Using paper trading API:', tradingKeys.apiUrl);
 
-    const order = await alpacaApi.createOrder({
+    // Create the order using the configured client
+    const order = await tradingKeys.client.post(`${tradingKeys.apiUrl}/v2/orders`, {
       symbol: ticker,
       qty: quantity,
       side: 'buy',
       type: 'market',
       time_in_force: 'gtc',
+    }, {
+      headers: {
+        'APCA-API-KEY-ID': tradingKeys.keyId,
+        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+      }
     });
-    console.log("order sent");
 
-
-    const updatedUser = await User.findByIdAndUpdate(userId, {
-      balance:
-        Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100,
-    });
+    // Update user balance
+    const newBalance = Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100;
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { balance: newBalance },
+      { new: true }
+    );
         
     return res.status(200).json({
       status: "success",
-      stockId: ticker,
+      order: order.data,
       user: {
         username: updatedUser.username,
         id: updatedUser._id,
-        balance:
-          Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100,
+        balance: newBalance,
       },
     });
 
   } catch (error) {
-    return res.status(200).json({
+    console.error('Error in purchaseStock:', error.message);
+    if (error.response) {
+      console.error('API Response:', error.response.status, error.response.data);
+    }
+    return res.status(error.response?.status || 500).json({
       status: "fail",
-      message: "Something unexpected happened.",
+      message: error.response?.data?.message || 'Error creating order',
     });
   }
 };
@@ -82,70 +93,67 @@ exports.purchaseStock = async (req, res) => {
 exports.sellStock = async (req, res) => {
   try {
     const { userId, stockId, quantity, price } = req.body;
-    // console.log(req.body);
-
 
     if (req.user !== userId) {
-      return res.status(200).json({
+      return res.status(401).json({
         status: "fail",
-        message: "Credentials couldn't be validated.",
+        message: "Unauthorized access",
       });
     }
 
     const stock = await Stock.findOne({ticker: stockId});
-    // console.log(stock);
-
-
     if (!stock) {
-      return res.status(200).json({
+      return res.status(404).json({
         status: "fail",
-        message: "Credentials couldn't be validated.",
+        message: "Stock not found",
       });
     }
 
     const user = await User.findById(userId);
-    // console.log(user);
-
-
     if (!user) {
-      return res.status(200).json({
+      return res.status(404).json({
         status: "fail",
-        message: "Credentials couldn't be validated.",
+        message: "User not found",
       });
     }
 
     if (quantity > stock.quantity) {
-      return res.status(200).json({
+      return res.status(400).json({
         status: "fail",
-        message: "Invalid quantity.",
+        message: `Invalid quantity. You only own ${stock.quantity} shares.`,
       });
     }
 
-    const alpacaConfig = await setAlpaca(userId);
-    console.log("config key done");
+    const alpacaConfig = await getAlpacaConfig(userId, 'paper');
+    if (!alpacaConfig.hasValidKeys) {
+      return res.status(403).json({
+        status: 'fail',
+        message: alpacaConfig.error || 'Invalid API keys. Please check your Alpaca account settings.',
+      });
+    }
 
-    const alpacaApi = new Alpaca(alpacaConfig);
-    console.log("connected to Alpaca");
+    const tradingKeys = alpacaConfig.getTradingKeys();
+    console.log('Using paper trading API:', tradingKeys.apiUrl);
 
-
-
-    const order = await alpacaApi.createOrder({
+    // Create the sell order using the configured client
+    const order = await tradingKeys.client.post(`${tradingKeys.apiUrl}/v2/orders`, {
       symbol: stock.ticker,
       qty: quantity,
       side: 'sell',
       type: 'market',
       time_in_force: 'gtc',
-    });
-    console.log("order sent");
-
-
-    const saleProfit = order.filled_avg_price * order.filled_qty;
-
-    const updatedUser = await User.findByIdAndUpdate(userId, {
-      balance:
-        Math.round((user.balance + saleProfit + Number.EPSILON) * 100) / 100,
+    }, {
+      headers: {
+        'APCA-API-KEY-ID': tradingKeys.keyId,
+        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+      }
     });
 
+    // Calculate sale profit and update user balance
+    const saleProfit = order.data.filled_avg_price * order.data.filled_qty;
+    const newBalance = Math.round((user.balance + saleProfit + Number.EPSILON) * 100) / 100;
+    
+    // Update stock quantity or delete if all sold
     if (quantity === stock.quantity) {
       await Stock.findOneAndDelete({ ticker: stockId });
     } else {
@@ -155,59 +163,102 @@ exports.sellStock = async (req, res) => {
       );
     }
 
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { balance: newBalance },
+      { new: true }
+    );
+
     return res.status(200).json({
       status: "success",
+      order: order.data,
       user: {
         username: updatedUser.username,
         id: updatedUser._id,
-        balance:
-          Math.round((user.balance + saleProfit + Number.EPSILON) * 100) / 100,
+        balance: newBalance,
       },
     });
   } catch (error) {
-    console.log(error);
-    return res.status(200).json({
+    console.error('Error in sellStock:', error.message);
+    if (error.response) {
+      console.error('API Response:', error.response.status, error.response.data);
+    }
+    return res.status(error.response?.status || 500).json({
       status: "fail",
-      message: "Something unexpected happened.",
+      message: error.response?.data?.message || 'Error creating order',
     });
   }
 };
 
 
-exports.getOrderForUser = async (req, res) => {
+exports.getOrders = async (req, res) => {
   try {
-    if (req.user !== req.params.userId) {
-      return res.status(200).json({
+    const userId = req.params.userId;
+
+    if (req.user !== userId) {
+      return res.status(401).json({
         status: "fail",
-        message: "Credentials couldn't be validated.",
+        message: "Unauthorized access",
       });
     }
 
-    // Set up Alpaca API client for the user
-    const alpacaConfig = await setAlpaca(req.params.userId);
-    const apiUrl = alpacaConfig.apiURL;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        status: "fail",
+        message: "User not found",
+      });
+    }
 
-    // Retrieve all orders for the user
-    const ordersResponse = await Axios.get(`${apiUrl}/v2/orders`, {
+    const alpacaConfig = await getAlpacaConfig(userId, 'paper');
+    if (!alpacaConfig.hasValidKeys) {
+      return res.status(403).json({
+        status: 'fail',
+        message: alpacaConfig.error || 'Invalid API keys. Please check your Alpaca account settings.',
+      });
+    }
+
+    const tradingKeys = alpacaConfig.getTradingKeys();
+    console.log('Using paper trading API:', tradingKeys.apiUrl);
+
+    // Get orders
+    const ordersResponse = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/orders`, {
       headers: {
-        'APCA-API-KEY-ID': alpacaConfig.keyId,
-        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-      },
-      params: {
-        status: 'all',
-      },
+        'APCA-API-KEY-ID': tradingKeys.keyId,
+        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+      }
     });
 
-    // Return the user's orders
+    // Get positions
+    const positionsResponse = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
+      headers: {
+        'APCA-API-KEY-ID': tradingKeys.keyId,
+        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+      }
+    });
+
+    // Get account
+    const accountResponse = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/account`, {
+      headers: {
+        'APCA-API-KEY-ID': tradingKeys.keyId,
+        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+      }
+    });
+
     return res.status(200).json({
       status: "success",
       orders: ordersResponse.data,
+      positions: positionsResponse.data,
+      account: accountResponse.data,
     });
+
   } catch (error) {
-    console.error(error);
+    console.error('Error in getOrders:', error);
+    console.error('Error details:', error.response?.data || error.message);
     return res.status(500).json({
-      status: "error",
-      message: "An error occurred while retrieving the user's orders.",
+      status: "fail",
+      message: "Error fetching orders",
+      error: error.message,
     });
   }
 };

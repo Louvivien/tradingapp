@@ -23,53 +23,65 @@ const FixedHeightPaper = styled(StyledPaper)({
   height: 350,
 });
 
-  const Dashboard = ({ userData, setUserData }) => {
-    const [purchasedStocks, setPurchasedStocks] = useState([]);
-    const [accountBalance, setAccountBalance] = useState([]);
-    const [orderList, setOrderList] = useState([]);
-    const [portfolios, setPortfolios] = useState([]);
+const Dashboard = ({ userData, setUserData }) => {
+  const [purchasedStocks, setPurchasedStocks] = useState([]);
+  const [accountBalance, setAccountBalance] = useState([]);
+  const [orderList, setOrderList] = useState({ orders: [], positions: [] });
+  const [portfolios, setPortfolios] = useState([]);
 
-
- //Function to get the list of purchased stocks from the server using Alpacas API
+  // Function to get the list of purchased stocks from the server using Alpacas API
   const getPurchasedStocks = async () => {
-    const url = config.base_url + `/api/stock/${userData.user.id}`;
-    const headers = {
-      "x-auth-token": userData.token,
-    };
+    try {
+      console.log('Fetching stocks for user:', userData.user.id);
+      const url = config.base_url + `/api/stock/${userData.user.id}`;
+      const headers = {
+        "x-auth-token": userData.token,
+      };
 
-    const response = await Axios.get(url, {
-      headers,
-    });
+      const response = await Axios.get(url, { headers });
+      console.log('Stocks API Response:', response.data);
 
-    if (response.data.status === "success") {
-      setPurchasedStocks(response.data.stocks);
-       console.log("response.data.stocks ", response.data.stocks);
-      setAccountBalance(response.data.cash);
-    }
-    else {  
+      if (response.data.status === "success") {
+        setPurchasedStocks(response.data.stocks);
+        setAccountBalance(response.data.cash);
+      } else {
+        console.warn('Failed to fetch stocks:', response.data);
+        setPurchasedStocks([]);
+        setAccountBalance(0);
+      }
+    } catch (error) {
+      console.error('Error in getPurchasedStocks:', error);
       setPurchasedStocks([]);
-        console.log("response.data.stocks ", response.data.stocks);
       setAccountBalance(0);
-    } 
-  };
-
-   //Function to get the list of orders from the server using Alpacas API
-  const getOrderList = async () => {
-    const url = config.base_url + `/api/order/${userData.user.id}`;
-    const headers = {
-      "x-auth-token": userData.token,
-    };
-
-    const response = await Axios.get(url, {
-      headers,
-    });
-
-    if (response.data.status === "success") {
-      setOrderList(response.data.orders);
-      
     }
   };
 
+  // Function to get the list of orders from the server using Alpacas API
+  const getOrderList = async () => {
+    try {
+      console.log('Fetching orders for user:', userData.user.id);
+      const url = config.base_url + `/api/order/${userData.user.id}`;
+      const headers = {
+        "x-auth-token": userData.token,
+      };
+
+      const response = await Axios.get(url, { headers });
+      console.log('Orders API Response:', response.data);
+
+      if (response.data.status === "success") {
+        setOrderList({
+          orders: response.data.orders || [],
+          positions: response.data.positions || []
+        });
+      } else {
+        console.warn('Failed to fetch orders:', response.data);
+        setOrderList({ orders: [], positions: [] });
+      }
+    } catch (error) {
+      console.error('Error in getOrderList:', error);
+      setOrderList({ orders: [], positions: [] });
+    }
+  };
 
   // Function to get the Strategy Portfolios from the server using MangoDB
   const getPortfolio = async () => {
@@ -98,7 +110,6 @@ const FixedHeightPaper = styled(StyledPaper)({
     getPortfolio();
   }, []);
 
-
   return (
     <Container maxWidth="lg" className={styles.container}>
       <Grid container spacing={3} marginTop="15px">
@@ -109,7 +120,6 @@ const FixedHeightPaper = styled(StyledPaper)({
           </FixedHeightPaper>
         </Grid>
 
-
         {/* Balance */}
         <Grid item xs={12} md={4} lg={3}>
           <FixedHeightPaper>
@@ -117,14 +127,12 @@ const FixedHeightPaper = styled(StyledPaper)({
           </FixedHeightPaper>
         </Grid>
 
-
         {/* General Portfolio */}
         <Grid item xs={12}>
           <StyledPaper>
             <Purchases accountBalance={accountBalance} purchasedStocks={purchasedStocks}/>
           </StyledPaper>
         </Grid>
-
 
         {/* Strategy Portfolio */}
         {portfolios && portfolios.length > 0 && (
@@ -134,8 +142,6 @@ const FixedHeightPaper = styled(StyledPaper)({
             </StyledPaper>
           </Grid>
         )}
-
-          
 
         {/* Orders History */}
         <Grid item xs={12}>

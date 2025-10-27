@@ -1,5 +1,5 @@
 const Axios = require("axios");
-const setAlpaca = require('../config/alpaca');
+const { getAlpacaConfig } = require("../config/alpacaConfig");
 
 exports.getStockMetaData = async (req, res) => {
   try {
@@ -61,11 +61,11 @@ exports.getStockInfo = async (req, res) => {
     const meta = result.meta;
 
     const stockInfo = {
-      description: "N/A", // Not available in the new API: to be found somewhere?
+      description: "N/A",
       name: meta.symbol || "N/A",
       exchangeCode: meta.exchangeName || "N/A",
-      startDate: new Date(meta.firstTradeDate * 1000).toISOString().split('T')[0] || "N/A", // Converting Unix timestamp to ISO format
-      endDate: "N/A", // Not available in the new API: to be found somewhere?
+      startDate: new Date(meta.firstTradeDate * 1000).toISOString().split('T')[0] || "N/A",
+      endDate: "N/A",
       ticker: ticker,
       currency: meta.currency || "N/A",
       instrumentType: meta.instrumentType || "N/A",
@@ -73,7 +73,6 @@ exports.getStockInfo = async (req, res) => {
       previousClose: meta.previousClose || "N/A",
       timezone: meta.timezone || "N/A",
       exchangeTimezoneName: meta.exchangeTimezoneName || "N/A"
-      // Add more fields as needed
     };
 
     return res.status(200).json({
@@ -94,7 +93,7 @@ exports.getStockInfo = async (req, res) => {
 exports.getStockHistoricData = async (req, res) => {
   try {
     const userId = req.params.userId;
-    const alpacaConfig = await setAlpaca(userId);
+    const alpacaConfig = await getAlpacaConfig(userId, 'live');
 
     // Get the last price for the stock using the Alpaca API
     const alpacaUrl = `https://data.alpaca.markets/v2/stocks/${req.params.ticker}/quotes/latest`;
@@ -118,7 +117,6 @@ exports.getStockHistoricData = async (req, res) => {
     const response = await Axios.get(url);
     const data = response.data;
     
-
     // Last month
     const pastMonth = [];
 
@@ -214,7 +212,6 @@ exports.getRandomStockData = async (req, res) => {
 
     const response = await Axios.get(url);
     
-
     const data = [];
     for (let i = response.data.length - 1; i >= 0; i -= 5) {
       data.push({
@@ -249,26 +246,37 @@ exports.getPortfolioData = async (req, res) => {
     });
   }
 
-  const alpacaConfig = await setAlpaca(userId);
-  const alpacaApi = Axios.create({
-    headers: {
-      'APCA-API-KEY-ID': alpacaConfig.keyId,
-      'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-    },
-  });
-
   try {
-    const response = await alpacaApi.get(alpacaConfig.apiURL+'/v2/account/portfolio/history?period=12M');
+    const alpacaConfig = await getAlpacaConfig(userId, 'live');
+    
+    if (!alpacaConfig.hasValidKeys) {
+      return res.status(403).json({
+        status: 'fail',
+        message: alpacaConfig.error || 'Invalid API keys. Please check your Alpaca account settings.',
+      });
+    }
+
+    const tradingKeys = alpacaConfig.getTradingKeys();
+    const response = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/account/portfolio/history?period=12M`, {
+      headers: {
+        'APCA-API-KEY-ID': tradingKeys.keyId,
+        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+      }
+    });
 
     return res.status(200).json({
       status: 'success',
-      data: response.data,
+      portfolio: response.data,
     });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({
+    console.error('Error fetching portfolio data:', error.message);
+    if (error.response) {
+      console.error('API Response:', error.response.status, error.response.data);
+    }
+    
+    return res.status(error.response?.status || 500).json({
       status: 'fail',
-      message: 'Error fetching portfolio history',
+      message: error.response?.data?.message || 'Error fetching portfolio history',
     });
   }
 };

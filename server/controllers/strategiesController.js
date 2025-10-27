@@ -2,7 +2,7 @@ const User = require("../models/userModel");
 const Strategy = require("../models/strategyModel");
 const Portfolio = require("../models/portfolioModel");
 const News = require("../models/newsModel");
-const setAlpaca = require('../config/alpaca');
+const { getAlpacaConfig } = require("../config/alpacaConfig");
 const Alpaca = require('@alpacahq/alpaca-trade-api');
 const axios = require("axios");
 const moment = require('moment');
@@ -40,15 +40,25 @@ exports.createCollaborative = async (req, res) => {
 
       // Function to parse the JSON data from GPT plugins
       const parseJsonData = (fullMessage) => {
+        if (!fullMessage) {
+          throw new Error("Empty response from OpenAI");
+        }
 
-        let jsonStart = fullMessage.indexOf('```json\n') + 8;
-        let jsonEnd = fullMessage.indexOf('\n```', jsonStart);
-        if (jsonStart !== -1 && jsonEnd !== -1) {
-          let jsonString = fullMessage.substring(jsonStart, jsonEnd);
-          let jsonData = JSON.parse(jsonString);
-          return jsonData;
-        } else {
-          console.error('No JSON in the response')
+        const fenceMatch = fullMessage.match(/```json\s*([\s\S]*?)```/i);
+        const payload = fenceMatch ? fenceMatch[1] : fullMessage;
+
+        try {
+          const parsed = JSON.parse(payload);
+          if (Array.isArray(parsed)) {
+            return parsed;
+          }
+          if (Array.isArray(parsed?.positions)) {
+            return parsed.positions;
+          }
+          throw new Error("Response JSON missing positions array");
+        } catch (error) {
+          console.error("Failed to parse JSON from OpenAI response", error);
+          throw new Error("Collaborative strategy response is not valid JSON");
         }
       };
 
@@ -71,7 +81,7 @@ exports.createCollaborative = async (req, res) => {
 
       console.log('Order: ', JSON.stringify(parsedJson, null, 2));
 
-      const alpacaConfig = await setAlpaca(UserID);
+      const alpacaConfig = await getAlpacaConfig(UserID);
       console.log("config key done");
 
       const alpacaApi = new Alpaca(alpacaConfig);
@@ -212,7 +222,7 @@ exports.createCollaborative = async (req, res) => {
       });
   
       // Send a sell order for all the stocks in the portfolio
-      const alpacaConfig = await setAlpaca(UserID);
+      const alpacaConfig = await getAlpacaConfig(UserID);
       const alpacaApi = new Alpaca(alpacaConfig);
   
       let sellOrderPromises = portfolio.stocks.map(stock => {
@@ -305,7 +315,7 @@ exports.createCollaborative = async (req, res) => {
         let totalScore = topAssets.reduce((total, asset) => total + asset.Score, 0);
         let remainingBudget = budget;
   
-        const alpacaConfig = await setAlpaca(UserID);
+        const alpacaConfig = await getAlpacaConfig(UserID);
         console.log("config key done");
   
         for (let i = 0; i < orderList.length; i++) {
@@ -536,7 +546,7 @@ exports.disableAIFund = async (req, res) => {
         });
     
         // Send a sell order for all the stocks in the portfolio
-        const alpacaConfig = await setAlpaca(UserID);
+        const alpacaConfig = await getAlpacaConfig(UserID);
         const alpacaApi = new Alpaca(alpacaConfig);
     
         let sellOrderPromises = portfolio.stocks.map(stock => {
@@ -608,7 +618,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, budge
     const numberOfOrders = orders.length;
     console.log('numberOfOrders', numberOfOrders);
 
-    const alpacaConfig = await setAlpaca(UserID);
+    const alpacaConfig = await getAlpacaConfig(UserID);
     const alpacaApi = new Alpaca(alpacaConfig);
 
 // Check if the market is open
@@ -863,7 +873,7 @@ exports.rebalanceAIFund = async (req, res) => {
       let totalScore = topAssets.reduce((total, asset) => total + asset.Score, 0);
       let budget = portfolio.budget;
 
-      const alpacaConfig = await setAlpaca(UserID);
+      const alpacaConfig = await getAlpacaConfig(UserID);
       console.log("config key done");
 
       for (let i = 0; i < orderList.length; i++) {
@@ -1071,128 +1081,79 @@ exports.rebalanceAIFund = async (req, res) => {
 
 exports.getPortfolios = async (req, res) => {
   try {
-    if (req.user !== req.params.userId) {
-      return res.status(200).json({
-        status: "fail",
-        message: "Credentials couldn't be validated.",
-      });
+    const { userId } = req.params;
+    const { duration = '1D' } = req.query;
+
+    // Validate user ID
+    if (!userId) {
+      return res.status(400).json({ error: 'User ID is required' });
     }
 
-    let UserID = req.params.userId;    
+    // Get user and validate
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
 
-    const portfolios = await Portfolio.find(); // Removed .populate('strategy_id')
-    console.log('portfolios:', portfolios);
+    // Get Alpaca configuration
+    const alpacaConfig = await getAlpacaConfig(userId);
+    if (!alpacaConfig) {
+      return res.status(500).json({ error: 'Failed to initialize Alpaca configuration' });
+    }
 
-    const marketOpen = await isMarketOpen(UserID);
+    // Get the appropriate API keys based on the endpoint
+    const { keyId, secretKey, apiUrl } = alpacaConfig.getTradingKeys();
 
-    const portfoliosData = await Promise.all(portfolios.map(async (portfolio) => {
-      const strategy = await Strategy.findOne({ strategy_id: portfolio.strategy_id });    
-      const stocksData = await getPricesData(portfolio.stocks, marketOpen, UserID);
+    // Validate API keys
+    if (!keyId || !secretKey) {
+      return res.status(403).json({ error: 'Invalid API keys' });
+    }
 
-      const modifiedStocks = portfolio.stocks.map(async (stock) => {
-        let currentPrice;
-        let currentDate;
-        let name;
-        let avgCost = stock.avgCost;
+    // Make API call to get portfolio history
+    const response = await axios.get(`${apiUrl}/v2/account/portfolio/history`, {
+      params: {
+        period: duration,
+        timeframe: '1D',
+        extended_hours: true
+      },
+      headers: {
+        'APCA-API-KEY-ID': keyId,
+        'APCA-API-SECRET-KEY': secretKey
+      }
+    });
 
+    // Process the portfolio history data
+    const portfolioHistory = response.data.timestamp.map((timestamp, index) => ({
+      timestamp: timestamp * 1000, // Convert to milliseconds
+      equity: response.data.equity[index],
+      profitLoss: response.data.profit_loss[index],
+      profitLossPct: response.data.profit_loss_pct[index]
+    }));
 
+    // Get current portfolio value
+    const currentEquity = portfolioHistory[portfolioHistory.length - 1]?.equity || 0;
+    const currentProfitLoss = portfolioHistory[portfolioHistory.length - 1]?.profitLoss || 0;
+    const currentProfitLossPct = portfolioHistory[portfolioHistory.length - 1]?.profitLossPct || 0;
 
-        stocksData.forEach((stockData) => {
-          if (stockData.ticker.toLowerCase() === stock.symbol.toLowerCase()) {
-            currentDate = stockData.date;
-            currentPrice = stockData.adjClose;
-            name = stockData.name;
-          }
-        });
-
-        // If avgCost is null and market is open, get the filled orders and update avgCost
-        if (avgCost === null && marketOpen) {
-          console.log('Updating portfolio to check if orders are filled');
-          const alpacaConfig = await setAlpaca(UserID);
-          const response = await axios.get(alpacaConfig.apiURL + '/v2/orders', {
-            headers: {
-              'APCA-API-KEY-ID': alpacaConfig.keyId,
-              'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-            },
-            params: {
-              status: 'filled',
-              symbols: [stock.symbol],
-              limit: 10,
-              direction: 'desc'
-            }
-          });   
-          const orders = response.data;
-
-          if (orders && orders.length > 0) {
-            // Find the order that matches the quantity
-            
-            const matchingOrder = orders.find(order => order.client_order_id === stock.orderID);
-            
-            console.log('stock.quantity:', stock.orderID);
-
-
-            if (matchingOrder) {
-
-              console.log('Found matching order:', matchingOrder);
-
-              avgCost = matchingOrder.filled_avg_price;
-
-              // Update the avgCost in the database
-              await Portfolio.updateOne(
-                { _id: portfolio._id, 'stocks.symbol': stock.symbol },
-                { $set: { 'stocks.$.avgCost': avgCost } }
-              );
-              console.log('Portfolio updated with cost for orders');
-            }
-
-            else {
-              console.log('No matching order found');
-            }
-
-          }
-        }
-
-        return {
-          symbol: stock.symbol,
-          name,
-          avgCost,
-          quantity: stock.quantity,
-          currentDate,
-          currentPrice,
-        };
-      });
-
-      return {
-        name: portfolio.name,
-        strategy: strategy ? strategy.strategy : null, 
-        strategy_id: portfolio.strategy_id, 
-        stocks: await Promise.all(modifiedStocks),
-      };
-
-
-    }))
-
-    // Send the response
-    return res.status(200).json({
-      status: "success",
-      portfolios: portfoliosData
+    // Return the formatted response
+    res.json({
+      success: true,
+      portfolio: {
+        history: portfolioHistory,
+        currentEquity,
+        currentProfitLoss,
+        currentProfitLossPct
+      }
     });
 
   } catch (error) {
-    console.error('Error fetching portfolios:', error);
+    console.error('Error in getPortfolios:', error.message);
     if (error.response) {
-      // This provides more details about the error response from the Alpaca API or other sources
-      console.error('Response data:', error.response.data);
-      console.error('Response status:', error.response.status);
-      console.error('Response headers:', error.response.headers);
-    } else if (error.request) {
-      console.error('Request data:', error.request);
-    } else {
-      console.error('Error message:', error.message);
+      console.error('API Response:', error.response.status, error.response.data);
     }
-    return res.status(500).json({
-      status: "fail",
-      message: "Something unexpected happened. Please check logs for details.",
+    res.status(error.response?.status || 500).json({
+      error: 'Failed to fetch portfolio data',
+      details: error.response?.data || error.message
     });
   }
 };
@@ -1444,17 +1405,26 @@ const retry = (fn, retriesLeft = 5, interval = 1000) => {
 //this is also in strockController can be put in utils
 const isMarketOpen = async (userId) => {
   try {
-    const alpacaConfig = await setAlpaca(userId);
-    const response = await Axios.get(alpacaConfig.apiURL+'/v2/clock', {
+    const alpacaConfig = await getAlpacaConfig(userId);
+    if (!alpacaConfig.hasValidKeys) {
+      console.error('Invalid API keys in isMarketOpen');
+      return false;
+    }
+
+    const tradingKeys = alpacaConfig.getTradingKeys();
+    const response = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/clock`, {
       headers: {
-        'APCA-API-KEY-ID': alpacaConfig.keyId,
-        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-      },
+        'APCA-API-KEY-ID': tradingKeys.keyId,
+        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+      }
     });
-    // console.log("response.data.is_open: ", response.data.is_open);
+
     return response.data.is_open;
   } catch (error) {
-    console.error('Error fetching market status:', error);
+    console.error('Error fetching market status:', error.message);
+    if (error.response) {
+      console.error('API Response:', error.response.status, error.response.data);
+    }
     return false;
   }
 };
@@ -1463,7 +1433,7 @@ const isMarketOpen = async (userId) => {
 //not exactly here it is symbol not ticker
 const getPricesData = async (stocks, marketOpen, userId) => {
   try {
-    const alpacaConfig = await setAlpaca(userId);
+    const alpacaConfig = await getAlpacaConfig(userId);
 
     const promises = stocks.map(async (stock) => {
       // console.log('Stock ticker:', stock.symbol);
@@ -1547,5 +1517,3 @@ const getPricesData = async (stocks, marketOpen, userId) => {
 //   console.log(`curl -X ${request.method.toUpperCase()} '${request.url}${params ? `?${params}` : ''}' ${headers}${data ? ` -d '${data}'` : ''}` + '\n');
 //   return request;
 // });
-
-

@@ -14,50 +14,52 @@ const LineChartPort = ({ pastDataPeriod, stockInfo, duration }) => {
     return [month, day].join("-");
   };
 
-  const lineChart =
-    pastDataPeriod.timestamp?.length > 0 ? (
-      <Line
-        data={{
-          labels: pastDataPeriod.timestamp.map((timestamp) => formatDate(timestamp * 1000)),
-          datasets: [
-            {
-              data: pastDataPeriod.equity,
-              label: "Equity",
-              borderColor: "rgba(0, 0, 255, 0.5)",
-              fill: true,
-              backgroundColor: "rgba(116, 185, 255, 0.2)",
-            },
-          ],
-        }}
-        options={{
-          maintainAspectRatio: false,
-          elements: {
-            point: {
-              radius: 2,
-            },
+  // Check if we have valid portfolio history data
+  const hasValidData = pastDataPeriod?.history?.length > 0;
+
+  const lineChart = hasValidData ? (
+    <Line
+      data={{
+        labels: pastDataPeriod.history.map(({ timestamp }) => formatDate(timestamp)),
+        datasets: [
+          {
+            data: pastDataPeriod.history.map(({ equity }) => equity),
+            label: "Equity",
+            borderColor: "rgba(0, 0, 255, 0.5)",
+            fill: true,
+            backgroundColor: "rgba(116, 185, 255, 0.2)",
           },
-          legend: { display: false },
-          layout: {
-            padding: {
-              left: 20,
-              right: 20,
-              top: 15,
-              bottom: 0,
-            },
+        ],
+      }}
+      options={{
+        maintainAspectRatio: false,
+        elements: {
+          point: {
+            radius: 2,
           },
-          title: {
-            display: true,
-            text: stockInfo
-              ? `Adjusted closing stock price of ${stockInfo.ticker} over the past ${duration}`
-              : `Portfolio Performance Chart over the past ${duration}`,
-            position: "bottom",
+        },
+        legend: { display: false },
+        layout: {
+          padding: {
+            left: 20,
+            right: 20,
+            top: 15,
+            bottom: 0,
           },
-          animation: {
-            duration: 2000,
-          },
-        }}
-      />
-    ) : null;
+        },
+        title: {
+          display: true,
+          text: stockInfo
+            ? `Adjusted closing stock price of ${stockInfo.ticker} over the past ${duration}`
+            : `Portfolio Performance Chart over the past ${duration}`,
+          position: "bottom",
+        },
+        animation: {
+          duration: 2000,
+        },
+      }}
+    />
+  ) : null;
 
   return lineChart;
 };

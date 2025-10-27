@@ -2,7 +2,7 @@
     const axios = require('axios');
     const Portfolio = require('./Portfolio'); // replace with the actual path to your Portfolio model
     const retry = require('retry'); // replace with the actual path to your retry function
-    const setAlpaca = require('./setAlpaca'); // replace with the actual path to your setAlpaca function
+    const { getAlpacaConfig } = require('../config/alpacaConfig');
     const process = require('process');
   
          // Work in progress
@@ -100,7 +100,7 @@
                 let totalScore = topAssets.reduce((total, asset) => total + asset.Score, 0);
                 let budget = portfolio.budget;
           
-                const alpacaConfig = await setAlpaca(UserID);
+                const alpacaConfig = await getAlpacaConfig(UserID);
                 console.log("config key done");
           
                 for (let i = 0; i < orderList.length; i++) {

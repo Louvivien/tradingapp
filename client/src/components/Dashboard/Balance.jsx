@@ -4,16 +4,19 @@ import { Typography } from "@mui/material/";
 import Title from "../Template/Title.jsx";
 import styles from "./Dashboard.module.css";
 
-const Balance = ({ purchasedStocks, accountBalance }) => {
+const Balance = ({ purchasedStocks = [], accountBalance = 0 }) => {
   const { userData } = useContext(UserContext);
   const [portfolioBalance, setPortfolioBalance] = useState(0);
 
   const getPortfolioBalance = () => {
     let total = 0;
-    purchasedStocks.forEach((stock) => {
-      total += Number(stock.currentPrice) * Number(stock.quantity);
-    });
-
+    if (Array.isArray(purchasedStocks)) {
+      purchasedStocks.forEach((stock) => {
+        if (stock && stock.currentPrice && stock.quantity) {
+          total += Number(stock.currentPrice) * Number(stock.quantity);
+        }
+      });
+    }
     return Math.round((total + Number.EPSILON) * 100) / 100;
   };
 
@@ -57,8 +60,6 @@ const Balance = ({ purchasedStocks, accountBalance }) => {
           >
             ${accountBalance ? (+(accountBalance/1 + portfolioBalance)).toLocaleString() : "---"}
           </Typography>
-
-
         </div>
       </div>
       <div>

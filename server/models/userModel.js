@@ -1,35 +1,63 @@
 const mongoose = require("mongoose");
 const Schema = mongoose.Schema;
+const bcrypt = require("bcryptjs");
 
 const userSchema = new Schema(
   {
-    username: {
+    name: {
       type: String,
-      required: [true, "Username is required."],
-      unique: [true, "An account with this username already exists."],
-      minlength: [4, "Username must be 4-15 characters."],
-      maxlength: [15, "Username must be 4-15 characters."],
-      lowercase: true,
+      required: [true, "Please provide a name"],
+      maxlength: [40, "Name cannot be more than 40 characters"],
+    },
+    email: {
+      type: String,
+      required: [true, "Please provide an email"],
+      unique: true,
+      match: [
+        /^([\w-\.]+@([\w-]+\.)+[\w-]{2,4})?$/,
+        "Please provide a valid email",
+      ],
     },
     password: {
       type: String,
-      required: [true, "Password is required."],
+      required: [true, "Please provide a password"],
+      minlength: [6, "Password cannot be less than 6 characters"],
+      select: false,
     },
-    balance:{
+    createdAt: {
+      type: Date,
+      default: Date.now,
+    },
+    balance: {
       type: Number,
       required: true,
       default: 100000
     },
-    ALPACA_API_KEY_ID:{
+    // Paper trading API keys (for trading operations)
+    ALPACA_API_KEY_ID: {
       type: String,
       required: false,
-      default: process.env.ALPACA_API_KEY_ID
     },
-    ALPACA_API_SECRET_KEY:{
+    ALPACA_API_SECRET_KEY: {
       type: String,
       required: false,
-      default: process.env.ALPACA_API_SECRET_KEY
     },
+    // Live trading API keys (for market data)
+    ALPACA_LIVE_API_KEY_ID: {
+      type: String,
+      required: false,
+    },
+    ALPACA_LIVE_API_SECRET_KEY: {
+      type: String,
+      required: false,
+    },
+    role: {
+      type: String,
+      enum: ["user", "admin"],
+      default: "user",
+    },
+    resetPasswordToken: String,
+    resetPasswordExpire: Date,
   },
   {
     timestamps: true,

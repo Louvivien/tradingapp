@@ -1,10 +1,11 @@
 const User = require("../models/userModel");
 const Stock = require("../models/stockModel");
-const setAlpaca = require('../config/alpaca');
 const data = require("../config/stocksData");
 const Alpaca = require('@alpacahq/alpaca-trade-api');
 const Axios = require("axios");
 const moment = require('moment');
+const AlpacaClient = require('../utils/alpacaClient');
+const { getAlpacaConfig } = require('../config/alpacaConfig');
 
 // // Mock the Alpaca client when market is closed:
 // const Mock = require('jest-mock');
@@ -20,192 +21,163 @@ const moment = require('moment');
 exports.purchaseStock = async (req, res) => {
   try {
     const { userId, ticker, quantity, price } = req.body;
-    // console.log(req.body);
-    // const trail_percent = parseFloat(req.body.trail_percent);
-    // console.log('req.body:', req.body);
-
     const parsedPrice = price === null ? 999 : price;
 
-if (req.user !== userId) {
-  return res.status(200).json({
-    status: "fail",
-    message: "Credentials couldn't be validated.",
-  });
-}
-
-const user = await User.findById(userId);
-
-if (!user) {
-  return res.status(200).json({
-    status: "fail",
-    message: "Credentials couldn't be validated.",
-  });
-}
-
-const totalPrice = quantity * parsedPrice;
-if (user.balance - totalPrice < 0) {
-  return res.status(200).json({
-    status: "fail",
-    message: `You don't have enough cash to purchase this stock.`,
-  });
-}
-
-console.log('Old balance:', user.balance);
-console.log('Total price:', totalPrice);
-
-const newBalance = Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100;
-console.log('New balance:', newBalance);
-
-try {
-  const updatedUser = await User.findByIdAndUpdate(userId, { balance: newBalance }, { new: true });
-  console.log('Updated user:', updatedUser);
-} catch (error) {
-  console.log('Error updating balance:', error);
-}
-
-const alpacaConfig = await setAlpaca(userId);
-console.log("config key done");
-
-const alpacaApi = new Alpaca(alpacaConfig);
-console.log("connected to alpaca");
-
-const order = await alpacaApi.createOrder({
-  symbol: ticker,
-  qty: quantity,
-  side: 'buy',
-  type: 'market',
-  time_in_force: 'gtc',
-});
-console.log("order sent");
-
-// // Create a trailing stop order
-// await alpacaApi.createOrder({
-//   symbol: ticker,
-//   qty: quantity,
-//   side: 'sell',
-//   type: 'trailing_stop',
-//   trail_percent: trail_percent,
-//   time_in_force: 'gtc',
-// });
-// console.log("trailing stop order sent");
-
-const updatedUser = await User.findByIdAndUpdate(userId, {
-  balance:
-    Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100,
-});
-
-return res.status(200).json({
-  status: "success",
-  stockId: ticker,
-  user: {
-    username: updatedUser.username,
-    id: updatedUser._id,
-    balance:
-      Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100,
-  },
-});
-} catch (error) {
-  console.error('Error:', error);
-  return res.status(200).json({
-  status: "fail",
-  message: "Something unexpected happened.",
-  });
-  }
-  
-  }
-
-   
-
-exports.sellStock = async (req, res) => {
-  try {
-    const { userId, stockId, quantity, price } = req.body;
-    console.log("req.body:", req.body);
-
-
     if (req.user !== userId) {
-      return res.status(200).json({
+      return res.status(401).json({
         status: "fail",
-        message: "Credentials couldn't be validated.",
+        message: "Unauthorized access",
       });
     }
 
-    const stock = stockId;
-
-
-    // const stock = await Stock.findOne({ticker: stockId});
-    console.log("stock:", stock);
-
     const user = await User.findById(userId);
-    console.log("user:", user);
+    if (!user) {
+      return res.status(404).json({
+        status: "fail",
+        message: "User not found",
+      });
+    }
 
+    const totalPrice = quantity * parsedPrice;
+    if (user.balance - totalPrice < 0) {
+      return res.status(400).json({
+        status: "fail",
+        message: `Insufficient balance. Required: $${totalPrice}, Available: $${user.balance}`,
+      });
+    }
 
-    // if (!user) {
-    //   return res.status(200).json({
-    //     status: "fail",
-    //     message: "Credentials couldn't be validated.",
-    //   });
-    // }
+    const alpacaConfig = await setAlpaca(userId, 'paper');
+    if (!alpacaConfig.hasValidKeys) {
+      return res.status(403).json({
+        status: 'fail',
+        message: alpacaConfig.error || 'Invalid API keys. Please check your Alpaca account settings.',
+      });
+    }
 
-    // if (quantity > stock.quantity) {
-    //   return res.status(200).json({
-    //     status: "fail",
-    //     message: "Invalid quantity.",
-    //   });
-    // }
+    const tradingKeys = alpacaConfig.getTradingKeys();
+    console.log('Using paper trading API:', tradingKeys.apiUrl);
 
-    const alpacaConfig = await setAlpaca(userId);
-    console.log("config key done");
-
-    const alpacaApi = new Alpaca(alpacaConfig);
-    console.log("connected to Alpaca");
-
-
-
-    const order = await alpacaApi.createOrder({
-      symbol: stock,
-      // symbol: stock.ticker,
+    // Create the order using the configured client
+    const order = await tradingKeys.client.post(`${tradingKeys.apiUrl}/v2/orders`, {
+      symbol: ticker,
       qty: quantity,
-      side: 'sell',
+      side: 'buy',
       type: 'market',
       time_in_force: 'gtc',
-    });
-    console.log("sell order sent");
-
-
-    const saleProfit = order.filled_avg_price * order.filled_qty;
-
-    const updatedUser = await User.findByIdAndUpdate(userId, {
-      balance:
-        Math.round((user.balance + saleProfit + Number.EPSILON) * 100) / 100,
+    }, {
+      headers: {
+        'APCA-API-KEY-ID': tradingKeys.keyId,
+        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+      }
     });
 
-    // if (quantity === stock.quantity) {
-    //   await Stock.findOneAndDelete({ ticker: stockId });
-    // } else {
-    //   await Stock.findOneAndUpdate(
-    //     { ticker: stockId },
-    //     { quantity: stock.quantity - quantity }
-    //   );
-    // }
+    // Update user balance
+    const newBalance = Math.round((user.balance - totalPrice + Number.EPSILON) * 100) / 100;
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { balance: newBalance },
+      { new: true }
+    );
 
     return res.status(200).json({
       status: "success",
+      order: order.data,
       user: {
         username: updatedUser.username,
         id: updatedUser._id,
-        balance:
-          Math.round((user.balance + saleProfit + Number.EPSILON) * 100) / 100,
-      },
+        balance: updatedUser.balance
+      }
     });
+
   } catch (error) {
-    console.log(error);
-    return res.status(200).json({
+    console.error('Error in purchaseStock:', error.message);
+    if (error.response) {
+      console.error('API Response:', error.response.status, error.response.data);
+    }
+    
+    return res.status(error.response?.status || 500).json({
       status: "fail",
-      message: "Something unexpected happened.",
+      message: error.message || "Failed to purchase stock",
     });
   }
 };
 
+exports.sellStock = async (req, res) => {
+  try {
+    const { userId, stockId, quantity, price } = req.body;
+
+    if (req.user !== userId) {
+      return res.status(401).json({
+        status: "fail",
+        message: "Unauthorized access",
+      });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        status: "fail",
+        message: "User not found",
+      });
+    }
+
+    const alpacaConfig = await setAlpaca(userId, 'paper');
+    if (!alpacaConfig.hasValidKeys) {
+      return res.status(403).json({
+        status: 'fail',
+        message: alpacaConfig.error || 'Invalid API keys. Please check your Alpaca account settings.',
+      });
+    }
+
+    const tradingKeys = alpacaConfig.getTradingKeys();
+    console.log('Using paper trading API:', tradingKeys.apiUrl);
+
+    // Create the sell order using the configured client
+    const order = await tradingKeys.client.post(`${tradingKeys.apiUrl}/v2/orders`, {
+      symbol: stockId,
+      qty: quantity,
+      side: 'sell',
+      type: 'market',
+      time_in_force: 'gtc',
+    }, {
+      headers: {
+        'APCA-API-KEY-ID': tradingKeys.keyId,
+        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+      }
+    });
+
+    // Calculate sale profit and update user balance
+    const saleProfit = order.data.filled_avg_price * order.data.filled_qty;
+    const newBalance = Math.round((user.balance + saleProfit + Number.EPSILON) * 100) / 100;
+    
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { balance: newBalance },
+      { new: true }
+    );
+
+    return res.status(200).json({
+      status: "success",
+      order: order.data,
+      user: {
+        username: updatedUser.username,
+        id: updatedUser._id,
+        balance: updatedUser.balance
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in sellStock:', error.message);
+    if (error.response) {
+      console.error('API Response:', error.response.status, error.response.data);
+    }
+    
+    return res.status(error.response?.status || 500).json({
+      status: "fail",
+      message: error.message || "Failed to sell stock",
+    });
+  }
+};
 
 // exports.getMarketStatus = async (req, res) => {
 //   console.log("getMarketStatus");
@@ -226,28 +198,58 @@ exports.searchStocks = async (req, res) => {
     const { userId, value } = req.params;
 
     if (req.user !== userId) {
-      return res.status(200).json({
+      return res.status(401).json({
         status: "fail",
-        message: "Credentials couldn't be validated.",
+        message: "Unauthorized access",
       });
     }
 
-    const url = `https://api.tiingo.com/tiingo/utilities/search?query=${value}&token=${process.env.TIINGO_API_KEY2}`;
-    const response = await Axios.get(url);
+    const alpacaConfig = await setAlpaca(userId);
+    if (!alpacaConfig.hasValidKeys) {
+      return res.status(403).json({
+        status: 'fail',
+        message: alpacaConfig.error || 'Invalid API keys. Please check your Alpaca account settings.',
+      });
+    }
 
-    const securities = response.data;
-    
-    const filteredSecurities = securities.slice(0, 20);
+    const client = new AlpacaClient(alpacaConfig);
+
+    // Search for stocks using Tiingo API
+    const url = `https://api.tiingo.com/tiingo/utilities/search?query=${value}&token=${process.env.TIINGO_API_KEY2}`;
+    const response = await Axios.get(url, {
+      timeout: 5000,
+    });
+
+    if (!response.data || !Array.isArray(response.data)) {
+      return res.status(404).json({
+        status: "fail",
+        message: "No stocks found matching the search criteria",
+      });
+    }
+
+    const securities = response.data.slice(0, 20).map(security => ({
+      name: security.name,
+      ticker: security.ticker,
+      assetType: security.assetType,
+      exchange: security.exchange,
+      country: security.country
+    }));
 
     return res.status(200).json({
       status: "success",
-      data: filteredSecurities.map(security => ({ name: security.name, ticker: security.ticker, assetType: security.assetType })),
+      data: securities,
+      count: securities.length
     });
+
   } catch (error) {
-    console.error('Error:', error);
-    return res.status(200).json({
+    console.error('Error in searchStocks:', error.message);
+    if (error.response) {
+      console.error('API Response:', error.response.status, error.response.data);
+    }
+    
+    return res.status(error.response?.status || 500).json({
       status: "fail",
-      message: "Something unexpected happened.",
+      message: error.message || "Failed to search for stocks",
     });
   }
 };
@@ -256,122 +258,60 @@ exports.searchStocks = async (req, res) => {
 
 exports.getStockForUser = async (req, res) => {
   try {
-    if (req.user !== req.params.userId) {
-      return res.status(200).json({
+    const userId = req.params.userId;
+
+    if (req.user !== userId) {
+      return res.status(401).json({
         status: "fail",
-        message: "Credentials couldn't be validated.",
+        message: "Unauthorized access",
       });
     }
 
-    const alpacaConfig = await setAlpaca(req.params.userId);
-    const apiUrl = alpacaConfig.apiURL;
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        status: "fail",
+        message: "User not found",
+      });
+    }
 
+    const alpacaConfig = await setAlpaca(userId, 'paper');
+    if (!alpacaConfig.hasValidKeys) {
+      return res.status(403).json({
+        status: 'fail',
+        message: alpacaConfig.error || 'Invalid API keys. Please check your Alpaca account settings.',
+      });
+    }
 
-    // Fetch account information and get cash balance
-    const accountInfo = await Axios.get(`${apiUrl}/v2/account`, {
+    const tradingKeys = alpacaConfig.getTradingKeys();
+    console.log('Using paper trading API:', tradingKeys.apiUrl);
+
+    const response = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
       headers: {
-        'APCA-API-KEY-ID': alpacaConfig.keyId,
-        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-      },
-    }).catch((error) => {
-      console.error('Error fetching account information:', error.message);
-      throw new Error('Account API call failed.');
-    });
-    const cashBalance = accountInfo.data.cash;
-
-
-
-
-    const positionsResponse = await Axios.get(`${apiUrl}/v2/positions`, {
-      headers: {
-        'APCA-API-KEY-ID': alpacaConfig.keyId,
-        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-      },
-    }).catch((error) => {
-      console.error('Error fetching positions:', error.message);
-      throw new Error('Positions API call failed.');
-    });
-
-
-    //how the order history is calculated
-    const ordersResponse = await Axios.get(`${apiUrl}/v2/orders`, {
-      headers: {
-        'APCA-API-KEY-ID': alpacaConfig.keyId,
-        'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-      },
-      params: {
-        status: 'closed',
-      },
-    });
-
-    const ordersBySymbol = {};
-
-    ordersResponse.data.forEach((order) => {
-      if (order.side === 'buy' && !ordersBySymbol[order.symbol]) {
-        ordersBySymbol[order.symbol] = order;
+        'APCA-API-KEY-ID': tradingKeys.keyId,
+        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
       }
-    });
-
-    //how the stocks prices are calculated
-    const stocks = positionsResponse.data.map((position) => {
-      const order = ordersBySymbol[position.symbol];
-      const purchaseDate = order ? moment(order.filled_at).format('YYYY-MM-DD') : null;
-
-      return {
-        id: position.symbol,
-        ticker: position.symbol,
-        price: position.avg_entry_price,
-        quantity: position.qty,
-        purchaseDate,
-      };
-    });
-
-    const marketOpen = await isMarketOpen();
-    const stocksData = await getPricesData(stocks, marketOpen);
-
-    //how the stocks prices are calculated
-    const modifiedStocks = stocks.map((stock) => {
-      let currentPrice;
-      let currentDate;
-
-      let name;
-      stocksData.forEach((stockData) => {
-        if (stockData.ticker.toLowerCase() === stock.ticker.toLowerCase()) {
-          name = stockData.name;
-        }
-      });
-
-      stocksData.forEach((stockData) => {
-        if (stockData.ticker.toLowerCase() === stock.ticker.toLowerCase()) {
-          currentDate = stockData.date;
-          currentPrice = stockData.adjClose;
-        }
-      });
-
-      return {
-        id: stock.id,
-        ticker: stock.ticker,
-        name,
-        purchasePrice: stock.price,
-        purchaseDate: stock.purchaseDate,
-        quantity: stock.quantity,
-        currentDate,
-        currentPrice,
-      };
     });
 
     return res.status(200).json({
       status: "success",
-      stocks: modifiedStocks,
-      cash: cashBalance
+      positions: response.data,
+      user: {
+        username: user.username,
+        id: user._id,
+        balance: user.balance
+      }
     });
 
-
   } catch (error) {
-    console.error(error);
-    return res.status(200).json({
+    console.error('Error in getStockForUser:', error.message);
+    if (error.response) {
+      console.error('API Response:', error.response.status, error.response.data);
+    }
+    
+    return res.status(error.response?.status || 500).json({
       status: "fail",
-      message: "Something unexpected happened.",
+      message: error.response?.data?.message || 'Error fetching positions',
     });
   }
 };
@@ -379,24 +319,49 @@ exports.getStockForUser = async (req, res) => {
 
 exports.editAccount = async (req, res) => {
   try {
-    const { ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY, } = req.body;
+    const { ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY } = req.body;
+
     if (req.user !== req.params.userId) {
-      return res.status(200).json({
+      return res.status(401).json({
         status: "fail",
-        message: "Credentials couldn't be validated.",
+        message: "Unauthorized access",
       });
     }
 
-    // const stocks = await Stock.find({ userId: req.params.userId });
-    // stocks.forEach(async (stock) => {
-    //   await Stock.findByIdAndDelete(stock._id);
-    // });
+    // Validate API keys by trying to connect to Alpaca
+    const testConfig = {
+      keyId: ALPACA_API_KEY_ID,
+      secretKey: ALPACA_API_SECRET_KEY,
+      tradingApiURL: ALPACA_API_KEY_ID.startsWith('PK') ? "https://paper-api.alpaca.markets" : "https://api.alpaca.markets",
+      dataApiURL: "https://data.alpaca.markets"
+    };
 
-    const updatedUser = await User.findByIdAndUpdate(req.params.userId, {
-      balance: User.balance,
-      ALPACA_API_KEY_ID: ALPACA_API_KEY_ID,
-      ALPACA_API_SECRET_KEY: ALPACA_API_SECRET_KEY
-    });
+    const client = new AlpacaClient(testConfig);
+    try {
+      await client.getAccount();
+    } catch (error) {
+      return res.status(403).json({
+        status: "fail",
+        message: "Invalid API keys. Please check your Alpaca account settings.",
+      });
+    }
+
+    // Update user with new API keys
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.userId,
+      {
+        ALPACA_API_KEY_ID,
+        ALPACA_API_SECRET_KEY
+      },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        status: "fail",
+        message: "User not found",
+      });
+    }
 
     return res.status(200).json({
       status: "success",
@@ -404,14 +369,19 @@ exports.editAccount = async (req, res) => {
         username: updatedUser.username,
         id: updatedUser._id,
         balance: updatedUser.balance,
-        ALPACA_API_KEY_ID: updatedUser.ALPACA_API_KEY_ID,
-        ALPACA_API_SECRET_KEY: updatedUser.ALPACA_API_SECRET_KEY
+        hasValidKeys: true
       },
     });
+
   } catch (error) {
-    return res.status(200).json({
+    console.error('Error in editAccount:', error.message);
+    if (error.response) {
+      console.error('API Response:', error.response.status, error.response.data);
+    }
+    
+    return res.status(error.response?.status || 500).json({
       status: "fail",
-      message: "Something unexpected happened.",
+      message: error.message || "Failed to update account settings",
     });
   }
 };
@@ -422,16 +392,24 @@ exports.editAccount = async (req, res) => {
 const isMarketOpen = async (userId) => {
   try {
     const alpacaConfig = await setAlpaca(userId);
-    const response = await Axios.get(alpacaConfig.apiURL+'/v2/clock', {
+    if (!alpacaConfig.hasValidKeys) {
+      console.error('Invalid API keys in isMarketOpen');
+      return false;
+    }
+
+    const response = await Axios.get(`${alpacaConfig.tradingApiURL}/v2/clock`, {
       headers: {
         'APCA-API-KEY-ID': alpacaConfig.keyId,
         'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
       },
+      timeout: 5000,
     });
-    // console.log("response.data.is_open: ", response.data.is_open);
     return response.data.is_open;
   } catch (error) {
-    console.error('Error fetching market status:', error);
+    console.error('Error fetching market status:', error.message);
+    if (error.response) {
+      console.error('API Response:', error.response.status, error.response.data);
+    }
     return false;
   }
 };
@@ -439,58 +417,94 @@ const isMarketOpen = async (userId) => {
 //this is also in strategiesController can be put in utils
 const getPricesData = async (stocks, marketOpen, userId) => {
   try {
+    if (!stocks || !Array.isArray(stocks) || stocks.length === 0) {
+      return [];
+    }
+
     const alpacaConfig = await setAlpaca(userId);
+    if (!alpacaConfig.hasValidKeys) {
+      throw new Error(alpacaConfig.error || 'Invalid API keys');
+    }
 
-    const promises = stocks.map(async (stock) => {
-      if (!stock.ticker || stock.ticker.trim() === '') {
-        console.error('Invalid stock ticker:', stock);
-        return null; // Skip invalid tickers
-      }
+    const dataKeys = alpacaConfig.getDataKeys();
+    const validStocks = stocks.filter(stock => stock && stock.ticker);
 
-      const ticker = stock.ticker.trim(); // Clean ticker
-      const url = marketOpen
-        ? `https://data.alpaca.markets/v2/stocks/${ticker}/trades/latest`
-        : `https://data.alpaca.markets/v2/stocks/${ticker}/bars?timeframe=1D&limit=1`;
+    // First try to get real-time data if market is open
+    const results = await Promise.all(
+      validStocks.map(async (stock) => {
+        try {
+          // Try real-time data first
+          const response = await dataKeys.client.get(`${dataKeys.apiUrl}/v2/stocks/${stock.ticker}/trades/latest`, {
+            headers: {
+              'APCA-API-KEY-ID': dataKeys.keyId,
+              'APCA-API-SECRET-KEY': dataKeys.secretKey,
+            }
+          });
 
+          if (response.data && response.data.trade) {
+            const trade = response.data.trade;
+            return {
+              ticker: stock.ticker,
+              date: trade.t,
+              price: trade.p,
+              size: trade.s,
+              exchange: trade.x,
+              isDelayed: false,
+              delayMessage: null
+            };
+          }
+        } catch (error) {
+          if (error.response?.status === 403) {
+            console.warn(`No real-time data access for ${stock.ticker}, falling back to delayed data`);
+          } else {
+            console.error(`Error fetching real-time data for ${stock.ticker}:`, error.message);
+          }
+        }
 
+        // Fall back to delayed data
+        try {
+          const delayedResponse = await dataKeys.client.get(`${dataKeys.apiUrl}/v2/stocks/${stock.ticker}/bars?timeframe=1D&limit=1`, {
+            headers: {
+              'APCA-API-KEY-ID': dataKeys.keyId,
+              'APCA-API-SECRET-KEY': dataKeys.secretKey,
+            }
+          });
 
-      console.log('Fetching data from:', url);
+          if (delayedResponse.data && delayedResponse.data.bars && delayedResponse.data.bars.length > 0) {
+            const bar = delayedResponse.data.bars[0];
+            return {
+              ticker: stock.ticker,
+              date: bar.t,
+              open: bar.o,
+              high: bar.h,
+              low: bar.l,
+              close: bar.c,
+              volume: bar.v,
+              isDelayed: true,
+              delayMessage: 'Using delayed market data'
+            };
+          }
+        } catch (error) {
+          console.error(`Error fetching delayed data for ${stock.ticker}:`, error.message);
+          return null;
+        }
 
-      const response = await Axios.get(url, {
-        headers: {
-          'APCA-API-KEY-ID': alpacaConfig.keyId,
-          'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-        },
-      });
-      // console.log("url: ",url),
+        return null;
+      })
+    );
 
-      // console.log("response.data: ",response.data);
-      // console.log("response.data.quote.ap: ",response.data.quote.ap);
-      // console.log("response.data.trade.p: ",response.data.trade.p);
+    const validResults = results.filter(Boolean);
+    if (validResults.length === 0) {
+      console.warn('No valid data returned for any stocks');
+    }
 
-      const currentPrice = marketOpen ? response.data.trade.p : response.data.bars[0]?.c;
-      const date = marketOpen ? response.data.trade.t : response.data.bars[0]?.t;
-
-      const alpacaApi = new Alpaca(alpacaConfig);
-      const asset = await alpacaApi.getAsset(ticker);
-      const assetName = asset?.name || 'Unknown';
-
-      return {
-        ticker,
-        date,
-        adjClose: currentPrice,
-        name: assetName,
-      };
-    });
-
-    const results = await Promise.all(promises);
-    return results.filter(Boolean); // Exclude null results
+    return validResults;
   } catch (error) {
     console.error('Error in getPricesData:', error.message);
     if (error.response) {
       console.error('API Response:', error.response.status, error.response.data);
     }
-    return [];
+    throw error;
   }
 };
 
