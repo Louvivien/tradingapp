@@ -50,10 +50,14 @@ exports.createCollaborative = async (req, res) => {
         try {
           const parsed = JSON.parse(payload);
           if (Array.isArray(parsed)) {
-            return parsed;
+            return { positions: parsed, summary: "", decisions: [] };
           }
           if (Array.isArray(parsed?.positions)) {
-            return parsed.positions;
+            return {
+              positions: parsed.positions,
+              summary: typeof parsed.summary === "string" ? parsed.summary : "",
+              decisions: Array.isArray(parsed.decisions) ? parsed.decisions : []
+            };
           }
           throw new Error("Response JSON missing positions array");
         } catch (error) {
@@ -63,9 +67,9 @@ exports.createCollaborative = async (req, res) => {
       };
 
       // Call the functions : ChatGPT and parse the data
-      let parsedJson;
+      let parsedResult;
       try {
-        parsedJson = await extractGPT(input).then(fullMessage => {
+        parsedResult = await extractGPT(input).then(fullMessage => {
           return parseJsonData(fullMessage);
         });
       } catch (error) {
@@ -76,10 +80,15 @@ exports.createCollaborative = async (req, res) => {
         });
       }
 
+      const { positions, summary, decisions } = parsedResult;
 
       //send the orders to the trading platform
 
-      console.log('Order: ', JSON.stringify(parsedJson, null, 2));
+      console.log('Strategy summary: ', summary || 'No summary provided.');
+      console.log('Orders payload: ', JSON.stringify(positions, null, 2));
+      if (decisions?.length) {
+        console.log('Decision rationale:', JSON.stringify(decisions, null, 2));
+      }
 
       const alpacaConfig = await getAlpacaConfig(UserID);
       console.log("config key done");
@@ -88,7 +97,7 @@ exports.createCollaborative = async (req, res) => {
       console.log("connected to alpaca");
 
       //send the orders to alpaca
-      let orderPromises = parsedJson.map(asset => {
+      let orderPromises = positions.map(asset => {
         let symbol = asset['Asset ticker'];
         if (!/^[A-Za-z]+$/.test(symbol)) {
           symbol = asset['Asset ticker'].match(/^[A-Za-z]+/)[0];
@@ -145,6 +154,8 @@ exports.createCollaborative = async (req, res) => {
         return res.status(200).json({
           status: "success",
           orders: orders,
+          summary: summary,
+          decisions: decisions || []
         });
       }).catch(error => {
         console.error(`Error: ${error}`);

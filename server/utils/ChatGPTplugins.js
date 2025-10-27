@@ -14,8 +14,10 @@ const extractGPT = async (input) => {
   const prompt = `${process.env.Collaborative_Prompt1 || ""}\n\n${input}`.trim();
   const systemPrompt =
     "You are an AI trading assistant. Respond ONLY with valid JSON (no code fences, no explanations). " +
-    "Return an object with a single key `positions` whose value is an array of objects. " +
-    "Each object must contain the keys 'Asset name', 'Asset ticker', 'Quantity', and 'Total Cost'.";
+    "Return an object with three keys: `summary`, `positions`, and `decisions`. " +
+    "`summary` must describe the overall investment thesis (Markdown allowed). " +
+    "`positions` must be an array of objects containing the keys 'Asset name', 'Asset ticker', 'Quantity', and 'Total Cost'. " +
+    "`decisions` must be an array where each element links a symbol to the precise signals or reasoning that triggered the buy (fields: 'Asset ticker' and 'Rationale').";
 
   try {
     console.log("Sending request to OpenAI chat completions...");

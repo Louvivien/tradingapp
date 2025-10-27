@@ -44,11 +44,13 @@ const Strategies = () => {
   const [strategyName, setstrategyName] = useState("");
   const [responseReceived, setResponseReceived] = useState(false);
   const { userData, setUserData } = useContext(UserContext);
-  const [output, setOutput] = useState(""); 
+  const [output, setOutput] = useState([]); 
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [value, setValue] = useState(0);
   const [aiFundStrategyEnabled, setAiFundStrategyEnabled] = useState(false);
+  const [strategySummary, setStrategySummary] = useState("");
+  const [strategyDecisions, setStrategyDecisions] = useState([]);
 
   useEffect(() => {
     const fetchStrategies = async () => {
@@ -102,7 +104,7 @@ const Strategies = () => {
       if (response.status === 200) {
         if (response.data.status === "success") {
           setResponseReceived(true);
-          setOutput(response.data.orders); 
+          setOutput(response.data.orders || []); 
         } else {
           setError(response.data.message);
         }
@@ -134,7 +136,7 @@ const Strategies = () => {
       if (response.status === 200) {
         if (response.data.status === "success") {
           setResponseReceived(true);
-          setOutput(response.data.orders); 
+          setOutput(response.data.orders || []); 
         } else {
           setError(response.data.message);
         }
@@ -153,8 +155,12 @@ const Strategies = () => {
 
 
   const handlecollaborativeSubmit = async (e) => {
+    setError(null);
+    setResponseReceived(false);
+    setStrategySummary("");
+    setStrategyDecisions([]);
+    setOutput([]);
     setLoading(true);
-
 
     const headers = {
       "x-auth-token": userData.token,
@@ -170,7 +176,9 @@ const Strategies = () => {
       if (response.status === 200) {
         if (response.data.status === "success") {
           setResponseReceived(true);
-          setOutput(response.data.orders); 
+          setOutput(response.data.orders || []); 
+          setStrategySummary(response.data.summary || "");
+          setStrategyDecisions(response.data.decisions || []);
           // console.log(response);
         } else {
           setError(response.data.message);
@@ -179,6 +187,8 @@ const Strategies = () => {
       
     } catch (err) {
       setError(err.message);
+      setStrategySummary("");
+      setStrategyDecisions([]);
     } finally {
       setLoading(false);
     }
@@ -267,6 +277,31 @@ return (
           <br />
           <br />
             <Typography variant="h6">Strategy successfully added. Here are the orders:</Typography>
+            {strategySummary && (
+              <Box mt={2}>
+                <Typography variant="subtitle1" gutterBottom>Strategy Overview</Typography>
+                {strategySummary.split(/\n+/).map((paragraph, index) => (
+                  <Typography key={index} variant="body2" paragraph>
+                    {paragraph}
+                  </Typography>
+                ))}
+              </Box>
+            )}
+            {strategyDecisions.length > 0 && (
+              <Box mt={2}>
+                <Typography variant="subtitle1" gutterBottom>Decision Breakdown</Typography>
+                {strategyDecisions.map((decision, index) => (
+                  <Box key={index} mb={1}>
+                    <Typography variant="body2" fontWeight={600}>
+                      {decision["Asset ticker"] || decision.symbol || `Asset ${index + 1}`}
+                    </Typography>
+                    <Typography variant="body2">
+                      {decision.Rationale || decision.rationale || decision.reason || "No rationale provided."}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+            )}
             {output.map((order, index) => (
               <Typography key={index} variant="body2">
                 Quantity: {order.qty}, Symbol: {order.symbol}
@@ -341,4 +376,3 @@ return (
 };
 
 export default Strategies;
-
