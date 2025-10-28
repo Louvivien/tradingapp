@@ -1129,6 +1129,7 @@ exports.getPortfolios = async (req, res) => {
     }
 
     const dataKeys = alpacaConfig.getDataKeys();
+    const tradingKeys = alpacaConfig.getTradingKeys();
     const headers = {
       'APCA-API-KEY-ID': dataKeys.keyId,
       'APCA-API-SECRET-KEY': dataKeys.secretKey,
@@ -1143,6 +1144,24 @@ exports.getPortfolios = async (req, res) => {
     ).filter(Boolean);
 
     const priceCache = {};
+    const positionMap = {};
+
+    try {
+      const positionsResponse = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
+        headers: {
+          'APCA-API-KEY-ID': tradingKeys.keyId,
+          'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+        },
+      });
+
+      if (Array.isArray(positionsResponse.data)) {
+        positionsResponse.data.forEach((position) => {
+          positionMap[position.symbol] = position;
+        });
+      }
+    } catch (error) {
+      console.warn('[Portfolio] Unable to retrieve Alpaca positions:', error.message);
+    }
 
     await Promise.all(
       uniqueTickers.map(async (symbol) => {
@@ -1167,14 +1186,36 @@ exports.getPortfolios = async (req, res) => {
       strategy_id: portfolio.strategy_id,
       budget: portfolio.budget ?? null,
       stocks: (portfolio.stocks || []).map((stock) => {
-        const currentPrice = priceCache[stock.symbol] ?? null;
+        const alpacaPosition = positionMap[stock.symbol];
+
+        const quantity =
+          stock.quantity !== undefined && stock.quantity !== null
+            ? Number(stock.quantity)
+            : alpacaPosition?.qty
+            ? Number(alpacaPosition.qty)
+            : 0;
+
+        const avgCost =
+          stock.avgCost !== null && stock.avgCost !== undefined
+            ? Number(stock.avgCost)
+            : alpacaPosition?.avg_entry_price
+            ? Number(alpacaPosition.avg_entry_price)
+            : null;
+
+        const currentPrice =
+          priceCache[stock.symbol] !== undefined
+            ? priceCache[stock.symbol]
+            : alpacaPosition?.current_price
+            ? Number(alpacaPosition.current_price)
+            : null;
+
         return {
           symbol: stock.symbol,
-          avgCost: stock.avgCost !== null && stock.avgCost !== undefined ? Number(stock.avgCost) : null,
-          quantity: stock.quantity !== undefined ? Number(stock.quantity) : 0,
+          avgCost,
+          quantity,
           currentPrice,
           orderID: stock.orderID || null,
-          currentTotal: currentPrice !== null ? Number(stock.quantity || 0) * currentPrice : null,
+          currentTotal: currentPrice !== null ? quantity * currentPrice : null,
         };
       }),
     }));
