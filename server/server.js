@@ -10,6 +10,28 @@ const { startProxies, scheduleNewsFromStocksList, scheduleSentimentVertex } = re
 const fs = require('fs');
 const { getAlpacaConfig } = require('./config/alpacaConfig');
 
+const readyStateLabels = {
+  0: 'disconnected',
+  1: 'connected',
+  2: 'connecting',
+  3: 'disconnecting',
+};
+
+const logConnectionState = (context) => {
+  const state = mongoose.connection.readyState;
+  console.log(`[MongoDB] ${context} | state=${state} (${readyStateLabels[state] || 'unknown'})`);
+};
+
+mongoose.connection.on('connected', () => logConnectionState('Event: connected'));
+mongoose.connection.on('error', (err) => {
+  console.error('[MongoDB] Event: error', err);
+  logConnectionState('Post-error state check');
+});
+mongoose.connection.on('disconnected', () => logConnectionState('Event: disconnected'));
+mongoose.connection.on('reconnected', () => logConnectionState('Event: reconnected'));
+mongoose.connection.on('connecting', () => logConnectionState('Event: connecting'));
+mongoose.connection.on('disconnecting', () => logConnectionState('Event: disconnecting'));
+
 const app = express();
 const port = process.env.PORT || 3000;
 const {getStrategies} = require("./controllers/strategiesController");
@@ -89,6 +111,8 @@ const DB = process.env.MONGO_URI.replace(
   process.env.MONGO_PASSWORD
 );
 
+logConnectionState('Initial readyState before connect');
+
 // Initialize Alpaca client
 let alpacaConfig = null;
 
@@ -158,6 +182,7 @@ const startServer = async () => {
       useUnifiedTopology: true,
     });
     console.log("[MongoDB] Connected to MongoDB");
+    logConnectionState('Post-connect');
 
     // Initialize Alpaca client
     const success = await initializeAlpaca();
@@ -176,9 +201,6 @@ const startServer = async () => {
 };
 
 startServer();
-
-
-
 
 
 

@@ -3,6 +3,15 @@ const Schema = mongoose.Schema;
 
 
 const portfolioSchema = new Schema({
+  userId: {
+    type: String,
+    required: false,
+    index: true,
+  },
+  budget: {
+    type: Number,
+    required: false,
+  },
   name: {
     type: String,
     required: true,
@@ -34,5 +43,3 @@ const portfolioSchema = new Schema({
 
 const Portfolio = mongoose.model("Portfolio", portfolioSchema);
 module.exports = Portfolio;
-
-

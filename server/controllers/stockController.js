@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const User = require("../models/userModel");
 const Stock = require("../models/stockModel");
 const data = require("../config/stocksData");
@@ -46,7 +47,7 @@ exports.purchaseStock = async (req, res) => {
       });
     }
 
-    const alpacaConfig = await setAlpaca(userId, 'paper');
+    const alpacaConfig = await getAlpacaConfig(userId, 'paper');
     if (!alpacaConfig.hasValidKeys) {
       return res.status(403).json({
         status: 'fail',
@@ -121,7 +122,7 @@ exports.sellStock = async (req, res) => {
       });
     }
 
-    const alpacaConfig = await setAlpaca(userId, 'paper');
+    const alpacaConfig = await getAlpacaConfig(userId, 'paper');
     if (!alpacaConfig.hasValidKeys) {
       return res.status(403).json({
         status: 'fail',
@@ -204,7 +205,7 @@ exports.searchStocks = async (req, res) => {
       });
     }
 
-    const alpacaConfig = await setAlpaca(userId);
+    const alpacaConfig = await getAlpacaConfig(userId);
     if (!alpacaConfig.hasValidKeys) {
       return res.status(403).json({
         status: 'fail',
@@ -260,6 +261,12 @@ exports.getStockForUser = async (req, res) => {
   try {
     const userId = req.params.userId;
 
+    console.log('[Stocks] getStockForUser called', {
+      userId,
+      authUser: req.user,
+      mongoState: mongoose.connection.readyState,
+    });
+
     if (req.user !== userId) {
       return res.status(401).json({
         status: "fail",
@@ -267,6 +274,7 @@ exports.getStockForUser = async (req, res) => {
       });
     }
 
+    console.log('[Stocks] Fetching user document');
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
@@ -275,7 +283,9 @@ exports.getStockForUser = async (req, res) => {
       });
     }
 
-    const alpacaConfig = await setAlpaca(userId, 'paper');
+    console.log('[Stocks] User document loaded', { userId: user._id });
+
+    const alpacaConfig = await getAlpacaConfig(userId, 'paper');
     if (!alpacaConfig.hasValidKeys) {
       return res.status(403).json({
         status: 'fail',
@@ -286,16 +296,43 @@ exports.getStockForUser = async (req, res) => {
     const tradingKeys = alpacaConfig.getTradingKeys();
     console.log('Using paper trading API:', tradingKeys.apiUrl);
 
-    const response = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
-      headers: {
-        'APCA-API-KEY-ID': tradingKeys.keyId,
-        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
-      }
-    });
+    const [positionsResponse, accountResponse] = await Promise.all([
+      tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
+        headers: {
+          'APCA-API-KEY-ID': tradingKeys.keyId,
+          'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+        }
+      }),
+      tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/account`, {
+        headers: {
+          'APCA-API-KEY-ID': tradingKeys.keyId,
+          'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+        }
+      })
+    ]);
+
+    const rawPositions = Array.isArray(positionsResponse.data) ? positionsResponse.data : [];
+    const stocks = rawPositions.map((position) => ({
+      id: position.asset_id,
+      ticker: position.symbol,
+      name: position.symbol,
+      quantity: Number(position.qty),
+      purchasePrice: position.avg_entry_price ? Number(position.avg_entry_price) : null,
+      currentPrice: position.current_price ? Number(position.current_price) : null,
+      marketValue: position.market_value ? Number(position.market_value) : null,
+      costBasis: position.cost_basis ? Number(position.cost_basis) : null,
+      exchange: position.exchange,
+      assetClass: position.asset_class,
+      side: position.side,
+    }));
+
+    const cash = accountResponse?.data?.cash ? Number(accountResponse.data.cash) : null;
 
     return res.status(200).json({
       status: "success",
-      positions: response.data,
+      stocks,
+      positions: rawPositions,
+      cash,
       user: {
         username: user.username,
         id: user._id,
@@ -391,7 +428,7 @@ exports.editAccount = async (req, res) => {
 //this is also in strategiesController can be put in utils
 const isMarketOpen = async (userId) => {
   try {
-    const alpacaConfig = await setAlpaca(userId);
+    const alpacaConfig = await getAlpacaConfig(userId);
     if (!alpacaConfig.hasValidKeys) {
       console.error('Invalid API keys in isMarketOpen');
       return false;
@@ -421,7 +458,7 @@ const getPricesData = async (stocks, marketOpen, userId) => {
       return [];
     }
 
-    const alpacaConfig = await setAlpaca(userId);
+    const alpacaConfig = await getAlpacaConfig(userId);
     if (!alpacaConfig.hasValidKeys) {
       throw new Error(alpacaConfig.error || 'Invalid API keys');
     }

@@ -664,6 +664,7 @@ if (!clock.is_open) {
 
             // Create a new portfolio
             const portfolio = new Portfolio({
+              userId: UserID,
               name: strategyName,
               strategy_id: strategy_id,
               budget: budget,
@@ -765,6 +766,7 @@ else {
 
               // Create a new portfolio
               const portfolio = new Portfolio({
+                userId: UserID,
                 name: strategyName,
                 strategy_id: strategy_id,
                 stocks: Object.values(ordersBySymbol).map(order => ({
@@ -1093,78 +1095,103 @@ exports.rebalanceAIFund = async (req, res) => {
 exports.getPortfolios = async (req, res) => {
   try {
     const { userId } = req.params;
-    const { duration = '1D' } = req.query;
 
-    // Validate user ID
     if (!userId) {
-      return res.status(400).json({ error: 'User ID is required' });
+      return res.status(400).json({
+        status: 'fail',
+        message: 'User ID is required',
+      });
     }
 
-    // Get user and validate
     const user = await User.findById(userId);
     if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+      return res.status(404).json({
+        status: 'fail',
+        message: 'User not found',
+      });
     }
 
-    // Get Alpaca configuration
     const alpacaConfig = await getAlpacaConfig(userId);
-    if (!alpacaConfig) {
-      return res.status(500).json({ error: 'Failed to initialize Alpaca configuration' });
+    if (!alpacaConfig?.hasValidKeys) {
+      return res.status(403).json({
+        status: 'fail',
+        message: alpacaConfig?.error || 'Invalid Alpaca credentials',
+      });
     }
 
-    // Get the appropriate API keys based on the endpoint
-    const { keyId, secretKey, apiUrl } = alpacaConfig.getTradingKeys();
+    const rawPortfolios = await Portfolio.find({ $or: [{ userId }, { userId: { $exists: false } }] }).lean();
 
-    // Validate API keys
-    if (!keyId || !secretKey) {
-      return res.status(403).json({ error: 'Invalid API keys' });
+    if (!rawPortfolios.length) {
+      return res.json({
+        status: 'success',
+        portfolios: [],
+      });
     }
 
-    // Make API call to get portfolio history
-    const response = await axios.get(`${apiUrl}/v2/account/portfolio/history`, {
-      params: {
-        period: duration,
-        timeframe: '1D',
-        extended_hours: true
-      },
-      headers: {
-        'APCA-API-KEY-ID': keyId,
-        'APCA-API-SECRET-KEY': secretKey
-      }
-    });
+    const dataKeys = alpacaConfig.getDataKeys();
+    const headers = {
+      'APCA-API-KEY-ID': dataKeys.keyId,
+      'APCA-API-SECRET-KEY': dataKeys.secretKey,
+    };
 
-    // Process the portfolio history data
-    const portfolioHistory = response.data.timestamp.map((timestamp, index) => ({
-      timestamp: timestamp * 1000, // Convert to milliseconds
-      equity: response.data.equity[index],
-      profitLoss: response.data.profit_loss[index],
-      profitLossPct: response.data.profit_loss_pct[index]
+    const uniqueTickers = Array.from(
+      new Set(
+        rawPortfolios.flatMap((portfolio) =>
+          (portfolio.stocks || []).map((stock) => stock.symbol)
+        )
+      )
+    ).filter(Boolean);
+
+    const priceCache = {};
+
+    await Promise.all(
+      uniqueTickers.map(async (symbol) => {
+        try {
+          const response = await dataKeys.client.get(
+            `${dataKeys.apiUrl}/v2/stocks/${symbol}/trades/latest`,
+            { headers }
+          );
+          const trade = response.data?.trade;
+          if (trade?.p) {
+            priceCache[symbol] = Number(trade.p);
+          }
+        } catch (error) {
+          console.error(`[Portfolio] Failed to fetch price for ${symbol}:`, error.message);
+          priceCache[symbol] = null;
+        }
+      })
+    );
+
+    const enhancedPortfolios = rawPortfolios.map((portfolio) => ({
+      name: portfolio.name,
+      strategy_id: portfolio.strategy_id,
+      budget: portfolio.budget ?? null,
+      stocks: (portfolio.stocks || []).map((stock) => {
+        const currentPrice = priceCache[stock.symbol] ?? null;
+        return {
+          symbol: stock.symbol,
+          avgCost: stock.avgCost !== null && stock.avgCost !== undefined ? Number(stock.avgCost) : null,
+          quantity: stock.quantity !== undefined ? Number(stock.quantity) : 0,
+          currentPrice,
+          orderID: stock.orderID || null,
+          currentTotal: currentPrice !== null ? Number(stock.quantity || 0) * currentPrice : null,
+        };
+      }),
     }));
 
-    // Get current portfolio value
-    const currentEquity = portfolioHistory[portfolioHistory.length - 1]?.equity || 0;
-    const currentProfitLoss = portfolioHistory[portfolioHistory.length - 1]?.profitLoss || 0;
-    const currentProfitLossPct = portfolioHistory[portfolioHistory.length - 1]?.profitLossPct || 0;
-
-    // Return the formatted response
-    res.json({
-      success: true,
-      portfolio: {
-        history: portfolioHistory,
-        currentEquity,
-        currentProfitLoss,
-        currentProfitLossPct
-      }
+    return res.json({
+      status: 'success',
+      portfolios: enhancedPortfolios,
     });
-
   } catch (error) {
     console.error('Error in getPortfolios:', error.message);
     if (error.response) {
       console.error('API Response:', error.response.status, error.response.data);
     }
-    res.status(error.response?.status || 500).json({
-      error: 'Failed to fetch portfolio data',
-      details: error.response?.data || error.message
+    return res.status(error.response?.status || 500).json({
+      status: 'fail',
+      message: 'Failed to fetch strategy portfolios',
+      details: error.response?.data || error.message,
     });
   }
 };
