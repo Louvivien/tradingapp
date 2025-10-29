@@ -17,7 +17,11 @@ const Orders = ({ orderList = { orders: [] }, loading = false, error = null }) =
 
   useEffect(() => {
     setPage(0);
-  }, [orders.length]);
+    if (process.env.NODE_ENV !== "production") {
+      // eslint-disable-next-line no-console
+      console.log("[Orders] received order count:", orders.length, "loading:", loading, "error:", error);
+    }
+  }, [orders.length, loading, error]);
 
   const sortedOrders = useMemo(() => {
     const parseDate = (value) => {

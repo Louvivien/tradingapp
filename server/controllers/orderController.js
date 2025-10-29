@@ -195,6 +195,8 @@ exports.getOrders = async (req, res) => {
   try {
     const userId = req.params.userId;
 
+    console.log('[Orders] Incoming request for user', userId, 'authenticated as', req.user);
+
     if (req.user !== userId) {
       return res.status(401).json({
         status: "fail",
@@ -226,7 +228,13 @@ exports.getOrders = async (req, res) => {
       headers: {
         'APCA-API-KEY-ID': tradingKeys.keyId,
         'APCA-API-SECRET-KEY': tradingKeys.secretKey,
-      }
+      },
+      params: {
+        status: 'all',
+        limit: 200,
+        direction: 'desc',
+        nested: true,
+      },
     });
 
     // Get positions
@@ -245,9 +253,12 @@ exports.getOrders = async (req, res) => {
       }
     });
 
+    const ordersPayload = Array.isArray(ordersResponse.data) ? ordersResponse.data : [];
+    console.log('[Orders] Retrieved', ordersPayload.length, 'orders for user', userId);
+
     return res.status(200).json({
       status: "success",
-      orders: ordersResponse.data,
+      orders: ordersPayload,
       positions: positionsResponse.data,
       account: accountResponse.data,
     });

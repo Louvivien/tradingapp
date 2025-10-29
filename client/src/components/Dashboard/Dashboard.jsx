@@ -78,6 +78,7 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
           orders: response.data.orders || [],
           positions: response.data.positions || []
         });
+        logDebug('Loaded orders count:', (response.data.orders || []).length);
         setOrdersError(null);
       } else {
         logWarn('Failed to fetch orders:', response.data);
