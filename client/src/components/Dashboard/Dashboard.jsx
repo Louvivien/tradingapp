@@ -28,6 +28,8 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
   const [purchasedStocks, setPurchasedStocks] = useState([]);
   const [accountBalance, setAccountBalance] = useState([]);
   const [orderList, setOrderList] = useState({ orders: [], positions: [] });
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState(null);
   const [portfolios, setPortfolios] = useState([]);
 
   // Function to get the list of purchased stocks from the server using Alpacas API
@@ -60,6 +62,8 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
   // Function to get the list of orders from the server using Alpacas API
   const getOrderList = async () => {
     try {
+      setOrdersLoading(true);
+      setOrdersError(null);
       logDebug('Fetching orders for user:', userData.user.id);
       const url = config.base_url + `/api/order/${userData.user.id}`;
       const headers = {
@@ -74,13 +78,18 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
           orders: response.data.orders || [],
           positions: response.data.positions || []
         });
+        setOrdersError(null);
       } else {
         logWarn('Failed to fetch orders:', response.data);
         setOrderList({ orders: [], positions: [] });
+        setOrdersError(response.data.message || "Unable to load order history.");
       }
     } catch (error) {
       logError('Error in getOrderList:', error);
       setOrderList({ orders: [], positions: [] });
+      setOrdersError(error.response?.data?.message || error.message);
+    } finally {
+      setOrdersLoading(false);
     }
   };
 
@@ -149,7 +158,7 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
         {/* Orders History */}
         <Grid item xs={12}>
           <StyledPaper>
-            <Orders orderList={orderList} />
+            <Orders orderList={orderList} loading={ordersLoading} error={ordersError} />
           </StyledPaper>
         </Grid>
       </Grid>

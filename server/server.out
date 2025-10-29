@@ -11975,3 +11975,1638 @@ Using paper trading API: https://paper-api.alpaca.markets
   }
 }
 [Scheduler] Checking for portfolios due for rebalancing...
+[Scheduler] Checking for portfolios due for rebalancing...
+[Scheduler] Checking for portfolios due for rebalancing...
+[HTTP] Incoming GET request for /api/data/portfolio/6477cf0011fcccfa0365bc87
+[HTTP] Incoming GET request for /api/data/portfolio/6477cf0011fcccfa0365bc87
+[Scheduler] Checking for portfolios due for rebalancing...
+[Debug] Environment variables loaded:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[Debug] - Live Key ID: AKILU...
+[Debug] - Live Secret: 6v68e...
+[Debug] User document found, checking for API keys
+[Debug] After user document check:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[API Info] Paper trading keys are present
+[API Info] Live trading key format is valid (starts with AK)
+[API Info] Validating Paper trading keys at https://paper-api.alpaca.markets/v2/clock
+[API Debug] Using key ID: PK5SX...
+[API Info] Validating Live trading keys at https://api.alpaca.markets/v2/clock
+[API Debug] Using key ID: AKILU...
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:46:01 GMT',
+    'content-type': 'application/json',
+    'content-length': '122',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749161',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': 'a75734703c00ac4d0990faa777f523af',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Live trading keys validated successfully
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:46:01 GMT',
+    'content-type': 'application/json',
+    'content-length': '123',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749161',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': 'a623b0b5aad4364634babb728d221394',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Paper trading keys validated successfully
+[API Info] Final configuration:
+[API Info] - Paper trading keys valid: true
+[API Info] - Live trading keys valid: true
+[API Info] - Trading API URL: https://paper-api.alpaca.markets
+[API Info] - Data API URL: https://data.alpaca.markets
+[API Info] Using paper trading keys for trading operations
+[API Info] Using paper trading keys for trading operations
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/positions',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/account',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:46:01 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '508',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749161',
+    'x-request-id': '957a11b63989571df1af0ad592b1492a',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:46:01 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'transfer-encoding': 'chunked',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding, Origin',
+    'access-control-allow-origin': '*',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '198',
+    'x-ratelimit-reset': '1761749162',
+    'x-request-id': 'eb7696f6204d7f2320c6a74bc619e113',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Request] {
+  method: 'POST',
+  url: 'https://paper-api.alpaca.markets/v2/orders',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:46:01 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '861',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '198',
+    'x-ratelimit-reset': '1761749162',
+    'x-request-id': 'e233ad5174528f026b3b76d476386bd6',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[Scheduler] Checking for portfolios due for rebalancing...
+[HTTP] Incoming GET request for /api/data/portfolio/6477cf0011fcccfa0365bc87
+[Debug] Environment variables loaded:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[Debug] - Live Key ID: AKILU...
+[Debug] - Live Secret: 6v68e...
+[Debug] User document found, checking for API keys
+[Debug] After user document check:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[API Info] Paper trading keys are present
+[API Info] Live trading key format is valid (starts with AK)
+[API Info] Validating Paper trading keys at https://paper-api.alpaca.markets/v2/clock
+[API Debug] Using key ID: PK5SX...
+[API Info] Validating Live trading keys at https://api.alpaca.markets/v2/clock
+[API Debug] Using key ID: AKILU...
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:47:13 GMT',
+    'content-type': 'application/json',
+    'content-length': '124',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749234',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': 'e2c3062f0682287a1a25e03509896dae',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Paper trading keys validated successfully
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:47:13 GMT',
+    'content-type': 'application/json',
+    'content-length': '123',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749234',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '1231d271676b52951f77da5ec9fca446',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Live trading keys validated successfully
+[API Info] Final configuration:
+[API Info] - Paper trading keys valid: true
+[API Info] - Live trading keys valid: true
+[API Info] - Trading API URL: https://paper-api.alpaca.markets
+[API Info] - Data API URL: https://data.alpaca.markets
+[API Info] Forcing live trading mode
+[API Info] Forcing live trading mode
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/account/portfolio/history?period=12M',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:47:13 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'transfer-encoding': 'chunked',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding, Origin',
+    'access-control-allow-origin': '*',
+    'x-portfolio-history-engine-version': 'v2',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749234',
+    'x-request-id': '625f40646eb5f583787c0ccb33741626',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[Scheduler] Checking for portfolios due for rebalancing...
+[Scheduler] Checking for portfolios due for rebalancing...
+[Scheduler] Checking for portfolios due for rebalancing...
+[Scheduler] Checking for portfolios due for rebalancing...
+[HTTP] Incoming GET request for /api/stock/6477cf0011fcccfa0365bc87
+[Stocks] getStockForUser called {
+  userId: '6477cf0011fcccfa0365bc87',
+  authUser: '6477cf0011fcccfa0365bc87',
+  mongoState: 1
+}
+[Stocks] Fetching user document
+[HTTP] Incoming GET request for /api/order/6477cf0011fcccfa0365bc87
+[Stocks] User document loaded { userId: new ObjectId("6477cf0011fcccfa0365bc87") }
+[Debug] Environment variables loaded:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[Debug] - Live Key ID: AKILU...
+[Debug] - Live Secret: 6v68e...
+[HTTP] Incoming GET request for /api/strategies/portfolios/6477cf0011fcccfa0365bc87
+[Debug] Environment variables loaded:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[Debug] - Live Key ID: AKILU...
+[Debug] - Live Secret: 6v68e...
+[Debug] User document found, checking for API keys
+[Debug] After user document check:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[API Info] Paper trading keys are present
+[API Info] Live trading key format is valid (starts with AK)
+[API Info] Validating Paper trading keys at https://paper-api.alpaca.markets/v2/clock
+[API Debug] Using key ID: PK5SX...
+[API Info] Validating Live trading keys at https://api.alpaca.markets/v2/clock
+[API Debug] Using key ID: AKILU...
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[Debug] Environment variables loaded:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[Debug] - Live Key ID: AKILU...
+[Debug] - Live Secret: 6v68e...
+[Debug] User document found, checking for API keys
+[Debug] After user document check:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[API Info] Paper trading keys are present
+[API Info] Live trading key format is valid (starts with AK)
+[API Info] Validating Paper trading keys at https://paper-api.alpaca.markets/v2/clock
+[API Debug] Using key ID: PK5SX...
+[API Info] Validating Live trading keys at https://api.alpaca.markets/v2/clock
+[API Debug] Using key ID: AKILU...
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[Debug] User document found, checking for API keys
+[Debug] After user document check:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[API Info] Paper trading keys are present
+[API Info] Live trading key format is valid (starts with AK)
+[API Info] Validating Paper trading keys at https://paper-api.alpaca.markets/v2/clock
+[API Debug] Using key ID: PK5SX...
+[API Info] Validating Live trading keys at https://api.alpaca.markets/v2/clock
+[API Debug] Using key ID: AKILU...
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:42 GMT',
+    'content-type': 'application/json',
+    'content-length': '123',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749503',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '9de48917e4b1b9fe054f741d3a60a04e',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Live trading keys validated successfully
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:42 GMT',
+    'content-type': 'application/json',
+    'content-length': '124',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749503',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': 'f73bb6d2834256238bfdcddc831ec3f2',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Paper trading keys validated successfully
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:42 GMT',
+    'content-type': 'application/json',
+    'content-length': '123',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '197',
+    'x-ratelimit-reset': '1761749503',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': 'e5f4c80ce52c00851659739cb24aec66',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Live trading keys validated successfully
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:42 GMT',
+    'content-type': 'application/json',
+    'content-length': '123',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '198',
+    'x-ratelimit-reset': '1761749503',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '42590a04a51ce44e0a2b2cb875ab255c',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Live trading keys validated successfully
+[API Info] Final configuration:
+[API Info] - Paper trading keys valid: true
+[API Info] - Live trading keys valid: true
+[API Info] - Trading API URL: https://paper-api.alpaca.markets
+[API Info] - Data API URL: https://data.alpaca.markets
+[API Info] Forcing paper trading mode
+[API Info] Forcing paper trading mode
+Using paper trading API: https://paper-api.alpaca.markets
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/orders',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:42 GMT',
+    'content-type': 'application/json',
+    'content-length': '124',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '198',
+    'x-ratelimit-reset': '1761749503',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': 'f8f9d2ae9fbf2ba6c24532f1a0027727',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Paper trading keys validated successfully
+[API Info] Final configuration:
+[API Info] - Paper trading keys valid: true
+[API Info] - Live trading keys valid: true
+[API Info] - Trading API URL: https://paper-api.alpaca.markets
+[API Info] - Data API URL: https://data.alpaca.markets
+[API Info] Forcing paper trading mode
+[API Info] Forcing paper trading mode
+Using paper trading API: https://paper-api.alpaca.markets
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/positions',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/account',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:42 GMT',
+    'content-type': 'application/json',
+    'content-length': '124',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '197',
+    'x-ratelimit-reset': '1761749503',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '09423b14ceab61596ac2b8aaf9fefe74',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Paper trading keys validated successfully
+[API Info] Final configuration:
+[API Info] - Paper trading keys valid: true
+[API Info] - Live trading keys valid: true
+[API Info] - Trading API URL: https://paper-api.alpaca.markets
+[API Info] - Data API URL: https://data.alpaca.markets
+[API Info] Using paper trading keys for trading operations
+[API Info] Using paper trading keys for trading operations
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/positions',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/account',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:42 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '2',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749503',
+    'x-request-id': '537262afacf6e64b76dadee31eea54b1',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/positions',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:42 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '505',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '198',
+    'x-ratelimit-reset': '1761749503',
+    'x-request-id': '0b989403576d1523753de14a3ad1c49e',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:42 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '505',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '197',
+    'x-ratelimit-reset': '1761749503',
+    'x-request-id': '7ad954973df5dd1031461d2acb497964',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:43 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '505',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '196',
+    'x-ratelimit-reset': '1761749504',
+    'x-request-id': '53be02c5c50eb4968095ddbf45efd302',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/account',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:43 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'transfer-encoding': 'chunked',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding, Origin',
+    'access-control-allow-origin': '*',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '195',
+    'x-ratelimit-reset': '1761749504',
+    'x-request-id': '3fbc32c84d15e20e821f13e4038d1fe7',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:43 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'transfer-encoding': 'chunked',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding, Origin',
+    'access-control-allow-origin': '*',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '194',
+    'x-ratelimit-reset': '1761749504',
+    'x-request-id': '78ca23548f6c6b6786589f3195746e7e',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://data.alpaca.markets/v2/stocks/CAT/trades/latest',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://data.alpaca.markets/v2/stocks/PETS/trades/latest',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:43 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'transfer-encoding': 'chunked',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding, Origin',
+    'access-control-allow-origin': '*',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '193',
+    'x-ratelimit-reset': '1761749505',
+    'x-request-id': '1ddbf445039bfdc934f211ae9591a8cf',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:43 GMT',
+    'content-type': 'application/json',
+    'content-length': '114',
+    connection: 'keep-alive',
+    'x-feed': 'iex',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749503',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '18bc600003e8d33732ecb46c05047cdb',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:43 GMT',
+    'content-type': 'application/json',
+    'content-length': '127',
+    connection: 'keep-alive',
+    'x-feed': 'iex',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '198',
+    'x-ratelimit-reset': '1761749503',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '2fac00d628fbb989571468c25a0b43d0',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[HTTP] Incoming GET request for /api/data/portfolio/6477cf0011fcccfa0365bc87
+[Debug] Environment variables loaded:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[Debug] - Live Key ID: AKILU...
+[Debug] - Live Secret: 6v68e...
+[HTTP] Incoming GET request for /api/stock/6477cf0011fcccfa0365bc87
+[Stocks] getStockForUser called {
+  userId: '6477cf0011fcccfa0365bc87',
+  authUser: '6477cf0011fcccfa0365bc87',
+  mongoState: 1
+}
+[Stocks] Fetching user document
+[HTTP] Incoming GET request for /api/order/6477cf0011fcccfa0365bc87
+[HTTP] Incoming GET request for /api/strategies/portfolios/6477cf0011fcccfa0365bc87
+[Debug] User document found, checking for API keys
+[Debug] After user document check:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[API Info] Paper trading keys are present
+[API Info] Live trading key format is valid (starts with AK)
+[API Info] Validating Paper trading keys at https://paper-api.alpaca.markets/v2/clock
+[API Debug] Using key ID: PK5SX...
+[API Info] Validating Live trading keys at https://api.alpaca.markets/v2/clock
+[API Debug] Using key ID: AKILU...
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[Stocks] User document loaded { userId: new ObjectId("6477cf0011fcccfa0365bc87") }
+[Debug] Environment variables loaded:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[Debug] - Live Key ID: AKILU...
+[Debug] - Live Secret: 6v68e...
+[Debug] Environment variables loaded:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[Debug] - Live Key ID: AKILU...
+[Debug] - Live Secret: 6v68e...
+[Debug] Environment variables loaded:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[Debug] - Live Key ID: AKILU...
+[Debug] - Live Secret: 6v68e...
+[Debug] User document found, checking for API keys
+[Debug] After user document check:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[API Info] Paper trading keys are present
+[API Info] Live trading key format is valid (starts with AK)
+[API Info] Validating Paper trading keys at https://paper-api.alpaca.markets/v2/clock
+[API Debug] Using key ID: PK5SX...
+[API Info] Validating Live trading keys at https://api.alpaca.markets/v2/clock
+[API Debug] Using key ID: AKILU...
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[Debug] User document found, checking for API keys
+[Debug] After user document check:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[API Info] Paper trading keys are present
+[API Info] Live trading key format is valid (starts with AK)
+[API Info] Validating Paper trading keys at https://paper-api.alpaca.markets/v2/clock
+[API Debug] Using key ID: PK5SX...
+[API Info] Validating Live trading keys at https://api.alpaca.markets/v2/clock
+[API Debug] Using key ID: AKILU...
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[Debug] User document found, checking for API keys
+[Debug] After user document check:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[API Info] Paper trading keys are present
+[API Info] Live trading key format is valid (starts with AK)
+[API Info] Validating Paper trading keys at https://paper-api.alpaca.markets/v2/clock
+[API Debug] Using key ID: PK5SX...
+[API Info] Validating Live trading keys at https://api.alpaca.markets/v2/clock
+[API Debug] Using key ID: AKILU...
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:49 GMT',
+    'content-type': 'application/json',
+    'content-length': '123',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749510',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '4f511c25038da924962190427f881f57',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Live trading keys validated successfully
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:49 GMT',
+    'content-type': 'application/json',
+    'content-length': '124',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749510',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': 'd8a9d26606d6fd03ac0ddae8f6ec71da',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Paper trading keys validated successfully
+[API Info] Final configuration:
+[API Info] - Paper trading keys valid: true
+[API Info] - Live trading keys valid: true
+[API Info] - Trading API URL: https://paper-api.alpaca.markets
+[API Info] - Data API URL: https://data.alpaca.markets
+[API Info] Forcing paper trading mode
+[API Info] Forcing paper trading mode
+Using paper trading API: https://paper-api.alpaca.markets
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/positions',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/account',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:49 GMT',
+    'content-type': 'application/json',
+    'content-length': '122',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '198',
+    'x-ratelimit-reset': '1761749510',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '09e782e8e006d7699b63c3758183810f',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Paper trading keys validated successfully
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:49 GMT',
+    'content-type': 'application/json',
+    'content-length': '123',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '198',
+    'x-ratelimit-reset': '1761749510',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '61a585cc9150857284e2ead78fa6efaa',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Live trading keys validated successfully
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:49 GMT',
+    'content-type': 'application/json',
+    'content-length': '124',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '197',
+    'x-ratelimit-reset': '1761749510',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '2323ab40992207353650c6d47ec6425f',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Paper trading keys validated successfully
+[API Info] Final configuration:
+[API Info] - Paper trading keys valid: true
+[API Info] - Live trading keys valid: true
+[API Info] - Trading API URL: https://paper-api.alpaca.markets
+[API Info] - Data API URL: https://data.alpaca.markets
+[API Info] Forcing paper trading mode
+[API Info] Forcing paper trading mode
+Using paper trading API: https://paper-api.alpaca.markets
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/orders',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:49 GMT',
+    'content-type': 'application/json',
+    'content-length': '123',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '197',
+    'x-ratelimit-reset': '1761749510',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '08bc97be6f6b1d56b50ec882d8450c7a',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Live trading keys validated successfully
+[API Info] Final configuration:
+[API Info] - Paper trading keys valid: true
+[API Info] - Live trading keys valid: true
+[API Info] - Trading API URL: https://paper-api.alpaca.markets
+[API Info] - Data API URL: https://data.alpaca.markets
+[API Info] Forcing live trading mode
+[API Info] Forcing live trading mode
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/account/portfolio/history?period=12M',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:49 GMT',
+    'content-type': 'application/json',
+    'content-length': '124',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '196',
+    'x-ratelimit-reset': '1761749511',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': 'ebe7f84b7d9155b3a0adda61878a7e97',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Paper trading keys validated successfully
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:49 GMT',
+    'content-type': 'application/json',
+    'content-length': '123',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '196',
+    'x-ratelimit-reset': '1761749511',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '1b382ca47f7688593653ec8e21d83ef9',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Live trading keys validated successfully
+[API Info] Final configuration:
+[API Info] - Paper trading keys valid: true
+[API Info] - Live trading keys valid: true
+[API Info] - Trading API URL: https://paper-api.alpaca.markets
+[API Info] - Data API URL: https://data.alpaca.markets
+[API Info] Using paper trading keys for trading operations
+[API Info] Using paper trading keys for trading operations
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/positions',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/account',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:50 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '505',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749510',
+    'x-request-id': 'aba8e2cd80dba5b5e9c0c014cb0c2314',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:50 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '2',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '198',
+    'x-ratelimit-reset': '1761749510',
+    'x-request-id': '4399986fd77d9e8111bd236dce3553af',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/positions',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:50 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '505',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '196',
+    'x-ratelimit-reset': '1761749511',
+    'x-request-id': '4d798be6a94fcf8a74010b41fa41b327',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:50 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'transfer-encoding': 'chunked',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding, Origin',
+    'access-control-allow-origin': '*',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '197',
+    'x-ratelimit-reset': '1761749510',
+    'x-request-id': '9e19fe3e170072e36332b6449a0a2221',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://data.alpaca.markets/v2/stocks/CAT/trades/latest',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://data.alpaca.markets/v2/stocks/PETS/trades/latest',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:50 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'transfer-encoding': 'chunked',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding, Origin',
+    'access-control-allow-origin': '*',
+    'x-portfolio-history-engine-version': 'v2',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749510',
+    'x-request-id': 'bef951a7405223b23ce165e429c0fd2f',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:50 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '505',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '195',
+    'x-ratelimit-reset': '1761749511',
+    'x-request-id': '4eea78efe6dd39e7c5f82d98e31b4e96',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/account',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:50 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'transfer-encoding': 'chunked',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding, Origin',
+    'access-control-allow-origin': '*',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '194',
+    'x-ratelimit-reset': '1761749512',
+    'x-request-id': '46f28eef37bc8aca86e30a13ddea2480',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:50 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'transfer-encoding': 'chunked',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding, Origin',
+    'access-control-allow-origin': '*',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '193',
+    'x-ratelimit-reset': '1761749512',
+    'x-request-id': '6877f806213c0192f698b7e090322333',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:50 GMT',
+    'content-type': 'application/json',
+    'content-length': '127',
+    connection: 'keep-alive',
+    'x-feed': 'iex',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749510',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '161f201686fa49e0b6d91c872987f944',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:51:50 GMT',
+    'content-type': 'application/json',
+    'content-length': '114',
+    connection: 'keep-alive',
+    'x-feed': 'iex',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '198',
+    'x-ratelimit-reset': '1761749511',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '45d693b4d122a722e2337cba5facdbba',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[Scheduler] Checking for portfolios due for rebalancing...
+[Debug] Environment variables loaded:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[Debug] - Live Key ID: AKILU...
+[Debug] - Live Secret: 6v68e...
+[Debug] User document found, checking for API keys
+[Debug] After user document check:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[API Info] Paper trading keys are present
+[API Info] Live trading key format is valid (starts with AK)
+[API Info] Validating Paper trading keys at https://paper-api.alpaca.markets/v2/clock
+[API Debug] Using key ID: PK5SX...
+[API Info] Validating Live trading keys at https://api.alpaca.markets/v2/clock
+[API Debug] Using key ID: AKILU...
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:52:01 GMT',
+    'content-type': 'application/json',
+    'content-length': '121',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749521',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '45951bab7c5d0d0d4e4ab3ca65c5d47b',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Paper trading keys validated successfully
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:52:01 GMT',
+    'content-type': 'application/json',
+    'content-length': '124',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749521',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '630522383a0fdbff7c7e904bd6ab5224',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Live trading keys validated successfully
+[API Info] Final configuration:
+[API Info] - Paper trading keys valid: true
+[API Info] - Live trading keys valid: true
+[API Info] - Trading API URL: https://paper-api.alpaca.markets
+[API Info] - Data API URL: https://data.alpaca.markets
+[API Info] Using paper trading keys for trading operations
+[API Info] Using paper trading keys for trading operations
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/positions',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/account',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:52:01 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '505',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749521',
+    'x-request-id': '45e4d597de71f0cbbfdc100af1723071',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:52:01 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'transfer-encoding': 'chunked',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding, Origin',
+    'access-control-allow-origin': '*',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '198',
+    'x-ratelimit-reset': '1761749522',
+    'x-request-id': 'f1f354551f8eed316f97bda868a73f7f',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Request] {
+  method: 'POST',
+  url: 'https://paper-api.alpaca.markets/v2/orders',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:52:01 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '854',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '197',
+    'x-ratelimit-reset': '1761749522',
+    'x-request-id': '8d5f74a23046c5979ce9b61e280843f7',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[Scheduler] Checking for portfolios due for rebalancing...
+[Scheduler] Checking for portfolios due for rebalancing...
+[Scheduler] Checking for portfolios due for rebalancing...
+[Scheduler] Checking for portfolios due for rebalancing...
+[Scheduler] Checking for portfolios due for rebalancing...
+[Scheduler] Checking for portfolios due for rebalancing...
+[Debug] Environment variables loaded:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[Debug] - Live Key ID: AKILU...
+[Debug] - Live Secret: 6v68e...
+[Debug] User document found, checking for API keys
+[Debug] After user document check:
+[Debug] - Paper Key ID: PK5SX...
+[Debug] - Paper Secret: OeC06...
+[API Info] Paper trading keys are present
+[API Info] Live trading key format is valid (starts with AK)
+[API Info] Validating Paper trading keys at https://paper-api.alpaca.markets/v2/clock
+[API Debug] Using key ID: PK5SX...
+[API Info] Validating Live trading keys at https://api.alpaca.markets/v2/clock
+[API Debug] Using key ID: AKILU...
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://api.alpaca.markets/v2/clock',
+  headers: { 'APCA-API-KEY-ID': 'AKILU...', 'APCA-API-SECRET-KEY': '6v68e...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:58:01 GMT',
+    'content-type': 'application/json',
+    'content-length': '123',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749881',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '814f27e30c03c11e54ddb135ae5ec409',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Live trading keys validated successfully
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:58:01 GMT',
+    'content-type': 'application/json',
+    'content-length': '124',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749881',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'x-request-id': '67650241074fea5302b090c46ce56b41',
+    'access-control-allow-origin': '*',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Success] Paper trading keys validated successfully
+[API Info] Final configuration:
+[API Info] - Paper trading keys valid: true
+[API Info] - Live trading keys valid: true
+[API Info] - Trading API URL: https://paper-api.alpaca.markets
+[API Info] - Data API URL: https://data.alpaca.markets
+[API Info] Using paper trading keys for trading operations
+[API Info] Using paper trading keys for trading operations
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/positions',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Request] {
+  method: 'GET',
+  url: 'https://paper-api.alpaca.markets/v2/account',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:58:01 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '511',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '199',
+    'x-ratelimit-reset': '1761749881',
+    'x-request-id': '86ad2d26b1d0ecff2805ddd9db034ab2',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:58:01 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'transfer-encoding': 'chunked',
+    connection: 'keep-alive',
+    vary: 'Accept-Encoding, Origin',
+    'access-control-allow-origin': '*',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '198',
+    'x-ratelimit-reset': '1761749882',
+    'x-request-id': '43aa964fe2926bff3299a18e6c3284bd',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}
+[API Request] {
+  method: 'POST',
+  url: 'https://paper-api.alpaca.markets/v2/orders',
+  headers: { 'APCA-API-KEY-ID': 'PK5SX...', 'APCA-API-SECRET-KEY': 'OeC06...' }
+}
+[API Response] {
+  status: 200,
+  statusText: 'OK',
+  headers: Object [AxiosHeaders] {
+    date: 'Wed, 29 Oct 2025 14:58:01 GMT',
+    'content-type': 'application/json; charset=UTF-8',
+    'content-length': '858',
+    connection: 'keep-alive',
+    'access-control-allow-origin': '*',
+    vary: 'Origin',
+    'x-ratelimit-limit': '200',
+    'x-ratelimit-remaining': '197',
+    'x-ratelimit-reset': '1761749882',
+    'x-request-id': '46a14116fa1ff41f7633dcd7439a9ebd',
+    'strict-transport-security': 'max-age=31536000; includeSubDomains',
+    'access-control-allow-credentials': 'true',
+    'access-control-allow-methods': 'GET, OPTIONS, PUT, DELETE, POST, PATCH',
+    'access-control-allow-headers': 'Apca-Api-Key-Id, Apca-Api-Secret-Key, Authorization, Content-Type, X-Correspondent',
+    'access-control-max-age': '1728000'
+  }
+}

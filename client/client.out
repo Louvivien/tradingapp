@@ -54,3 +54,19 @@ webpack compiled successfully
 Compiling...
 Compiled successfully!
 webpack compiled successfully
+Compiling...
+Compiled successfully!
+webpack compiled successfully
+Failed to compile.
+
+Module not found: Error: Can't resolve './Orders' in '/Users/vivienrichaud/Documents/tradingapp/client/src/components/Dashboard'
+ERROR in ./src/components/Dashboard/Dashboard.jsx 16:0-30
+Module not found: Error: Can't resolve './Orders' in '/Users/vivienrichaud/Documents/tradingapp/client/src/components/Dashboard'
+
+webpack compiled with 1 error
+Compiling...
+Compiled successfully!
+webpack compiled successfully
+Compiling...
+Compiled successfully!
+webpack compiled successfully
