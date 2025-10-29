@@ -1,5 +1,5 @@
 import React, { useContext, useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import UserContext from "../../context/UserContext";
 import styles from "./PageTemplate.module.css";
 import clsx from "clsx";
@@ -19,6 +19,7 @@ import Navbar from "../Template/Navbar";
 import SecondNavbar from "../Template/SecondNavbar";
 import Dashboard from "../Dashboard/Dashboard";
 import Strategies from "../Strategies/Strategies";
+import StrategyLogs from "../Strategies/StrategyLogs";
 import News from "../News/News";
 import Search from "../Search/Search";
 import SettingsModal from "./SettingsModal";
@@ -75,14 +76,19 @@ const StyledDrawer = styled(Drawer)(({ theme, open }) => ({
 
 
 
-const PageTemplate = () => {
+const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, initialStrategyName = "" }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { userData, setUserData } = useContext(UserContext);
   const [open, setOpen] = useState(false);
-  const [currentPage, setCurrentPage] = useState("dashboard");
+  const [currentPage, setCurrentPage] = useState(initialPage || "dashboard");
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [purchasedStocks, setPurchasedStocks] = useState([]);
   const [accountBalance, setAccountBalance] = useState([]);
+  const [selectedStrategyForLogs, setSelectedStrategyForLogs] = useState({
+    id: initialStrategyId,
+    name: initialStrategyName,
+  });
 
 
 
@@ -109,6 +115,32 @@ const PageTemplate = () => {
     getPurchasedStocks();
   }, []);
 
+  useEffect(() => {
+    setSelectedStrategyForLogs({
+      id: initialStrategyId,
+      name: initialStrategyName,
+    });
+  }, [initialStrategyId, initialStrategyName]);
+
+  useEffect(() => {
+    setCurrentPage(initialPage || "dashboard");
+  }, [initialPage]);
+
+  useEffect(() => {
+    const isStrategyLogsRoute = /^\/strategies\/[^/]+\/logs/.test(location.pathname);
+    if (isStrategyLogsRoute) {
+      if (currentPage !== "strategyLogs") {
+        setCurrentPage("strategyLogs");
+      }
+    } else if (currentPage === "strategyLogs") {
+      setCurrentPage("dashboard");
+      setSelectedStrategyForLogs({
+        id: null,
+        name: "",
+      });
+    }
+  }, [location.pathname, currentPage]);
+
 
   const logout = () => {
     setUserData({
@@ -130,6 +162,27 @@ const PageTemplate = () => {
 
   const openSettings = () => {
     setSettingsOpen(true);
+  };
+
+  const handleCloseStrategyLogs = () => {
+    setSelectedStrategyForLogs({
+      id: null,
+      name: "",
+    });
+    setCurrentPage("dashboard");
+    navigate("/");
+  };
+
+  const handleViewStrategyLogs = ({ id, name }) => {
+    if (!id) {
+      return;
+    }
+    setSelectedStrategyForLogs({
+      id,
+      name: name || "",
+    });
+    setCurrentPage("strategyLogs");
+    navigate(`/strategies/${id}/logs?name=${encodeURIComponent(name || "")}`);
   };
 
   // console.log("userData.user ", userData.user);
@@ -172,6 +225,7 @@ const PageTemplate = () => {
             {currentPage === "news" && "Market News"}
             {currentPage === "search" && "Search"}
             {currentPage === "strategies" && "Strategies"}
+            {currentPage === "strategyLogs" && "Strategy Logs"}
           </Typography>
           <Typography color="inherit">
             Hello,{" "}
@@ -207,6 +261,7 @@ const PageTemplate = () => {
           <Dashboard
             userData={userData}
             setUserData={setUserData}
+            onViewStrategyLogs={handleViewStrategyLogs}
           />
 
 
@@ -215,6 +270,13 @@ const PageTemplate = () => {
 
         {currentPage === "news" && <News />}
         {currentPage === "strategies" && <Strategies />}
+        {currentPage === "strategyLogs" && (
+          <StrategyLogs
+            strategyId={selectedStrategyForLogs.id}
+            strategyName={selectedStrategyForLogs.name}
+            onClose={handleCloseStrategyLogs}
+          />
+        )}
         {currentPage === "search" && (
 
 

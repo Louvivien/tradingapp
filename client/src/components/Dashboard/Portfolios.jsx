@@ -13,12 +13,15 @@ import Axios from "axios";
 import config from "../../config/Config";
 import UserContext from "../../context/UserContext";
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
+import { useNavigate } from "react-router-dom";
+import { logError } from "../../utils/logger";
 
 
 
 
 
-const Portfolios = ({ portfolios }) => {
+const Portfolios = ({ portfolios, onViewStrategyLogs }) => {
+  const navigate = useNavigate();
   const [saleOpen, setSaleOpen] = useState(false);
   const { userData, setUserData } = useContext(UserContext);
   const [stock, setStock] = useState(undefined);
@@ -78,15 +81,12 @@ const Portfolios = ({ portfolios }) => {
         // console.log("Strategy deleted successfully");
         // You might want to update the state or redirect the user here
       } else {
-        console.error('Error deleting strategy:', response.data.message);
+        logError('Error deleting strategy:', response.data.message);
       }
     } catch (error) {
-      console.error('Error deleting strategy:', error);
+      logError('Error deleting strategy:', error);
     }
   };
-
-
-
 
 
   return (
@@ -125,6 +125,7 @@ const Portfolios = ({ portfolios }) => {
           });
 
           const assetCount = portfolio.stocks.length;
+          const totalUnrealizedPL = allStocksHaveAvgCost ? totalCurrentTotal - totalPurchaseTotal : null;
           const purchaseSummary = allStocksHaveAvgCost && totalPurchaseTotal > 0
             ? `$${roundNumber(totalPurchaseTotal).toLocaleString()}`
             : '—';
@@ -155,6 +156,22 @@ const Portfolios = ({ portfolios }) => {
                 <IconButton color="error" onClick={() => openDeleteModal(portfolio.strategy_id)}>
                   <HighlightOffIcon fontSize="small"/>
                 </IconButton>
+                <Button
+                  size="small"
+                  sx={{ ml: 1 }}
+                  onClick={() => {
+                    if (onViewStrategyLogs) {
+                      onViewStrategyLogs({
+                        id: portfolio.strategy_id,
+                        name: portfolio.name,
+                      });
+                    } else {
+                      navigate(`/strategies/${portfolio.strategy_id}/logs?name=${encodeURIComponent(portfolio.name)}`);
+                    }
+                  }}
+                >
+                  View Logs
+                </Button>
 
 
 
@@ -299,20 +316,20 @@ const Portfolios = ({ portfolios }) => {
                         <TableCell
                           align="right"
                           className={
-                            (totalCurrentTotal - totalPurchaseTotal) >= 0
+                            totalUnrealizedPL !== null && totalUnrealizedPL >= 0
                               ? styles.positive
                               : styles.negative
                           }
                         >
-                          ${roundNumber(totalCurrentTotal - totalPurchaseTotal).toLocaleString()}
+                          ${totalUnrealizedPL !== null ? roundNumber(totalUnrealizedPL).toLocaleString() : "----"}
                         </TableCell>
                         <TableCell
                           align="right"
                           className={
-                            totalDifference >= 0 ? styles.positive : styles.negative
+                            totalDiffPct !== null && totalDiffPct >= 0 ? styles.positive : styles.negative
                           }
                         >
-                          {Math.abs(totalDifference * 100).toFixed(2)}%
+                          {totalDiffPct !== null ? `${totalDiffPct >= 0 ? "▲" : "▼"} ${Math.abs(totalDiffPct).toFixed(2)}%` : "----"}
                         </TableCell>
                       </TableRow>
                     )}

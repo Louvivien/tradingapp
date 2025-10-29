@@ -1,11 +1,26 @@
 import React, { useState, useEffect } from "react";
-import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import { BrowserRouter as Router, Route, Routes, useLocation, useParams } from "react-router-dom";
 import styles from "./App.module.css";
 import Test from "./components/Test/test";
 import { Login, Register, NotFound, PageTemplate} from "./components";
 import UserContext from "./context/UserContext";
 import Axios from "axios";
 import config from "./config/Config";
+
+const StrategyLogsRoute = () => {
+  const { strategyId } = useParams();
+  const location = useLocation();
+  const queryParams = new URLSearchParams(location.search);
+  const strategyName = queryParams.get("name") || "";
+
+  return (
+    <PageTemplate
+      initialPage="strategyLogs"
+      initialStrategyId={strategyId}
+      initialStrategyName={strategyName}
+    />
+  );
+};
 
 
 
@@ -69,6 +84,7 @@ function App() {
             {userData.user ? (
               <>
                 <Route path="/" element={<PageTemplate />} />
+                <Route path="/strategies/:strategyId/logs" element={<StrategyLogsRoute />} />
                 <Route path="/test" element={<Test />} />
               </>
             ) : (

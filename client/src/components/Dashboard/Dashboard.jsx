@@ -11,6 +11,7 @@ import Purchases from "./Purchases";
 import Portfolios from "./Portfolios";
 import Orders from "./Orders";
 import Copyright from "../Template/Copyright";
+import { logDebug, logWarn, logError } from "../../utils/logger";
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(2),
@@ -23,7 +24,7 @@ const FixedHeightPaper = styled(StyledPaper)({
   height: 350,
 });
 
-const Dashboard = ({ userData, setUserData }) => {
+const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
   const [purchasedStocks, setPurchasedStocks] = useState([]);
   const [accountBalance, setAccountBalance] = useState([]);
   const [orderList, setOrderList] = useState({ orders: [], positions: [] });
@@ -32,25 +33,25 @@ const Dashboard = ({ userData, setUserData }) => {
   // Function to get the list of purchased stocks from the server using Alpacas API
   const getPurchasedStocks = async () => {
     try {
-      console.log('Fetching stocks for user:', userData.user.id);
+      logDebug('Fetching stocks for user:', userData.user.id);
       const url = config.base_url + `/api/stock/${userData.user.id}`;
       const headers = {
         "x-auth-token": userData.token,
       };
 
       const response = await Axios.get(url, { headers });
-      console.log('Stocks API Response:', response.data);
+      logDebug('Stocks API Response:', response.data);
 
       if (response.data.status === "success") {
         setPurchasedStocks(response.data.stocks);
         setAccountBalance(response.data.cash);
       } else {
-        console.warn('Failed to fetch stocks:', response.data);
+        logWarn('Failed to fetch stocks:', response.data);
         setPurchasedStocks([]);
         setAccountBalance(0);
       }
     } catch (error) {
-      console.error('Error in getPurchasedStocks:', error);
+      logError('Error in getPurchasedStocks:', error);
       setPurchasedStocks([]);
       setAccountBalance(0);
     }
@@ -59,14 +60,14 @@ const Dashboard = ({ userData, setUserData }) => {
   // Function to get the list of orders from the server using Alpacas API
   const getOrderList = async () => {
     try {
-      console.log('Fetching orders for user:', userData.user.id);
+      logDebug('Fetching orders for user:', userData.user.id);
       const url = config.base_url + `/api/order/${userData.user.id}`;
       const headers = {
         "x-auth-token": userData.token,
       };
 
       const response = await Axios.get(url, { headers });
-      console.log('Orders API Response:', response.data);
+      logDebug('Orders API Response:', response.data);
 
       if (response.data.status === "success") {
         setOrderList({
@@ -74,11 +75,11 @@ const Dashboard = ({ userData, setUserData }) => {
           positions: response.data.positions || []
         });
       } else {
-        console.warn('Failed to fetch orders:', response.data);
+        logWarn('Failed to fetch orders:', response.data);
         setOrderList({ orders: [], positions: [] });
       }
     } catch (error) {
-      console.error('Error in getOrderList:', error);
+      logError('Error in getOrderList:', error);
       setOrderList({ orders: [], positions: [] });
     }
   };
@@ -95,12 +96,10 @@ const Dashboard = ({ userData, setUserData }) => {
   
       if (response.data.status === "success") {
         setPortfolios(response.data.portfolios);
-          // eslint-disable-next-line no-console
-        console.log("Portfolios ", response.data.portfolios);
+        logDebug("Portfolios ", response.data.portfolios);
       }
     } catch (error) {
-        // eslint-disable-next-line no-console
-      console.error('Error fetching portfolios:', error);
+      logError('Error fetching portfolios:', error);
     }
   };
 
@@ -138,7 +137,11 @@ const Dashboard = ({ userData, setUserData }) => {
         {portfolios && portfolios.length > 0 && (
           <Grid item xs={12}>
             <StyledPaper>
-              <Portfolios accountBalance={accountBalance} portfolios={portfolios} />
+              <Portfolios
+                accountBalance={accountBalance}
+                portfolios={portfolios}
+                onViewStrategyLogs={onViewStrategyLogs}
+              />
             </StyledPaper>
           </Grid>
         )}

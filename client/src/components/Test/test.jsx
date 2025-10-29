@@ -4,6 +4,7 @@ import { TextField, Button, Box, CircularProgress } from '@mui/material';
 import UserContext from '../../context/UserContext';
 import Axios from 'axios';
 import config from '../../config/Config';
+import { logDebug, logError } from '../../utils/logger';
 
 const Test = () => {
   const { userData } = useContext(UserContext);
@@ -24,12 +25,11 @@ const Test = () => {
       };
 
       const response = await Axios.post(url, { ticker, period }, { headers });
-      console.log(response.data);
-
+      logDebug('News response:', response.data);
       setNewsHeadlines(response.data);
-      console.log("Headlines added to the database");
+      logDebug("Headlines added to the database");
     } catch (error) {
-      console.error('Error fetching news:', error);
+      logError('Error fetching news:', error);
     }
     setLoading(false);
   };
@@ -47,9 +47,9 @@ const Test = () => {
       const response = await Axios.get(url, { headers });
 
       setMessage(response.data);
-      console.log("Scores calculated");
+      logDebug("Scores calculated");
     } catch (error) {
-      console.error('Error fetching scores:', error);
+      logError('Error fetching scores:', error);
     }
     setLoading(false);
   };

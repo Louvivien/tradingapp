@@ -2,12 +2,20 @@ const Portfolio = require('../models/portfolioModel');
 const Strategy = require('../models/strategyModel');
 const { getAlpacaConfig } = require('../config/alpacaConfig');
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
+const { recordStrategyLog } = require('./strategyLogger');
 
 const TOLERANCE = 0.01;
 
 const toNumber = (value, fallback = 0) => {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
+};
+
+const roundToTwo = (value) => {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  return Math.round((value + Number.EPSILON) * 100) / 100;
 };
 
 const normalizeTargets = (targets = []) => {
@@ -341,6 +349,24 @@ const rebalancePortfolio = async (portfolio) => {
   portfolio.recurrence = recurrence;
 
   await portfolio.save();
+
+  await recordStrategyLog({
+    strategyId: portfolio.strategy_id,
+    userId: portfolio.userId,
+    strategyName: portfolio.name,
+    message: 'Portfolio rebalanced',
+    details: {
+      recurrence,
+      sells: sells.map((sell) => ({ symbol: sell.symbol, qty: sell.qty })),
+      buys: buys.map((buy) => ({ symbol: buy.symbol, qty: buy.qty })),
+      budget,
+      buySpend: roundToTwo(buySpend),
+      sellProceeds: roundToTwo(sellProceeds),
+      remainingCash: roundToTwo(availableCash),
+      cashBuffer: roundToTwo(portfolio.cashBuffer),
+      accountCash: roundToTwo(accountCash),
+    },
+  });
 };
 
 const runDueRebalances = async () => {
@@ -358,6 +384,14 @@ const runDueRebalances = async () => {
       await rebalancePortfolio(portfolio);
     } catch (error) {
       console.error(`[Rebalance] Failed for portfolio ${portfolio._id}:`, error.message);
+      await recordStrategyLog({
+        strategyId: portfolio.strategy_id,
+        userId: portfolio.userId,
+        strategyName: portfolio.name,
+        level: 'error',
+        message: 'Portfolio rebalance failed',
+        details: { error: error.message },
+      });
     }
   }
 };

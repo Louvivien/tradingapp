@@ -1,6 +1,7 @@
 const User = require("../models/userModel");
 const Strategy = require("../models/strategyModel");
 const Portfolio = require("../models/portfolioModel");
+const StrategyLog = require("../models/strategyLogModel");
 const News = require("../models/newsModel");
 const { getAlpacaConfig } = require("../config/alpacaConfig");
 const Alpaca = require('@alpacahq/alpaca-trade-api');
@@ -14,6 +15,7 @@ const path = require('path');
 const { distance } = require('fastest-levenshtein');
 const Axios = require("axios");
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
+const { recordStrategyLog } = require('../services/strategyLogger');
 
 
 
@@ -640,18 +642,26 @@ exports.createCollaborative = async (req, res) => {
             }
           : null;
 
-        return res.status(200).json({
-          status: "success",
-          orders,
-          schedule,
-        });
-      } catch (error) {
-        console.error(`Error in enableAIFund: ${error}`);
-        return res.status(500).json({
-          status: "fail",
-          message: `Something unexpected happened: ${error.message}`,
-        });
-      }
+      return res.status(200).json({
+        status: "success",
+        orders,
+        schedule,
+      });
+    } catch (error) {
+      console.error(`Error in enableAIFund: ${error}`);
+      await recordStrategyLog({
+        strategyId: strategyName,
+        userId: String(UserID || ''),
+        strategyName,
+        level: 'error',
+        message: 'Failed to enable AI Fund strategy',
+        details: { error: error.message },
+      });
+      return res.status(500).json({
+        status: "fail",
+        message: `Something unexpected happened: ${error.message}`,
+      });
+    }
   }
 
 
@@ -764,6 +774,40 @@ exports.disableAIFund = async (req, res) => {
     return res.status(500).json({
       status: "fail",
       message: "An error occurred while deleting the strategy and portfolio",
+    });
+  }
+};
+
+
+
+exports.getStrategyLogs = async (req, res) => {
+  try {
+    const { userId, strategyId } = req.params;
+
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: 'Credentials could not be validated.',
+      });
+    }
+
+    const logs = await StrategyLog.find({
+      strategy_id: strategyId,
+      userId: String(userId),
+    })
+      .sort({ createdAt: -1 })
+      .limit(200)
+      .lean();
+
+    return res.status(200).json({
+      status: 'success',
+      logs,
+    });
+  } catch (error) {
+    console.error('Error fetching strategy logs:', error.message);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Failed to load strategy logs',
     });
   }
 };
@@ -985,6 +1029,8 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
     initialInvestment: initialInvestmentInput = null,
   } = options || {};
 
+  let strategy_id;
+
   try {
     const normalizedRecurrence = normalizeRecurrence(recurrence);
     let targets = normalizeTargetPositions(targetPositions);
@@ -997,7 +1043,6 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
     const clock = await alpacaApi.getClock();
     const now = new Date();
 
-    let strategy_id;
     if (strategyName === 'AI Fund') {
       strategy_id = '01';
     } else {
@@ -1043,9 +1088,20 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
           : [],
       });
 
-      await portfolio.save();
+      const savedPortfolio = await portfolio.save();
+      await recordStrategyLog({
+        strategyId: strategy_id,
+        userId: String(UserID),
+        strategyName,
+        message: 'Strategy created (orders pending fill)',
+        details: {
+          recurrence: normalizedRecurrence,
+          initialInvestment: initialInvestmentEstimate,
+          orderCount: Array.isArray(orders) ? orders.length : 0,
+        },
+      });
       console.log('Portfolio for strategy ' + strategyName + ' has been created. Market is closed so the orders are not filled yet.');
-      return portfolio.toObject();
+      return savedPortfolio.toObject();
     }
 
     console.log('Market is open.');
@@ -1116,11 +1172,33 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
       stocks,
     });
 
-    await portfolio.save();
+    const savedPortfolio = await portfolio.save();
+    await recordStrategyLog({
+      strategyId: strategy_id,
+      userId: String(UserID),
+      strategyName,
+      message: 'Strategy created',
+      details: {
+        recurrence: normalizedRecurrence,
+        initialInvestment: determinedInitialInvestment,
+        cashBuffer,
+        orderCount: Array.isArray(orders) ? orders.length : 0,
+      },
+    });
     console.log('Portfolio for strategy ' + strategyName + ' has been created.');
-    return portfolio.toObject();
+    return savedPortfolio.toObject();
   } catch (error) {
     console.error('Error:', error);
+    if (strategy_id) {
+      await recordStrategyLog({
+        strategyId: strategy_id,
+        userId: String(UserID),
+        strategyName,
+        level: 'error',
+        message: 'Failed to add portfolio',
+        details: { error: error.message },
+      });
+    }
     throw error;
   }
 };

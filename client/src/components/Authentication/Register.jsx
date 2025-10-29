@@ -14,6 +14,7 @@ import { useNavigate } from "react-router-dom";
 import Axios from "axios";
 import config from "../../config/Config";
 import styles from "./Auth.module.css";
+import { logError } from "../../utils/logger";
 
 const Register = () => {
   const navigate = useNavigate();
@@ -67,7 +68,7 @@ const Register = () => {
           navigate("/login");
         }
       } catch (error) {
-        console.error(error);
+        logError("Registration failed:", error);
       } finally {
         setLoading(false);
       }
