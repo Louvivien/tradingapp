@@ -6,7 +6,7 @@ const path = require("path");
 const cors = require("cors");
 const cron = require('node-cron');
 const { spawn } = require('child_process');
-const { startProxies, scheduleNewsFromStocksList, scheduleSentimentVertex } = require('./scheduler');
+const { startProxies, scheduleNewsFromStocksList, scheduleSentimentVertex, schedulePortfolioRebalances } = require('./scheduler');
 const fs = require('fs');
 const { getAlpacaConfig } = require('./config/alpacaConfig');
 
@@ -202,7 +202,7 @@ const startServer = async () => {
 
 startServer();
 
-
+schedulePortfolioRebalances();
 
 
 

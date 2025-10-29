@@ -1,5 +1,5 @@
 import React, { useContext, useState } from "react";
-import { Link, Collapse, IconButton, Modal, Button, useTheme } from "@mui/material";
+import { Link, Collapse, IconButton, Modal, Button, Typography, useTheme } from "@mui/material";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -114,7 +114,7 @@ const Portfolios = ({ portfolios }) => {
           let allStocksHaveAvgCost = true;
 
           portfolio.stocks.forEach((stock) => {
-            if (stock.avgCost === null) {
+            if (stock.avgCost === null || stock.currentPrice === null) {
               allStocksHaveAvgCost = false;
             } else {
               totalQuantity += Number(stock.quantity);
@@ -123,6 +123,17 @@ const Portfolios = ({ portfolios }) => {
               totalDifference += (stock.currentPrice - stock.avgCost) / stock.currentPrice;
             }
           });
+
+          const assetCount = portfolio.stocks.length;
+          const purchaseSummary = allStocksHaveAvgCost && totalPurchaseTotal > 0
+            ? `$${roundNumber(totalPurchaseTotal).toLocaleString()}`
+            : '—';
+          const currentSummary = allStocksHaveAvgCost && totalCurrentTotal > 0
+            ? `$${roundNumber(totalCurrentTotal).toLocaleString()}`
+            : '—';
+          const totalDiffPct = allStocksHaveAvgCost && totalPurchaseTotal > 0
+            ? ((totalCurrentTotal - totalPurchaseTotal) / totalPurchaseTotal) * 100
+            : null;
 
 
 
@@ -149,6 +160,18 @@ const Portfolios = ({ portfolios }) => {
 
 
               </div>
+              <Typography variant="body2" color="textSecondary" sx={{ ml: 6, mt: 0.5 }}>
+                Status: {formatStatus(portfolio.status)} · Frequency: {formatRecurrenceLabel(portfolio.recurrence)} · Next reallocation: {formatDateTime(portfolio.nextRebalanceAt)}
+              </Typography>
+              <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
+                Assets: {assetCount} · Purchase total: {purchaseSummary} · Current total: {currentSummary}{" "}
+                {totalDiffPct !== null ? `· Difference: ${totalDiffPct.toFixed(2)}%` : ''}
+              </Typography>
+              {portfolio.cashBuffer > 0 && (
+                <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
+                  Cash buffer available: ${roundNumber(portfolio.cashBuffer).toLocaleString()}
+                </Typography>
+              )}
 
                   <Modal
                     open={deleteOpen}
@@ -180,90 +203,88 @@ const Portfolios = ({ portfolios }) => {
                 <Table size="small">
                   <TableHead>
                     <TableRow>
-                      <TableCell>Company Ticker</TableCell>
-                      <TableCell>Name</TableCell>
+                      <TableCell>Asset</TableCell>
                       <TableCell>Quantity</TableCell>
-                      <TableCell>Price of Purchase</TableCell>
-                      <TableCell>Purchase Total</TableCell>
+                      <TableCell align="right">Avg Entry Price</TableCell>
                       <TableCell align="right">Current Price</TableCell>
-                      <TableCell align="right">Current Total</TableCell>
-                      <TableCell align="right">Difference</TableCell>
+                      <TableCell align="right">Market Value</TableCell>
+                      <TableCell align="right">Unrealized P/L</TableCell>
+                      <TableCell align="right">Unrealized P/L %</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     {portfolio.stocks.map((stock) => {
-                      const purchaseTotal = Number(stock.quantity) * Number(stock.avgCost);
-                      const currentTotal = Number(stock.quantity) * Number(stock.currentPrice);
-                      const difference = (stock.currentPrice - stock.avgCost) / stock.currentPrice;
+                      const qty = Number(stock.quantity) || 0;
+                      const avgCost = Number(stock.avgCost);
+                      const currentPrice = Number(stock.currentPrice);
+                      const marketValue = currentPrice && qty ? currentPrice * qty : null;
+                      const purchaseTotal = avgCost && qty ? avgCost * qty : null;
+                      const unrealizedPL = purchaseTotal !== null && marketValue !== null ? marketValue - purchaseTotal : null;
+                      const unrealizedPLPct = unrealizedPL !== null && purchaseTotal ? (unrealizedPL / purchaseTotal) * 100 : null;
 
-                      if (stock.avgCost === null) {
+                      if (stock.avgCost === null || stock.currentPrice === null) {
                         return (
                           <TableRow key={stock.symbol}>
                             <TableCell>
                               <Link onClick={() => openSaleModal(stock)}>{stock.symbol}</Link>
                             </TableCell>
-                            <TableCell>{stock.name || "----"}</TableCell>
                             <TableCell>{stock.quantity || "----"}</TableCell>
                             <TableCell colSpan={5}>Order not filled yet.</TableCell>
                           </TableRow>
                         );
-                      } else {
-                        return (
-                          <TableRow key={stock.symbol}>
-                            <TableCell>
-                              <Link onClick={() => openSaleModal(stock)}>{stock.symbol}</Link>
-                            </TableCell>
-                            <TableCell>{stock.name || "----"}</TableCell>
-                            <TableCell>{stock.quantity || "----"}</TableCell>
-                            <TableCell align="right">
-                              ${stock.avgCost ? stock.avgCost.toLocaleString() : "----"}
-                            </TableCell>
-                            <TableCell align="right">
-                              ${roundNumber(purchaseTotal).toLocaleString() || "----"}
-                            </TableCell>
-                            <TableCell
-                              align="right"
-                              className={
-                                stock.currentPrice >= stock.avgCost
-                                  ? styles.positive
-                                  : styles.negative
-                              }
-                            >
-                              ${stock.currentPrice ? stock.currentPrice.toLocaleString() : "----"}
-                            </TableCell>
-                            <TableCell
-                              align="right"
-                              className={
-                                currentTotal >= purchaseTotal
-                                  ? styles.positive
-                                  : styles.negative
-                              }
-                            >
-                              ${roundNumber(currentTotal).toLocaleString() || "----"}
-                            </TableCell>
-                            <TableCell
-                              align="right"
-                              className={
-                                difference >= 0 ? styles.positive : styles.negative
-                              }
-                            >
-                              {difference >= 0 ? "▲" : "▼"}{" "}
-                              {Math.abs(difference * 100).toFixed(2)}%
-                            </TableCell>
-                          </TableRow>
-                        );
                       }
+
+                      return (
+                        <TableRow key={stock.symbol}>
+                          <TableCell>
+                            <Link onClick={() => openSaleModal(stock)}>{stock.symbol}</Link>
+                          </TableCell>
+                          <TableCell>{stock.quantity || "----"}</TableCell>
+                          <TableCell align="right">
+                            ${avgCost ? avgCost.toLocaleString() : "----"}
+                          </TableCell>
+                          <TableCell align="right">
+                            ${currentPrice ? currentPrice.toLocaleString() : "----"}
+                          </TableCell>
+                          <TableCell
+                            align="right"
+                            className={
+                              marketValue !== null && purchaseTotal !== null && marketValue >= purchaseTotal
+                                ? styles.positive
+                                : styles.negative
+                            }
+                          >
+                            ${marketValue !== null ? roundNumber(marketValue).toLocaleString() : "----"}
+                          </TableCell>
+                          <TableCell
+                            align="right"
+                            className={
+                              unrealizedPL !== null && unrealizedPL >= 0
+                                ? styles.positive
+                                : styles.negative
+                            }
+                          >
+                            ${unrealizedPL !== null ? roundNumber(unrealizedPL).toLocaleString() : "----"}
+                          </TableCell>
+                          <TableCell
+                            align="right"
+                            className={
+                              unrealizedPLPct !== null && unrealizedPLPct >= 0 ? styles.positive : styles.negative
+                            }
+                          >
+                            {unrealizedPLPct !== null
+                              ? `${unrealizedPLPct >= 0 ? "▲" : "▼"} ${Math.abs(unrealizedPLPct).toFixed(2)}%`
+                              : "----"}
+                          </TableCell>
+                        </TableRow>
+                      );
                     })}
 
-
-                      {/* Add totals row if all stocks have avgCost */}
-                      {allStocksHaveAvgCost && (
+                    {allStocksHaveAvgCost && (
                       <TableRow>
                         <TableCell>Total</TableCell>
-                        <TableCell></TableCell>
                         <TableCell>{totalQuantity}</TableCell>
                         <TableCell></TableCell>
-                        <TableCell align="right">${roundNumber(totalPurchaseTotal).toLocaleString()}</TableCell>
                         <TableCell></TableCell>
                         <TableCell
                           align="right"
@@ -278,6 +299,16 @@ const Portfolios = ({ portfolios }) => {
                         <TableCell
                           align="right"
                           className={
+                            (totalCurrentTotal - totalPurchaseTotal) >= 0
+                              ? styles.positive
+                              : styles.negative
+                          }
+                        >
+                          ${roundNumber(totalCurrentTotal - totalPurchaseTotal).toLocaleString()}
+                        </TableCell>
+                        <TableCell
+                          align="right"
+                          className={
                             totalDifference >= 0 ? styles.positive : styles.negative
                           }
                         >
@@ -285,12 +316,7 @@ const Portfolios = ({ portfolios }) => {
                         </TableCell>
                       </TableRow>
                     )}
-
-
-
-                    
                   </TableBody>
-
                 </Table>
               </Collapse>
             </div>
@@ -306,3 +332,37 @@ const Portfolios = ({ portfolios }) => {
 };
 
 export default Portfolios;
+const RECURRENCE_LABELS = {
+  every_minute: "Every minute",
+  every_5_minutes: "Every 5 minutes",
+  every_15_minutes: "Every 15 minutes",
+  hourly: "Hourly",
+  daily: "Daily",
+  weekly: "Weekly",
+  monthly: "Monthly",
+};
+
+const formatRecurrenceLabel = (value) => {
+  if (!value) {
+    return "—";
+  }
+  return RECURRENCE_LABELS[value] || value;
+};
+
+const formatDateTime = (value) => {
+  if (!value) {
+    return "—";
+  }
+  try {
+    return new Date(value).toLocaleString();
+  } catch (error) {
+    return value;
+  }
+};
+
+const formatStatus = (value) => {
+  if (!value) {
+    return "Scheduled";
+  }
+  return value.charAt(0).toUpperCase() + value.slice(1);
+};

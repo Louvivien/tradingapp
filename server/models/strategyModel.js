@@ -16,6 +16,19 @@ const strategySchema = new Schema({
     type: String, 
     required: true,
   },
+  recurrence: {
+    type: String,
+    enum: [
+      'every_minute',
+      'every_5_minutes',
+      'every_15_minutes',
+      'hourly',
+      'daily',
+      'weekly',
+      'monthly'
+    ],
+    default: 'daily',
+  },
 });
 
 

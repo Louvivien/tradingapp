@@ -2,6 +2,7 @@
 
 const cron = require('node-cron');
 const { spawn } = require('child_process');
+const { runDueRebalances } = require('./services/rebalanceService');
 
 // Function to run the proxy machine
 function startProxies(scriptPath) {
@@ -61,8 +62,20 @@ function scheduleSentimentVertex() {
   });
 }
 
+function schedulePortfolioRebalances() {
+  cron.schedule('* * * * *', async () => {
+    try {
+      console.log('[Scheduler] Checking for portfolios due for rebalancing...');
+      await runDueRebalances();
+    } catch (error) {
+      console.error('[Scheduler] Portfolio rebalance check failed:', error.message);
+    }
+  });
+}
+
 module.exports = {
   startProxies,
   scheduleNewsFromStocksList,
-  scheduleSentimentVertex
+  scheduleSentimentVertex,
+  schedulePortfolioRebalances,
 };

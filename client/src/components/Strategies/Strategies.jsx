@@ -14,7 +14,8 @@ import {
   Button,
   Tab,
   Alert,
-  Tabs
+  Tabs,
+  MenuItem,
 } from "@mui/material";
 import { styled } from "@mui/system";
 import Skeleton from "@mui/lab/Skeleton";
@@ -36,6 +37,15 @@ const FixedHeightPaper = styled(StyledPaper)({
   height: 450,
 });
 
+const RECURRENCE_OPTIONS = [
+  { value: "every_minute", label: "Every minute" },
+  { value: "every_5_minutes", label: "Every 5 minutes" },
+  { value: "every_15_minutes", label: "Every 15 minutes" },
+  { value: "hourly", label: "Hourly" },
+  { value: "daily", label: "Daily" },
+  { value: "weekly", label: "Weekly" },
+  { value: "monthly", label: "Monthly" },
+];
 
 const Strategies = () => {
   const [collaborative, setcollaborative] = useState("");
@@ -51,6 +61,10 @@ const Strategies = () => {
   const [aiFundStrategyEnabled, setAiFundStrategyEnabled] = useState(false);
   const [strategySummary, setStrategySummary] = useState("");
   const [strategyDecisions, setStrategyDecisions] = useState([]);
+  const [collaborativeRecurrence, setCollaborativeRecurrence] = useState("daily");
+  const [aiFundRecurrence, setAiFundRecurrence] = useState("daily");
+  const [collaborativeSchedule, setCollaborativeSchedule] = useState(null);
+  const [aiFundSchedule, setAiFundSchedule] = useState(null);
 
   useEffect(() => {
     const fetchStrategies = async () => {
@@ -90,6 +104,7 @@ const Strategies = () => {
 
   const handleAIFundSubmit = async () => {
     setLoading(true);
+    setAiFundSchedule(null);
   
     const headers = {
       "x-auth-token": userData.token,
@@ -99,12 +114,22 @@ const Strategies = () => {
     const url = config.base_url + "/api/strategies/aifund/enable";
   
     try {
-      const response = await Axios.post(url, {userID, strategyName: "AI Fund", budget: aifundbudget}, {headers});
+    const response = await Axios.post(
+      url,
+      {
+        userID,
+        strategyName: "AI Fund",
+        budget: aifundbudget,
+        recurrence: aiFundRecurrence,
+      },
+      {headers}
+    );
     
       if (response.status === 200) {
         if (response.data.status === "success") {
           setResponseReceived(true);
           setOutput(response.data.orders || []); 
+          setAiFundSchedule(response.data.schedule || null);
         } else {
           setError(response.data.message);
         }
@@ -112,6 +137,7 @@ const Strategies = () => {
       
     } catch (err) {
       setError(err.message);
+      setAiFundSchedule(null);
     } finally {
       setLoading(false);
     }
@@ -161,6 +187,7 @@ const Strategies = () => {
     setStrategyDecisions([]);
     setOutput([]);
     setLoading(true);
+    setCollaborativeSchedule(null);
 
     const headers = {
       "x-auth-token": userData.token,
@@ -170,8 +197,13 @@ const Strategies = () => {
     const url = config.base_url + "/api/strategies/collaborative/";
 
     try {
-      // console.log("About to send request:", url, {collaborative, userID, strategyName}, {headers});
-      const response = await Axios.post(url, {collaborative, userID, strategyName}, {headers});
+      const payload = {
+        collaborative,
+        userID,
+        strategyName,
+        recurrence: collaborativeRecurrence,
+      };
+      const response = await Axios.post(url, payload, {headers});
     
       if (response.status === 200) {
         if (response.data.status === "success") {
@@ -179,7 +211,7 @@ const Strategies = () => {
           setOutput(response.data.orders || []); 
           setStrategySummary(response.data.summary || "");
           setStrategyDecisions(response.data.decisions || []);
-          // console.log(response);
+          setCollaborativeSchedule(response.data.schedule || null);
         } else {
           setError(response.data.message);
         }
@@ -189,6 +221,7 @@ const Strategies = () => {
       setError(err.message);
       setStrategySummary("");
       setStrategyDecisions([]);
+      setCollaborativeSchedule(null);
     } finally {
       setLoading(false);
     }
@@ -230,6 +263,21 @@ return (
                   fullWidth
                   margin="normal"
                 />
+              <TextField
+                select
+                variant="outlined"
+                label="Rebalance frequency"
+                value={aiFundRecurrence}
+                onChange={(e) => setAiFundRecurrence(e.target.value)}
+                fullWidth
+                margin="normal"
+              >
+                {RECURRENCE_OPTIONS.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </TextField>
               <br />
               <Button variant="contained" color="primary" className={styles.submit} onClick={handleAIFundSubmit}>
                 Create this strategy
@@ -242,7 +290,12 @@ return (
                 <p>It buys and sell stocks selected by AI based on a sentiment analysis of news headlines</p>
                 <p>Based on the sentiment analysis, a scoring is done of the stocks</p>
                 <p>The strategy buys only the stocks with the most positve headlines</p>
-                <p>The portfolio is automatically rebalanced every day based on market news headlines.</p>
+                <p>The portfolio is automatically rebalanced based on market news headlines.</p>
+                {aiFundSchedule && (
+                  <p>
+                    Frequency: {formatRecurrenceLabel(aiFundSchedule.recurrence)} · Next reallocation: {formatDateTime(aiFundSchedule.nextRebalanceAt)}
+                  </p>
+                )}
               </div>
               <br />
               <Button variant="contained" color="success" className={styles.submit} >
@@ -285,6 +338,14 @@ return (
                     {paragraph}
                   </Typography>
                 ))}
+              </Box>
+            )}
+            {collaborativeSchedule && (
+              <Box mt={2}>
+                <Typography variant="subtitle1" gutterBottom>Automation</Typography>
+                <Typography variant="body2">
+                  Frequency: {formatRecurrenceLabel(collaborativeSchedule.recurrence)} · Next reallocation: {formatDateTime(collaborativeSchedule.nextRebalanceAt)}
+                </Typography>
               </Box>
             )}
             {strategyDecisions.length > 0 && (
@@ -357,6 +418,22 @@ return (
 
               />
         <br />
+        <TextField
+          select
+          variant="outlined"
+          label="Rebalance frequency"
+          value={collaborativeRecurrence}
+          onChange={(e) => setCollaborativeRecurrence(e.target.value)}
+          fullWidth
+          margin="normal"
+        >
+          {RECURRENCE_OPTIONS.map((option) => (
+            <MenuItem key={option.value} value={option.value}>
+              {option.label}
+            </MenuItem>
+          ))}
+        </TextField>
+        <br />
         <br />
 
           <Button variant="contained" color="primary" className={styles.submit} onClick={handlecollaborativeSubmit}>
@@ -376,3 +453,18 @@ return (
 };
 
 export default Strategies;
+  const formatRecurrenceLabel = (value) => {
+    const option = RECURRENCE_OPTIONS.find((opt) => opt.value === value);
+    return option ? option.label : value;
+  };
+
+  const formatDateTime = (value) => {
+    if (!value) {
+      return "—";
+    }
+    try {
+      return new Date(value).toLocaleString();
+    } catch (error) {
+      return value;
+    }
+  };

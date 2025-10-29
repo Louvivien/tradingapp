@@ -13,172 +13,297 @@ const fs = require('fs');
 const path = require('path');
 const { distance } = require('fastest-levenshtein');
 const Axios = require("axios");
+const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 
 
 
 
 //Work in progress: prompt engineering (see jira https://ai-trading-bot.atlassian.net/browse/AI-76)
 
+const sanitizeSymbol = (value) => {
+  if (!value) {
+    return null;
+  }
+  return String(value).trim().toUpperCase();
+};
+
+const toNumber = (value, fallback = null) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : fallback;
+};
+
+const extractTargetPositions = (rawPositions = []) => {
+  if (!Array.isArray(rawPositions)) {
+    return [];
+  }
+
+  return rawPositions
+    .map((entry) => {
+      const symbol = sanitizeSymbol(
+        entry?.symbol
+        || entry?.ticker
+        || entry?.Ticker
+        || entry?.['Asset ticker']
+        || entry?.['asset ticker']
+      );
+
+      if (!symbol) {
+        return null;
+      }
+
+      const quantity = toNumber(
+        entry?.targetQuantity
+          ?? entry?.quantity
+          ?? entry?.Quantity
+          ?? entry?.qty
+          ?? entry?.['Quantity'],
+        null,
+      );
+
+      const totalCost = toNumber(
+        entry?.targetValue
+          ?? entry?.value
+          ?? entry?.amount
+          ?? entry?.['Total Cost']
+          ?? entry?.['Total cost']
+          ?? entry?.['Total'],
+        null,
+      );
+
+      const weight = toNumber(entry?.targetWeight, null);
+
+      return {
+        symbol,
+        targetQuantity: quantity,
+        targetValue: totalCost,
+        targetWeight: weight,
+      };
+    })
+    .filter(Boolean);
+};
+
+const normalizeTargetPositions = (rawTargets = []) => {
+  const targets = extractTargetPositions(rawTargets);
+  if (!targets.length) {
+    return [];
+  }
+
+  let weightSum = targets.reduce((sum, target) => {
+    return sum + (target.targetWeight && target.targetWeight > 0 ? target.targetWeight : 0);
+  }, 0);
+
+  if (weightSum > 0) {
+    return targets.map((target) => ({
+      ...target,
+      targetWeight: target.targetWeight && target.targetWeight > 0 ? target.targetWeight / weightSum : 0,
+    }));
+  }
+
+  const valueSum = targets.reduce((sum, target) => {
+    return sum + (target.targetValue && target.targetValue > 0 ? target.targetValue : 0);
+  }, 0);
+
+  if (valueSum > 0) {
+    return targets.map((target) => ({
+      ...target,
+      targetWeight: target.targetValue && target.targetValue > 0 ? target.targetValue / valueSum : 0,
+    }));
+  }
+
+  const quantitySum = targets.reduce((sum, target) => {
+    return sum + (target.targetQuantity && target.targetQuantity > 0 ? target.targetQuantity : 0);
+  }, 0);
+
+  if (quantitySum > 0) {
+    return targets.map((target) => ({
+      ...target,
+      targetWeight: target.targetQuantity && target.targetQuantity > 0 ? target.targetQuantity / quantitySum : 0,
+    }));
+  }
+
+  const equalWeight = 1 / targets.length;
+  return targets.map((target) => ({
+    ...target,
+    targetWeight: equalWeight,
+  }));
+};
+
+const estimateInitialInvestment = (targets = [], budget = null) => {
+  const parsedBudget = toNumber(budget, null);
+  if (parsedBudget && parsedBudget > 0) {
+    return parsedBudget;
+  }
+
+  const valueSum = targets.reduce((sum, target) => {
+    return sum + (target.targetValue && target.targetValue > 0 ? target.targetValue : 0);
+  }, 0);
+
+  if (valueSum > 0) {
+    return valueSum;
+  }
+
+  return 0;
+};
+
 
 
 exports.createCollaborative = async (req, res) => {
-  return new Promise(async (resolve, reject) => {
-    try {
+  try {
+    let input = req.body.collaborative;
+    const UserID = req.body.userID;
+    const strategyName = req.body.strategyName;
+    const strategy = input;
 
-      // console.log ('req.body', req.body);
-      let input = req.body.collaborative;
-      let UserID = req.body.userID;
-      // console.log ('UserID', UserID);
-      //We will use those 2 variables to create a new portfolio
-      let strategyName = req.body.strategyName;
-      let strategy = input;
+    if (/Below is a trading[\s\S]*strategy does\?/.test(input)) {
+      input = input.replace(/Below is a trading[\s\S]*strategy does\?/, "");
+    }
 
-      if (/Below is a trading[\s\S]*strategy does\?/.test(input)) {
-        input = input.replace(/Below is a trading[\s\S]*strategy does\?/, "");
+    const parseJsonData = (fullMessage) => {
+      if (!fullMessage) {
+        throw new Error("Empty response from OpenAI");
       }
 
+      const fenceMatch = fullMessage.match(/```json\s*([\s\S]*?)```/i);
+      const payload = fenceMatch ? fenceMatch[1] : fullMessage;
 
-      // Function to parse the JSON data from GPT plugins
-      const parseJsonData = (fullMessage) => {
-        if (!fullMessage) {
-          throw new Error("Empty response from OpenAI");
-        }
-
-        const fenceMatch = fullMessage.match(/```json\s*([\s\S]*?)```/i);
-        const payload = fenceMatch ? fenceMatch[1] : fullMessage;
-
-        try {
-          const parsed = JSON.parse(payload);
-          if (Array.isArray(parsed)) {
-            return { positions: parsed, summary: "", decisions: [] };
-          }
-          if (Array.isArray(parsed?.positions)) {
-            return {
-              positions: parsed.positions,
-              summary: typeof parsed.summary === "string" ? parsed.summary : "",
-              decisions: Array.isArray(parsed.decisions) ? parsed.decisions : []
-            };
-          }
-          throw new Error("Response JSON missing positions array");
-        } catch (error) {
-          console.error("Failed to parse JSON from OpenAI response", error);
-          throw new Error("Collaborative strategy response is not valid JSON");
-        }
-      };
-
-      // Call the functions : ChatGPT and parse the data
-      let parsedResult;
       try {
-        parsedResult = await extractGPT(input).then(fullMessage => {
-          return parseJsonData(fullMessage);
-        });
+        const parsed = JSON.parse(payload);
+        if (Array.isArray(parsed)) {
+          return { positions: parsed, summary: "", decisions: [] };
+        }
+        if (Array.isArray(parsed?.positions)) {
+          return {
+            positions: parsed.positions,
+            summary: typeof parsed.summary === "string" ? parsed.summary : "",
+            decisions: Array.isArray(parsed.decisions) ? parsed.decisions : []
+          };
+        }
+        throw new Error("Response JSON missing positions array");
       } catch (error) {
-        console.error('Error in extractGPT:', error);
-        return res.status(400).json({
-          status: "fail",
-          message: error.message,
-        });
+        console.error("Failed to parse JSON from OpenAI response", error);
+        throw new Error("Collaborative strategy response is not valid JSON");
       }
+    };
 
-      const { positions, summary, decisions } = parsedResult;
-
-      //send the orders to the trading platform
-
-      console.log('Strategy summary: ', summary || 'No summary provided.');
-      console.log('Orders payload: ', JSON.stringify(positions, null, 2));
-      if (decisions?.length) {
-        console.log('Decision rationale:', JSON.stringify(decisions, null, 2));
-      }
-
-      const alpacaConfig = await getAlpacaConfig(UserID);
-      console.log("config key done");
-
-      const alpacaApi = new Alpaca(alpacaConfig);
-      console.log("connected to alpaca");
-
-      //send the orders to alpaca
-      let orderPromises = positions.map(asset => {
-        let symbol = asset['Asset ticker'];
-        if (!/^[A-Za-z]+$/.test(symbol)) {
-          symbol = asset['Asset ticker'].match(/^[A-Za-z]+/)[0];
-        }
-        let qty = Math.floor(asset['Quantity']);
-
-        if (qty > 0) {
-          return retry(() => {
-            return axios({
-              method: 'post',
-              url: alpacaConfig.apiURL + '/v2/orders',
-              headers: {
-                'APCA-API-KEY-ID': alpacaConfig.keyId,
-                'APCA-API-SECRET-KEY': alpacaConfig.secretKey
-              },
-              data: {
-                symbol: symbol,
-                qty: qty,
-                side: 'buy',
-                type: 'market',
-                time_in_force: 'gtc'
-              }
-            }).then((response) => {
-              // console.log(response.data);
-              console.log(`Order of ${qty} shares for ${symbol} has been placed. Order ID: ${response.data.client_order_id}`);
-              return { qty: qty, symbol: symbol, orderID: response.data.client_order_id};
-            });
-          }, 5, 2000).catch((error) => { // Retry up to 5 times, with a delay of 2 seconds between attempts
-            console.error(`Failed to place order for ${symbol}: ${error}`)
-            return null;
-          })
-        } else {
-          console.log(`Quantity for ${symbol} is ${qty}. Order not placed.`);
-          return null;
-        }
-      })
-
-      //get the response from alpaca
-      Promise.all(orderPromises).then(orders => {
-        // Filter out any null values
-        orders = orders.filter(order => order !== null);
-        
-        // If all orders failed, return an error message
-        if (orders.length === 0) {
-          console.error('Failed to place all orders.');
-          return res.status(400).json({
-            status: "fail",
-            message: "Failed to place orders. Try again.",
-          });
-        }
-      
-        // If some orders were successful, continue with the rest of the code
-        this.addPortfolio(strategy, strategyName, orders, UserID);
-        return res.status(200).json({
-          status: "success",
-          orders: orders,
-          summary: summary,
-          decisions: decisions || []
-        });
-      }).catch(error => {
-        console.error(`Error: ${error}`);
-        return res.status(400).json({
-          status: "fail",
-          message: `Something unexpected happened: ${error.message}`,
-        });
-      });
-      
-
-
-
-    } catch (error) {
-      console.error(`Error: ${error}`);
-      return res.status(200).json({
+    const existingStrategy = await Strategy.findOne({ name: strategyName });
+    if (existingStrategy) {
+      return res.status(409).json({
         status: "fail",
-        message: `Something unexpected happened: ${error.message}`,
+        message: `A strategy named "${strategyName}" already exists. Please choose another name.`,
       });
     }
 
-  });
+    let parsedResult;
+    try {
+      parsedResult = await extractGPT(input).then(parseJsonData);
+    } catch (error) {
+      console.error('Error in extractGPT:', error);
+      return res.status(400).json({
+        status: "fail",
+        message: error.message,
+      });
+    }
 
+    const { positions, summary, decisions } = parsedResult;
+    const recurrence = normalizeRecurrence(req.body?.recurrence);
+    const budgetInput = toNumber(req.body?.budget, null);
+    const normalizedTargets = normalizeTargetPositions(positions);
+    const initialInvestmentEstimate = estimateInitialInvestment(normalizedTargets, budgetInput);
+
+    console.log('Strategy summary: ', summary || 'No summary provided.');
+    console.log('Orders payload: ', JSON.stringify(positions, null, 2));
+    if (decisions?.length) {
+      console.log('Decision rationale:', JSON.stringify(decisions, null, 2));
+    }
+
+    const alpacaConfig = await getAlpacaConfig(UserID);
+    console.log("config key done");
+
+    const alpacaApi = new Alpaca(alpacaConfig);
+    console.log("connected to alpaca");
+
+    const orderPromises = positions.map(asset => {
+      const symbol = sanitizeSymbol(asset?.['Asset ticker'] || asset?.symbol || asset?.ticker);
+      if (!symbol) {
+        return Promise.resolve(null);
+      }
+      const qty = Math.floor(Math.max(0, toNumber(asset?.['Quantity'], 0)));
+
+      if (qty <= 0) {
+        console.log(`Quantity for ${symbol} is ${qty}. Order not placed.`);
+        return Promise.resolve(null);
+      }
+
+      return retry(() => {
+        return axios({
+          method: 'post',
+          url: alpacaConfig.apiURL + '/v2/orders',
+          headers: {
+            'APCA-API-KEY-ID': alpacaConfig.keyId,
+            'APCA-API-SECRET-KEY': alpacaConfig.secretKey
+          },
+          data: {
+            symbol,
+            qty,
+            side: 'buy',
+            type: 'market',
+            time_in_force: 'gtc'
+          }
+        }).then((response) => {
+          console.log(`Order of ${qty} shares for ${symbol} has been placed. Order ID: ${response.data.client_order_id}`);
+          return { qty, symbol, orderID: response.data.client_order_id };
+        });
+      }, 5, 2000).catch((error) => {
+        console.error(`Failed to place order for ${symbol}: ${error}`);
+        return null;
+      });
+    });
+
+    const orders = (await Promise.all(orderPromises)).filter(Boolean);
+    if (!orders.length) {
+      console.error('Failed to place all orders.');
+      return res.status(400).json({
+        status: "fail",
+        message: "Failed to place orders. Try again.",
+      });
+    }
+
+    const portfolioRecord = await exports.addPortfolio(
+      strategy,
+      strategyName,
+      orders,
+      UserID,
+      {
+        budget: budgetInput,
+        targetPositions: normalizedTargets,
+        recurrence,
+        initialInvestment: initialInvestmentEstimate,
+      }
+    );
+
+    const schedule = portfolioRecord
+      ? {
+          recurrence: portfolioRecord.recurrence,
+          nextRebalanceAt: portfolioRecord.nextRebalanceAt,
+          lastRebalancedAt: portfolioRecord.lastRebalancedAt,
+        }
+      : null;
+
+    return res.status(200).json({
+      status: "success",
+      orders,
+      summary: summary || "",
+      decisions: decisions || [],
+      schedule,
+    });
+  } catch (error) {
+    console.error(`Error in createCollaborative:`, error);
+    return res.status(500).json({
+      status: "fail",
+      message: `Something unexpected happened: ${error.message}`,
+    });
   }
+};
 
  
 
@@ -298,13 +423,21 @@ exports.createCollaborative = async (req, res) => {
 
   //still it does not use all the budget it seems
  
-  exports.enableAIFund = async (req, res) => {
-    return new Promise(async (resolve, reject) => {
-      try {
-        let budget = req.body.budget;
-        let UserID = req.body.userID;
-        let strategyName = req.body.strategyName;
-        let strategy = "AiFund";
+ exports.enableAIFund = async (req, res) => {
+    try {
+        let budget = toNumber(req.body.budget, 0);
+        const UserID = req.body.userID;
+        const strategyName = req.body.strategyName;
+        const strategy = "AiFund";
+        const recurrence = normalizeRecurrence(req.body?.recurrence);
+
+        const existingStrategy = await Strategy.findOne({ name: strategyName });
+        if (existingStrategy) {
+          return res.status(409).json({
+            status: "fail",
+            message: `The strategy "${strategyName}" already exists. You can manage it from the dashboard.`,
+          });
+        }
   
         // Scoring
         let scoreResults = require('../data/scoreResults.json');
@@ -429,13 +562,22 @@ exports.createCollaborative = async (req, res) => {
 
           
         
+              const normalizedTargets = normalizeTargetPositions(
+                orderList.map((asset) => ({
+                  symbol: asset['Asset ticker'],
+                  targetQuantity: asset['Quantity'],
+                  targetValue: toNumber(asset['Quantity'], 0) * toNumber(asset['Current Price'], 0),
+                }))
+              );
+              const initialInvestmentEstimate = estimateInitialInvestment(normalizedTargets, budget);
+
               // Send the orders to the trading platform
               console.log('Order: ', JSON.stringify(orderList, null, 2));
         
               // Send the orders to alpaca
-              let orderPromises = orderList.map(asset => {
-                let symbol = asset['Asset ticker'];
-                let qty = Math.floor(asset['Quantity']);
+              const orderPromises = orderList.map(asset => {
+                const symbol = sanitizeSymbol(asset['Asset ticker']);
+                const qty = Math.floor(asset['Quantity']);
         
                 if (qty > 0) {
                   return retry(() => {
@@ -465,43 +607,51 @@ exports.createCollaborative = async (req, res) => {
                   console.log(`Quantity for ${symbol} is ${qty}. Order not placed.`);
                   return null;
                 }
-        })
-  
-        // Get the response from alpaca
-        Promise.all(orderPromises).then(orders => {
-          orders = orders.filter(order => order !== null);
-  
-          if (orders.length === 0) {
-            console.error('Failed to place all orders.');
-            return res.status(400).json({
-              status: "fail",
-              message: "Failed to place orders. Try again.",
-            });
-          }
-  
-          // If some orders were successful, and the portfolio does not exist, create it
-          this.addPortfolio(strategy, strategyName, orders, UserID, budget);
-          return res.status(200).json({
-            status: "success",
-            orders: orders,
-          });
-  
-          // If some orders were successful, and the portfolio does exist update the portfolio
-        }).catch(error => {
-          console.error(`Error: ${error}`);
+        });
+
+        const orders = (await Promise.all(orderPromises)).filter(Boolean);
+
+        if (orders.length === 0) {
+          console.error('Failed to place all orders.');
           return res.status(400).json({
             status: "fail",
-            message: `Something unexpected happened: ${error.message}`,
+            message: "Failed to place orders. Try again.",
           });
+        }
+
+        const portfolioRecord = await exports.addPortfolio(
+          strategy,
+          strategyName,
+          orders,
+          UserID,
+          {
+            budget,
+            targetPositions: normalizedTargets,
+            recurrence,
+            initialInvestment: initialInvestmentEstimate,
+          }
+        );
+
+        const schedule = portfolioRecord
+          ? {
+              recurrence: portfolioRecord.recurrence,
+              nextRebalanceAt: portfolioRecord.nextRebalanceAt,
+              lastRebalancedAt: portfolioRecord.lastRebalancedAt,
+            }
+          : null;
+
+        return res.status(200).json({
+          status: "success",
+          orders,
+          schedule,
         });
       } catch (error) {
-        console.error(`Error: ${error}`);
-        return res.status(200).json({
+        console.error(`Error in enableAIFund: ${error}`);
+        return res.status(500).json({
           status: "fail",
           message: `Something unexpected happened: ${error.message}`,
         });
       }
-    });
   }
 
 
@@ -609,486 +759,14 @@ exports.disableAIFund = async (req, res) => {
           });
         });
     
-      } catch (error) {
-        console.error(`Error deleting strategy and portfolio: ${error}`);
-        return res.status(500).json({
-          status: "fail",
-          message: "An error occurred while deleting the strategy and portfolio",
-        });
-      }
-    };
-  
-
-
-exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, budget) => {
-  console.log('strategyName', strategyName);
-  console.log('orders', orders);
-  console.log('UserID', UserID);
-
-  try {
-    const numberOfOrders = orders.length;
-    console.log('numberOfOrders', numberOfOrders);
-
-    const alpacaConfig = await getAlpacaConfig(UserID);
-    const alpacaApi = new Alpaca(alpacaConfig);
-
-// Check if the market is open
-const clock = await alpacaApi.getClock();
-if (!clock.is_open) {
-            console.log('Market is closed.');
-
-
-
-            let strategy_id;
-            if (strategyName === "AI Fund") {
-              strategy_id = "01";
-            } else {
-              const crypto = require("crypto");
-              strategy_id = crypto.randomBytes(16).toString("hex");
-            }
-            console.log('strategy_id:', strategy_id);
-            
-
-
-            // Create a new strategy
-            const strategy = new Strategy({
-              name: strategyName,
-              strategy: strategyinput, 
-              strategy_id: strategy_id, 
-            });
-
-            // Save the strategy
-            await strategy.save();
-            console.log(`Strategy ${strategyName} has been created.`);
-
-
-            // Create a new portfolio
-            const portfolio = new Portfolio({
-              userId: UserID,
-              name: strategyName,
-              strategy_id: strategy_id,
-              budget: budget,
-              stocks: orders.map(order => ({
-                symbol: order.symbol,
-                avgCost: null, 
-                quantity: order.qty,
-                orderID: order.orderID,
-              })),
-            });
-
-            // Save the portfolio
-            await portfolio.save();
-
-            console.log(`Portfolio for strategy ${strategyName} has been created. Market is closed so the orders are not filled yet.`);
-            return;
-          }
-
-else {        
-  
-              console.log('Market is open.');
-              // Function to get the orders if market is open
-              const getOrders = async () => {
-                const ordersResponse = await axios({
-                  method: 'get',
-                  url: alpacaConfig.apiURL + '/v2/orders',
-                  headers: {
-                    'APCA-API-KEY-ID': alpacaConfig.keyId,
-                    'APCA-API-SECRET-KEY': alpacaConfig.secretKey
-                  },
-                  params: {
-                    limit: numberOfOrders,
-                    status: 'all',
-                    nested: true
-                  }
-                });
-
-                console.log('ordersResponse', ordersResponse.data);
-
-                // Check if all orders are filled
-                const filledOrders = ordersResponse.data.filter(order => order.filled_qty !== '0');
-                      if (!filledOrders || filledOrders.length !== numberOfOrders) {
-                        // If not all orders are closed or not all orders have been filled, throw an error to trigger a retry
-                        throw new Error("Not all orders are closed or filled yet.");
-                      }
-                      return filledOrders;
-                    };
-
-
-              let ordersResponse;
-              try {
-                ordersResponse = await retry(getOrders, 5, 4000);
-
-              } catch (error) {
-                console.error(`Error: ${error}`);
-                throw error;
-              }
-
-
-                // Create an object to store orders by symbol
-                const ordersBySymbol = {};
-
-                ordersResponse.forEach((order) => {
-                  if (order.side === 'buy' && !ordersBySymbol[order.symbol]) {
-                    ordersBySymbol[order.symbol] = {
-                      symbol: order.symbol,
-                      avgCost: order.filled_avg_price,
-                      filled_qty: order.filled_qty,
-                      orderID: order.client_order_id
-                    };
-                  }
-                });
-
-
-
-                let strategy_id;
-                if (strategyName === "AI Fund") {
-                  strategy_id = "01";
-                } else {
-                  const crypto = require("crypto");
-                  strategy_id = crypto.randomBytes(16).toString("hex");
-                }
-                console.log('strategy_id:', strategy_id);
-                
-              console.log('strategy_id:', strategy_id);
-            
-
-              // Create a new strategy
-              const strategy = new Strategy({
-                name: strategyName,
-                strategy: strategyinput,
-                strategy_id: strategy_id, 
-              });
-
-              // Save the strategy
-              await strategy.save();
-              console.log(`Strategy ${strategyName} has been created.`);
-
-
-              // Create a new portfolio
-              const portfolio = new Portfolio({
-                userId: UserID,
-                name: strategyName,
-                strategy_id: strategy_id,
-                stocks: Object.values(ordersBySymbol).map(order => ({
-                  symbol: order.symbol,
-                  avgCost: order.filled_avg_price ? Number(order.filled_avg_price) : null, // Convert the avgCost to a number or set it to null
-                  quantity: order.filled_qty,
-                  orderID: order.orderID || null, // Set the orderID to null if it's not provided
-                })),
-              });
-
-
-              // Save the portfolio
-              await portfolio.save();
-
-              console.log(`Portfolio for strategy ${strategyName} has been created.`);
-
-
-  }} catch (error) {
-    console.error(`Error: ${error}`);
+  } catch (error) {
+    console.error(`Error deleting strategy and portfolio: ${error}`);
+    return res.status(500).json({
+      status: "fail",
+      message: "An error occurred while deleting the strategy and portfolio",
+    });
   }
-
-
-}
-
-          // Work in progress
-exports.rebalanceAIFund = async (req, res) => {
-  return new Promise(async (resolve, reject) => {
-    try {
-      let UserID = "6477cf0011fcccfa0365bc87";
-      let strategyName = "AI Fund";
-      let strategy = "AiFund";
-
-
-          // Get the strategy and portfolio
-
-        //get the portfolio for this specific strategy
-        //if nothing found end the function
-        //get the tickers in the portfolio related to this strategy
-        //get the value of the stocks in the portfolio 
-        //get the budget of the portfolio
-
-      const portfolio = await Portfolio.findOne({ strategy: strategyName, userID: UserID });
-      if (!portfolio) {
-        console.error('No portfolio found for this strategy');
-        return res.status(400).json({
-          status: "fail",
-          message: "No portfolio found for this strategy.",
-        });
-      }
-
-      const portfolioTickers = portfolio.stocks.map(stock => stock.symbol);
-
-            // Scoring
-
-      let scoreResults = require('../data/scoreResults.json');
-      scoreResults.sort((a, b) => b.Score - a.Score);
-      let topAssets = scoreResults.slice(0, 5);
-      let topAssetsTickers = topAssets.map(asset => asset.Ticker);
-
-
-          // Creating orders
-
-            //check if the top assets are in the portfolio
-
-            //if they are already all in the portfolio, end the function
-
-            //if some top assets are not in the portfolio, add the missing ones to the orderList to buy, quantities will be calculated later
-            //if the portfolio contains some assets that are not in the top assets, add them to the orderList to sell with the quantities in the portfolio, we do not want to keep those stocks
-
-      // check if the top assets are in the portfolio
-      const portfolioContainsAllTopAssets = topAssetsTickers.every(ticker => portfolioTickers.includes(ticker));
-      if (portfolioContainsAllTopAssets) {
-        console.log('The portfolio already contains all top assets. No need to rebalance.');
-        return res.status(200).json({
-          status: "success",
-          message: "The portfolio already contains all top assets. No need to rebalance.",
-        });
-      }
-
-      let orderList = [];
-
-      // Add missing top assets to the orderList to buy
-      for (let asset of topAssets) {
-        if (!portfolioTickers.includes(asset.Ticker)) {
-          orderList.push({
-            'Asset ticker': asset.Ticker,
-            'Quantity': 0,
-            'Side': 'buy'
-          });
-        }
-      }
-
-      // Add assets not in top assets to the orderList to sell
-      for (let stock of portfolio.stocks) {
-        if (!topAssetsTickers.includes(stock.symbol)) {
-          orderList.push({
-            'Asset ticker': stock.symbol,
-            'Quantity': stock.quantity,
-            'Side': 'sell'
-          });
-        }
-      }
-
-            // Calculating investing amounts
-
-            //get the value of the stocks in the portfolio that are not in the order list
-
-            //get the value of the stocks in the order list :
-            //the one that are in the order list to sell it, using the quantities in the order list
-            //for the one that are in the order list to buy it, get the currentPrice of the stock
-
-            //calculate the quantities to buy so that the total value of the portfolio do not goes over the budget
- 
-        // Update the order list with the calculated quantity for the stocks to buy
-
-      // Calculating investing amounts
-      let totalScore = topAssets.reduce((total, asset) => total + asset.Score, 0);
-      let budget = portfolio.budget;
-
-      const alpacaConfig = await getAlpacaConfig(UserID);
-      console.log("config key done");
-
-      for (let i = 0; i < orderList.length; i++) {
-        let order = orderList[i];
-        let symbol = order['Asset ticker'];
-        let originalSymbol = symbol; // Save the original symbol for later use
-
-        let currentPrice = 0;
-
-        // Get the last price for the stock using the Alpaca API
-        const alpacaUrl = `https://data.alpaca.markets/v2/stocks/${symbol}/quotes/latest`;
-        const alpacaResponse = await Axios.get(alpacaUrl, {
-          headers: {
-            'APCA-API-KEY-ID': alpacaConfig.keyId,
-            'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
-          },
-        });
-        currentPrice = alpacaResponse.data.quote.ap;
-
-        // If the current price is still 0, get the adjClose from the past day
-          if (currentPrice === 0) {
-  
-            // Get the historical stock data for the given ticker from the Tiingo API
-            const startDate = new Date();
-            startDate.setFullYear(startDate.getFullYear() - 2);
-            const year = startDate.getFullYear();
-            const month = startDate.getMonth() + 1;
-            const day = startDate.getDate();
-  
-            let url = `https://api.tiingo.com/tiingo/daily/${symbol}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY1}`;
-            let response;
-            try {
-              response = await Axios.get(url);
-            } catch (error) {
-              if (symbol.includes('.')) {
-                symbol = symbol.replace('.', '-');
-                url = `https://api.tiingo.com/tiingo/daily/${symbol}/prices?startDate=${year}-${month}-${day}&token=${process.env.TIINGO_API_KEY1}`;
-                response = await Axios.get(url);
-              } else {
-                throw error;
-              }
-            }
-            const data = response.data;
-            currentPrice = data[data.length - 1].adjClose;
-          }
-
-        console.log(`Current price of ${symbol} is ${currentPrice}`);
-
-        if (order.Side === 'buy') {
-          // Calculate the quantity based on the score of the asset
-          let assetScore = topAssets.find(a => a.Ticker === originalSymbol).Score; // Use the original symbol here
-          let allocatedBudget = (assetScore / totalScore) * budget;
-
-          // Calculate the quantity to buy
-          let quantity = Math.floor(allocatedBudget / currentPrice);
-
-          // Update the remaining budget
-          budget -= quantity * currentPrice;
-
-          // Update the order list with the calculated quantity
-          orderList[i]['Quantity'] = quantity;
-        }
-
-        // If there's remaining budget, distribute it to the assets again
-        if (remainingBudget > 0) {
-          // Sort the order list by asset price in ascending order
-          orderList.sort((a, b) => a['Current Price'] - b['Current Price']);
-        
-          while (remainingBudget > orderList[0]['Current Price']) {
-            for (let i = 0; i < orderList.length; i++) {
-              let asset = orderList[i];
-              let symbol = asset['Asset ticker'];
-              let currentPrice = asset['Current Price'];
-        
-              // Calculate the quantity to buy with the remaining budget
-              let quantity = Math.floor(remainingBudget / currentPrice);
-        
-              // If quantity is 0, continue to the next asset
-              if (quantity === 0) continue;
-        
-              // Update the remaining budget
-              remainingBudget -= quantity * currentPrice;
-        
-              // Update the order list with the additional quantity
-              orderList[i]['Quantity'] += quantity;
-        
-              // If there's no remaining budget, break the loop
-              if (remainingBudget <= 0) {
-                break;
-              }
-            }
-          }
-        }
-
-
-
-
-
-      }
-
-      // Send the orders to alpaca
-      let orderPromises = orderList.map(order => {
-        let symbol = order['Asset ticker'];
-        let qty = Math.floor(order['Quantity']);
-
-        if (qty > 0) {
-          return retry(() => {
-            return axios({
-              method: 'post',
-              url: alpacaConfig.apiURL + '/v2/orders',
-              headers: {
-                'APCA-API-KEY-ID': alpacaConfig.keyId,
-                'APCA-API-SECRET-KEY': alpacaConfig.secretKey
-              },
-              data: {
-                symbol: symbol,
-                qty: qty,
-                side: order.Side,
-                type: 'market',
-                time_in_force: 'gtc'
-              }
-            }).then((response) => {
-              console.log(`Order of ${qty} shares for ${symbol} has been placed. Order ID: ${response.data.client_order_id}`);
-              return { qty: qty, symbol: symbol, orderID: response.data.client_order_id};
-            });
-          }, 5, 2000).catch((error) => {
-            console.error(`Failed to place order for ${symbol}: ${error}`)
-            return null;
-          })
-        } else {
-          console.log(`Quantity for ${symbol} is ${qty}. Order not placed.`);
-          return null;
-        }
-      })
-      // Get the response from alpaca
-      Promise.all(orderPromises).then(async orders => {
-        orders = orders.filter(order => order !== null);
-
-        if (orders.length === 0) {
-          console.error('Failed to place all orders.');
-          return res.status(400).json({
-            status: "fail",
-            message: "Failed to place orders. Try again.",
-          });
-        }
-
-        // If some orders were successful, update the portfolio
-        let updatedStocks = portfolio.stocks.map(stock => {
-          let order = orders.find(order => order.symbol === stock.symbol);
-          if (order) {
-            return {
-              symbol: stock.symbol,
-              quantity: stock.quantity + order.qty, // update quantity
-              avgCost: stock.avgCost, // you may want to update the average cost
-              orderID: order.orderID
-            };
-          } else {
-            return stock;
-          }
-        });
-
-        // Add new stocks to the portfolio
-        for (let order of orders) {
-          if (!portfolioTickers.includes(order.symbol)) {
-            updatedStocks.push({
-              symbol: order.symbol,
-              quantity: order.qty,
-              avgCost: null, // you may want to update the average cost
-              orderID: order.orderID
-            });
-          }
-        }
-
-        // Update the portfolio in the database
-        await Portfolio.updateOne(
-          { _id: portfolio._id },
-          { $set: { stocks: updatedStocks } }
-        );
-
-        console.log('Portfolio updated');
-        return res.status(200).json({
-          status: "success",
-          orders: orders,
-        });
-      }).catch(error => {
-        console.error(`Error: ${error}`);
-        return res.status(400).json({
-          status: "fail",
-          message: `Something unexpected happened: ${error.message}`,
-        });
-      });
-    } catch (error) {
-      console.error(`Error: ${error}`);
-      return res.status(400).json({
-        status: "fail",
-        message: `Something unexpected happened: ${error.message}`,
-      });
-    }
-  });
-}
-
-
+};
 
 
 
@@ -1119,109 +797,165 @@ exports.getPortfolios = async (req, res) => {
       });
     }
 
-    const rawPortfolios = await Portfolio.find({ $or: [{ userId }, { userId: { $exists: false } }] }).lean();
+    const tradingKeys = alpacaConfig.getTradingKeys();
+    const dataKeys = alpacaConfig.getDataKeys();
+
+    const [positionsResponse, accountResponse] = await Promise.all([
+      tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
+        headers: {
+          'APCA-API-KEY-ID': tradingKeys.keyId,
+          'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+        },
+      }),
+      tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/account`, {
+        headers: {
+          'APCA-API-KEY-ID': tradingKeys.keyId,
+          'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+        },
+      }),
+    ]);
+
+    const accountCash = toNumber(accountResponse?.data?.cash, 0);
+    const positions = Array.isArray(positionsResponse.data) ? positionsResponse.data : [];
+
+    const positionMap = {};
+    const priceCache = {};
+
+    positions.forEach((position) => {
+      const symbol = sanitizeSymbol(position.symbol);
+      if (!symbol) {
+        return;
+      }
+      positionMap[symbol] = position;
+      const price = toNumber(position.current_price, toNumber(position.avg_entry_price, null));
+      if (price) {
+        priceCache[symbol] = price;
+      }
+    });
+
+    const rawPortfolios = await Portfolio.find({
+      userId: String(userId),
+    }).lean();
 
     if (!rawPortfolios.length) {
       return res.json({
         status: 'success',
         portfolios: [],
+        cash: accountCash,
       });
     }
 
-    const dataKeys = alpacaConfig.getDataKeys();
-    const tradingKeys = alpacaConfig.getTradingKeys();
-    const headers = {
-      'APCA-API-KEY-ID': dataKeys.keyId,
-      'APCA-API-SECRET-KEY': dataKeys.secretKey,
-    };
-
-    const uniqueTickers = Array.from(
-      new Set(
-        rawPortfolios.flatMap((portfolio) =>
-          (portfolio.stocks || []).map((stock) => stock.symbol)
-        )
-      )
-    ).filter(Boolean);
-
-    const priceCache = {};
-    const positionMap = {};
-
-    try {
-      const positionsResponse = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
-        headers: {
-          'APCA-API-KEY-ID': tradingKeys.keyId,
-          'APCA-API-SECRET-KEY': tradingKeys.secretKey,
-        },
-      });
-
-      if (Array.isArray(positionsResponse.data)) {
-        positionsResponse.data.forEach((position) => {
-          positionMap[position.symbol] = position;
-        });
-      }
-    } catch (error) {
-      console.warn('[Portfolio] Unable to retrieve Alpaca positions:', error.message);
-    }
-
-    await Promise.all(
-      uniqueTickers.map(async (symbol) => {
-        try {
-          const response = await dataKeys.client.get(
-            `${dataKeys.apiUrl}/v2/stocks/${symbol}/trades/latest`,
-            { headers }
-          );
-          const trade = response.data?.trade;
-          if (trade?.p) {
-            priceCache[symbol] = Number(trade.p);
-          }
-        } catch (error) {
-          console.error(`[Portfolio] Failed to fetch price for ${symbol}:`, error.message);
-          priceCache[symbol] = null;
+    const symbolsToFetch = new Set();
+    rawPortfolios.forEach((portfolio) => {
+      (portfolio.stocks || []).forEach((stock) => {
+        const symbol = sanitizeSymbol(stock.symbol);
+        if (symbol && priceCache[symbol] == null) {
+          symbolsToFetch.add(symbol);
         }
-      })
-    );
+      });
+      (portfolio.targetPositions || []).forEach((target) => {
+        const symbol = sanitizeSymbol(target.symbol);
+        if (symbol && priceCache[symbol] == null) {
+          symbolsToFetch.add(symbol);
+        }
+      });
+    });
 
-    const enhancedPortfolios = rawPortfolios.map((portfolio) => ({
-      name: portfolio.name,
-      strategy_id: portfolio.strategy_id,
-      budget: portfolio.budget ?? null,
-      stocks: (portfolio.stocks || []).map((stock) => {
-        const alpacaPosition = positionMap[stock.symbol];
+    if (symbolsToFetch.size) {
+      const headers = {
+        'APCA-API-KEY-ID': dataKeys.keyId,
+        'APCA-API-SECRET-KEY': dataKeys.secretKey,
+      };
+      await Promise.all(
+        Array.from(symbolsToFetch).map(async (symbol) => {
+          try {
+            const { data } = await dataKeys.client.get(`${dataKeys.apiUrl}/v2/stocks/${symbol}/trades/latest`, {
+              headers,
+            });
+            const price = toNumber(data?.trade?.p, null);
+            if (price) {
+              priceCache[symbol] = price;
+            }
+          } catch (error) {
+            console.warn(`[Portfolios] Failed to fetch latest price for ${symbol}: ${error.message}`);
+          }
+        })
+      );
+    }
 
-        const quantity =
-          stock.quantity !== undefined && stock.quantity !== null
-            ? Number(stock.quantity)
-            : alpacaPosition?.qty
-            ? Number(alpacaPosition.qty)
-            : 0;
+    const now = new Date();
+    const enhancedPortfolios = rawPortfolios.map((portfolio) => {
+      let normalizedTargets = normalizeTargetPositions(portfolio.targetPositions || []);
+      if (!normalizedTargets.length) {
+        normalizedTargets = normalizeTargetPositions(
+          (portfolio.stocks || []).map((stock) => ({
+            symbol: stock.symbol,
+            targetQuantity: stock.quantity,
+            targetValue: stock.avgCost && stock.quantity ? stock.avgCost * stock.quantity : null,
+          }))
+        );
+      }
 
-        const avgCost =
-          stock.avgCost !== null && stock.avgCost !== undefined
-            ? Number(stock.avgCost)
-            : alpacaPosition?.avg_entry_price
-            ? Number(alpacaPosition.avg_entry_price)
-            : null;
+      const stocks = (portfolio.stocks || []).map((stock) => {
+        const symbol = sanitizeSymbol(stock.symbol);
+        const alpacaPosition = symbol ? positionMap[symbol] : null;
 
-        const currentPrice =
-          priceCache[stock.symbol] !== undefined
-            ? priceCache[stock.symbol]
-            : alpacaPosition?.current_price
-            ? Number(alpacaPosition.current_price)
-            : null;
+        const quantity = stock.quantity !== undefined && stock.quantity !== null
+          ? toNumber(stock.quantity, 0)
+          : alpacaPosition
+          ? toNumber(alpacaPosition.qty, 0)
+          : 0;
+
+        const avgCost = stock.avgCost !== undefined && stock.avgCost !== null
+          ? toNumber(stock.avgCost, null)
+          : alpacaPosition
+          ? toNumber(alpacaPosition.avg_entry_price, null)
+          : null;
+
+        const currentPrice = symbol && priceCache[symbol] !== undefined
+          ? priceCache[symbol]
+          : alpacaPosition
+          ? toNumber(alpacaPosition.current_price, toNumber(alpacaPosition.avg_entry_price, null))
+          : null;
 
         return {
-          symbol: stock.symbol,
+          symbol,
           avgCost,
           quantity,
           currentPrice,
           orderID: stock.orderID || null,
           currentTotal: currentPrice !== null ? quantity * currentPrice : null,
         };
-      }),
-    }));
+      });
+
+      return {
+        name: portfolio.name,
+        strategy_id: portfolio.strategy_id,
+        recurrence: portfolio.recurrence || 'daily',
+        lastRebalancedAt: portfolio.lastRebalancedAt,
+        nextRebalanceAt: portfolio.nextRebalanceAt,
+        cashBuffer: toNumber(portfolio.cashBuffer, 0),
+        initialInvestment: toNumber(portfolio.initialInvestment, 0),
+        targetPositions: normalizedTargets,
+        budget: toNumber(portfolio.budget, null),
+        status: (() => {
+          const next = portfolio.nextRebalanceAt ? new Date(portfolio.nextRebalanceAt) : null;
+          const last = portfolio.lastRebalancedAt ? new Date(portfolio.lastRebalancedAt) : null;
+          if (next && next <= now) {
+            return 'pending';
+          }
+          if (last) {
+            return 'running';
+          }
+          return 'scheduled';
+        })(),
+        stocks,
+      };
+    });
 
     return res.json({
       status: 'success',
+      cash: accountCash,
       portfolios: enhancedPortfolios,
     });
   } catch (error) {
@@ -1239,272 +973,155 @@ exports.getPortfolios = async (req, res) => {
 
 
 
+exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, options = {}) => {
+  console.log('strategyName', strategyName);
+  console.log('orders', orders);
+  console.log('UserID', UserID);
 
+  const {
+    budget = null,
+    targetPositions = [],
+    recurrence = 'daily',
+    initialInvestment: initialInvestmentInput = null,
+  } = options || {};
 
-
-
-
-exports.getStrategies = async (req, res) => {
   try {
-    if (req.user !== req.params.userId) {
-      return res.status(200).json({
-        status: "fail",
-        message: "Credentials couldn't be validated.",
-      });
+    const normalizedRecurrence = normalizeRecurrence(recurrence);
+    let targets = normalizeTargetPositions(targetPositions);
+    if (!targets.length && Array.isArray(orders)) {
+      targets = normalizeTargetPositions(orders);
     }
 
-    // Query all strategies
-    const strategies = await Strategy.find();
+    const alpacaConfig = await getAlpacaConfig(UserID);
+    const alpacaApi = new Alpaca(alpacaConfig);
+    const clock = await alpacaApi.getClock();
+    const now = new Date();
 
-    // Send the response
-    return res.status(200).json({
-      status: "success",
-      strategies: strategies
+    let strategy_id;
+    if (strategyName === 'AI Fund') {
+      strategy_id = '01';
+    } else {
+      strategy_id = crypto.randomBytes(16).toString('hex');
+    }
+
+    const strategy = new Strategy({
+      name: strategyName,
+      strategy: strategyinput,
+      strategy_id,
+      recurrence: normalizedRecurrence,
     });
 
-  } catch (error) {
-    console.error('Error fetching strategies:', error);
-    return res.status(200).json({
-      status: "fail",
-      message: "Something unexpected happened.",
-    });
-  }
-};
+    await strategy.save();
+    console.log('Strategy ' + strategyName + ' has been created.');
 
+    const initialInvestmentEstimate = initialInvestmentInput && initialInvestmentInput > 0
+      ? initialInvestmentInput
+      : estimateInitialInvestment(targets, budget);
 
+    if (!clock.is_open) {
+      console.log('Market is closed.');
 
-exports.getNewsHeadlines = async (req, res) => {
-  const ticker = req.body.ticker;
-  const period = req.body.period;
-
-  const python = spawn('python3', ['./scripts/news.py', '--ticker', ticker, '--period', period]);
-
-  let python_output = "";
-  let python_log = "";
-
-  const pythonPromise = new Promise((resolve, reject) => {
-      python.stdout.on('data', (data) => {
-          python_output += data.toString();
+      const portfolio = new Portfolio({
+        userId: String(UserID),
+        name: strategyName,
+        strategy_id,
+        recurrence: normalizedRecurrence,
+        initialInvestment: initialInvestmentEstimate,
+        cashBuffer: Math.max(0, toNumber(budget, 0) - (initialInvestmentEstimate || 0)),
+        lastRebalancedAt: null,
+        nextRebalanceAt: computeNextRebalanceAt(normalizedRecurrence, now),
+        targetPositions: targets,
+        budget: toNumber(budget, null),
+        stocks: Array.isArray(orders)
+          ? orders.map((order) => ({
+              symbol: sanitizeSymbol(order.symbol),
+              avgCost: null,
+              quantity: toNumber(order.qty, 0),
+              currentPrice: null,
+              orderID: order.orderID,
+            }))
+          : [],
       });
 
-      python.stderr.on('data', (data) => {
-          python_log += data.toString();
+      await portfolio.save();
+      console.log('Portfolio for strategy ' + strategyName + ' has been created. Market is closed so the orders are not filled yet.');
+      return portfolio.toObject();
+    }
+
+    console.log('Market is open.');
+    const numberOfOrders = Array.isArray(orders) ? orders.length : 0;
+
+    const getOrders = async () => {
+      const ordersResponse = await axios({
+        method: 'get',
+        url: alpacaConfig.apiURL + '/v2/orders',
+        headers: {
+          'APCA-API-KEY-ID': alpacaConfig.keyId,
+          'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
+        },
+        params: {
+          limit: numberOfOrders,
+          status: 'all',
+          nested: true,
+        },
       });
 
-      python.on('close', (code) => {
-          if (code !== 0) {
-              console.log(`Python script exited with code ${code}`);
-              reject(`Python script exited with code ${code}`);
-          } else {
-              resolve(python_output);
-          }
-      });
-  });
-
-  try {
-      const python_output = await pythonPromise;
-      console.log('Python output:', python_output);
-
-      let newsData;
-      try {
-          newsData = JSON.parse(python_output);
-          console.log('newsData:', newsData);
-
-      } catch (err) {
-          console.error(`Error parsing JSON in nodejs: ${err}`);
-          console.error(`Invalid  JSON in nodejs: ${python_output}`);
-          newsData = [];
+      const filledOrders = ordersResponse.data.filter((order) => order.filled_qty !== '0');
+      if (!filledOrders || filledOrders.length !== numberOfOrders) {
+        throw new Error('Not all orders are closed or filled yet.');
       }
+      return filledOrders;
+    };
 
-      // Extract headlines from newsData
-      const newsHeadlines = newsData.map(news => news["title"]);
-
-      const stockKeywords = ["stock", "jumped", "intraday", "pre-market", "uptrend", "position", "increased", "gains", "loss", "up", "down", "rise", "fall", "bullish", "bearish", "nasdaq", "nyse", "percent", "%"];
-
-      for (const news of newsData) {
-          // Check if the headline contains any of the stock keywords
-          const lowerCaseTitle = news.title.toLowerCase();
-          if (stockKeywords.some(keyword => lowerCaseTitle.includes(keyword))) {
-              continue;  // Skip this headline
-          }
-
-          const existingNews = await News.find({ "Stock name": ticker, Date: news.date }).catch(err => {
-              console.error('Error finding news:', err);
-              throw err;
-          });
-
-          let isSimilar = false;
-          for (const existing of existingNews) {
-              const similarity = 1 - distance(existing["News headline"], news.title) / Math.max(existing["News headline"].length, news.title.length);
-              if (similarity > 0.6) {
-                  isSimilar = true;
-                  break;
-              }
-          }
-
-          if (!isSimilar) {
-              const newNews = new News({
-                  newsId: news.id,
-                  "News headline": news.title,
-                  Date: news.date,
-                  Ticker: news.ticker,
-                  "Stock name": ticker, 
-                  Source: news.source,
-              });
-              try {
-                  await newNews.save();
-                  console.log(`Saved: ${newNews["News headline"]}`);
-              } catch (err) {
-                  console.log('Error saving news: ', err);
-              }
-          }
-      }
-      res.send(newsHeadlines);
-  } catch (err) {
-      console.error('Error:', err);
-      res.status(500).send(err);
-  }
-};
-exports.getScoreHeadlines = async (req, res) => {
-  try {
-    const newsData = await News.find({});
-    const newsDataJson = JSON.stringify(newsData);
-    const inputFilePath = './data/newsData.json';
-    const outputFilePath = './data/sentimentResults.json';
-    const output2FilePath = './data/scoreResults.json';
-
-    fs.writeFileSync(inputFilePath, newsDataJson);
-
-    const python = spawn('python3', ['-u', './scripts/sentiment_claude5.py', inputFilePath, outputFilePath, output2FilePath]);
-
-    python.stdout.on('data', (data) => {
-      const message = data.toString();
-      if (message.trim() !== '') {  // Only print the message if it's not an empty string
-        console.log(message);  // Stream the Python output immediately
-      }
-    });
-
-    python.stderr.on('data', (data) => {
-      console.error('Python error:', data.toString());  // Log the Python errors immediately
-    });
-
-    const pythonPromise = new Promise((resolve, reject) => {
-      python.on('close', (code) => {
-        if (code !== 0) {
-          console.log(`Python script exited with code ${code}`);
-          reject(`Python script exited with code ${code}`);
-        } else {
-          resolve();
-        }
-      });
-    });
-
+    let ordersResponse;
     try {
-      await pythonPromise;  // Wait for the Python script to finish
-      res.send('Sentiment analysis completed successfully');
-    } catch (err) {
-      console.error('Error:', err);
-      res.status(500).send(err);
-    }
-  } catch (err) {
-    console.error('Error in getScoreHeadlines:', err);
-    res.status(500).send('Error in getScoreHeadlines');
-  }
-};
-
-
-
-
-exports.testPython = async (req, res) => {
-  console.log('testPython called');
-  const { spawn } = require('child_process');
-  let input = req.body.input;
-
-  // Call a Python script
-  const runPythonScript = async (input) => {
-    return new Promise((resolve, reject) => {
-      let python_process = spawn('python3', ['scripts/test.py', input]);
-      let python_output = "";
-
-      python_process.stdout.on('data', (data) => {
-        console.log(`stdout: ${data}`);
-        python_output += data.toString();
-      });
-
-      python_process.stderr.on('data', (data) => {
-        console.error(`stderr: ${data}`);
-      });
-
-      python_process.on('close', (code) => {
-        console.log(`child process exited with code ${code}`);
-        resolve(python_output);
-      });
-    });
-  }
-
-  const getPython = async (input) => {
-    let python_output = await runPythonScript(input);
-    console.log('python_output:'+'\n\n'+python_output);
-    return python_output.toString();
-  }
-
-  // Call the getPython function and send the result back to the client
-  try {
-    let result = await getPython(input);
-    res.send(result);
-  } catch (error) {
-    res.status(500).send({ message: 'An error occurred while running the Python script.' });
-  }
-};
-
-  
-
-
-
-// Debugging function to retry a promise-based function
-const retry = (fn, retriesLeft = 5, interval = 1000) => {
-  return new Promise((resolve, reject) => {
-    fn().then(resolve)
-      .catch((error) => {
-        setTimeout(() => {
-          if (retriesLeft === 1) {
-            // reject('maximum retries exceeded');
-            reject(error);
-          } else {
-            console.log(`Retrying... attempts left: ${retriesLeft - 1}`); // Log message at each retry
-            // Try again with one less retry attempt left
-            retry(fn, retriesLeft - 1, interval).then(resolve, reject);
-          }
-        }, interval);
-      });
-  });
-};
-
-
-//this is also in strockController can be put in utils
-const isMarketOpen = async (userId) => {
-  try {
-    const alpacaConfig = await getAlpacaConfig(userId);
-    if (!alpacaConfig.hasValidKeys) {
-      console.error('Invalid API keys in isMarketOpen');
-      return false;
+      ordersResponse = await retry(getOrders, 5, 4000);
+    } catch (error) {
+      console.error('Error:', error);
+      throw error;
     }
 
-    const tradingKeys = alpacaConfig.getTradingKeys();
-    const response = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/clock`, {
-      headers: {
-        'APCA-API-KEY-ID': tradingKeys.keyId,
-        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+    const stocks = [];
+    let totalInvested = 0;
+
+    ordersResponse.forEach((order) => {
+      if (order.side === 'buy') {
+        const avgPrice = toNumber(order.filled_avg_price, null);
+        const filledQty = toNumber(order.filled_qty, 0);
+        totalInvested += (avgPrice || 0) * filledQty;
+        stocks.push({
+          symbol: sanitizeSymbol(order.symbol),
+          avgCost: avgPrice,
+          quantity: filledQty,
+          currentPrice: avgPrice,
+          orderID: order.client_order_id,
+        });
       }
     });
 
-    return response.data.is_open;
+    const determinedInitialInvestment = totalInvested || initialInvestmentEstimate || 0;
+    const cashBuffer = Math.max(0, toNumber(budget, 0) - determinedInitialInvestment);
+
+    const portfolio = new Portfolio({
+      userId: String(UserID),
+      name: strategyName,
+      strategy_id,
+      recurrence: normalizedRecurrence,
+      initialInvestment: determinedInitialInvestment,
+      cashBuffer,
+      lastRebalancedAt: now,
+      nextRebalanceAt: computeNextRebalanceAt(normalizedRecurrence, now),
+      targetPositions: targets,
+      budget: toNumber(budget, null),
+      stocks,
+    });
+
+    await portfolio.save();
+    console.log('Portfolio for strategy ' + strategyName + ' has been created.');
+    return portfolio.toObject();
   } catch (error) {
-    console.error('Error fetching market status:', error.message);
-    if (error.response) {
-      console.error('API Response:', error.response.status, error.response.data);
-    }
-    return false;
+    console.error('Error:', error);
+    throw error;
   }
 };
 
@@ -1564,6 +1181,213 @@ const getPricesData = async (stocks, marketOpen, userId) => {
 };
 
 
+exports.getStrategies = async (req, res) => {
+  try {
+    if (req.user !== req.params.userId) {
+      return res.status(200).json({
+        status: "fail",
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const strategies = await Strategy.find();
+
+    return res.status(200).json({
+      status: "success",
+      strategies: strategies
+    });
+
+  } catch (error) {
+    console.error('Error fetching strategies:', error);
+    return res.status(200).json({
+      status: "fail",
+      message: "Something unexpected happened.",
+    });
+  }
+};
+
+
+
+exports.getNewsHeadlines = async (req, res) => {
+  const ticker = req.body.ticker;
+  const period = req.body.period;
+
+  const python = spawn('python3', ['./scripts/news.py', '--ticker', ticker, '--period', period]);
+
+  let python_output = "";
+  let python_log = "";
+
+  const pythonPromise = new Promise((resolve, reject) => {
+      python.stdout.on('data', (data) => {
+          python_output += data.toString();
+      });
+
+      python.stderr.on('data', (data) => {
+          python_log += data.toString();
+      });
+
+      python.on('close', (code) => {
+          if (code !== 0) {
+              console.log(`Python script exited with code ${code}`);
+              reject(`Python script exited with code ${code}`);
+          } else {
+              resolve(python_output);
+          }
+      });
+  });
+
+  try {
+      const python_output = await pythonPromise;
+      console.log('Python output:', python_output);
+
+      let newsData;
+      try {
+          newsData = JSON.parse(python_output);
+          console.log('newsData:', newsData);
+
+      } catch (err) {
+          console.error(`Error parsing JSON in nodejs: ${err}`);
+          console.error(`Invalid  JSON in nodejs: ${python_output}`);
+          newsData = [];
+      }
+
+      const newsHeadlines = newsData.map(news => news["title"]);
+
+      const stockKeywords = ["stock", "jumped", "intraday", "pre-market", "uptrend", "position", "increased", "gains", "loss", "up", "down", "rise", "fall", "bullish", "bearish", "nasdaq", "nyse", "percent", "%"];
+
+      for (const news of newsData) {
+          const lowerCaseTitle = news.title.toLowerCase();
+          if (stockKeywords.some(keyword => lowerCaseTitle.includes(keyword))) {
+              continue;
+          }
+
+          const existingNews = await News.find({ "Stock name": ticker, Date: news.date }).catch(err => {
+              console.error('Error finding news:', err);
+              throw err;
+          });
+
+          let isSimilar = false;
+          for (const existing of existingNews) {
+              const similarity = 1 - distance(existing["News headline"], news.title) / Math.max(existing["News headline"].length, news.title.length);
+              if (similarity > 0.6) {
+                  isSimilar = true;
+                  break;
+              }
+          }
+
+          if (!isSimilar) {
+              const newNews = new News({
+                  newsId: news.id,
+                  "News headline": news.title,
+                  Date: news.date,
+                  Ticker: news.ticker,
+                  "Stock name": ticker, 
+                  Source: news.source,
+              });
+              try {
+                  await newNews.save();
+                  console.log(`Saved: ${newNews["News headline"]}`);
+              } catch (err) {
+                  console.log('Error saving news: ', err);
+              }
+          }
+      }
+      res.send(newsHeadlines);
+  } catch (err) {
+      console.error('Error:', err);
+      res.status(500).send(err);
+  }
+};
+exports.getScoreHeadlines = async (req, res) => {
+  try {
+    const newsData = await News.find({});
+    const newsDataJson = JSON.stringify(newsData);
+    const inputFilePath = './data/newsData.json';
+    const outputFilePath = './data/sentimentResults.json';
+    const output2FilePath = './data/scoreResults.json';
+
+    fs.writeFileSync(inputFilePath, newsDataJson);
+
+    const python = spawn('python3', ['-u', './scripts/sentiment_claude5.py', inputFilePath, outputFilePath, output2FilePath]);
+
+    python.stdout.on('data', (data) => {
+      const message = data.toString();
+      if (message.trim() !== '') {
+        console.log(message);
+      }
+    });
+
+    python.stderr.on('data', (data) => {
+      console.error('Python error:', data.toString());
+    });
+
+    const pythonPromise = new Promise((resolve, reject) => {
+      python.on('close', (code) => {
+        if (code !== 0) {
+          console.log(`Python script exited with code ${code}`);
+          reject(`Python script exited with code ${code}`);
+        } else {
+          resolve();
+        }
+      });
+    });
+
+    try {
+      await pythonPromise;
+      res.send('Sentiment analysis completed successfully');
+    } catch (err) {
+      console.error('Error:', err);
+      res.status(500).send(err);
+    }
+  } catch (err) {
+    console.error('Error in getScoreHeadlines:', err);
+    res.status(500).send('Error in getScoreHeadlines');
+  }
+};
+
+
+
+exports.testPython = async (req, res) => {
+  console.log('testPython called');
+  const { spawn } = require('child_process');
+  let input = req.body.input;
+
+  const runPythonScript = async (input) => {
+    return new Promise((resolve, reject) => {
+      let python_process = spawn('python3', ['scripts/test.py', input]);
+      let python_output = "";
+
+      python_process.stdout.on('data', (data) => {
+        console.log(`stdout: ${data}`);
+        python_output += data.toString();
+      });
+
+      python_process.stderr.on('data', (data) => {
+        console.error(`stderr: ${data}`);
+      });
+
+      python_process.on('close', (code) => {
+        console.log(`child process exited with code ${code}`);
+        resolve(python_output);
+      });
+    });
+  }
+
+  const getPython = async (input) => {
+    let python_output = await runPythonScript(input);
+    console.log('python_output:'+'\n\n'+python_output);
+    return python_output.toString();
+  }
+
+  try {
+    let result = await getPython(input);
+    res.send(result);
+  } catch (error) {
+    res.status(500).send({ message: 'An error occurred while running the Python script.' });
+  }
+};
+
+
 
 // // Mock the Alpaca client when market is closed:
 
@@ -1596,3 +1420,19 @@ const getPricesData = async (stocks, marketOpen, userId) => {
 //   console.log(`curl -X ${request.method.toUpperCase()} '${request.url}${params ? `?${params}` : ''}' ${headers}${data ? ` -d '${data}'` : ''}` + '\n');
 //   return request;
 // });
+
+function retry(fn, retriesLeft = 5, interval = 1000) {
+  return new Promise((resolve, reject) => {
+    fn().then(resolve)
+      .catch((error) => {
+        setTimeout(() => {
+          if (retriesLeft === 1) {
+            reject(error);
+          } else {
+            console.log(`Retrying... attempts left: ${retriesLeft - 1}`);
+            retry(fn, retriesLeft - 1, interval).then(resolve, reject);
+          }
+        }, interval);
+      });
+  });
+}

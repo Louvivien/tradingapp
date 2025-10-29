@@ -5,11 +5,7 @@ const Schema = mongoose.Schema;
 const portfolioSchema = new Schema({
   userId: {
     type: String,
-    required: false,
     index: true,
-  },
-  budget: {
-    type: Number,
     required: false,
   },
   name: {
@@ -17,28 +13,89 @@ const portfolioSchema = new Schema({
     required: true,
   },
   strategy_id: {
-    type: String, 
+    type: String,
     ref: 'Strategy',
   },
-  stocks: [{
-    symbol: {
-      type: String,
-      required: true,
-    },
-    orderID: {
-      type: String,
-      required: true,
-    },
-    avgCost: {
-      type: Number,
-      required: false,
-      default: null, 
-    },
-    quantity: {
-      type: Number,
-      required: true,
-    },
-  }],
+  recurrence: {
+    type: String,
+    enum: [
+      'every_minute',
+      'every_5_minutes',
+      'every_15_minutes',
+      'hourly',
+      'daily',
+      'weekly',
+      'monthly'
+    ],
+    default: 'daily',
+  },
+  initialInvestment: {
+    type: Number,
+    default: 0,
+  },
+  cashBuffer: {
+    type: Number,
+    default: 0,
+  },
+  lastRebalancedAt: {
+    type: Date,
+    default: null,
+  },
+  nextRebalanceAt: {
+    type: Date,
+    default: null,
+    index: true,
+  },
+  targetPositions: {
+    type: [{
+      symbol: {
+        type: String,
+        required: true,
+      },
+      targetQuantity: {
+        type: Number,
+        default: null,
+      },
+      targetValue: {
+        type: Number,
+        default: null,
+      },
+      targetWeight: {
+        type: Number,
+        default: null,
+      },
+    }],
+    default: [],
+  },
+  stocks: {
+    type: [{
+      symbol: {
+        type: String,
+        required: true,
+      },
+      orderID: {
+        type: String,
+        required: true,
+      },
+      avgCost: {
+        type: Number,
+        default: null,
+      },
+      quantity: {
+        type: Number,
+        required: true,
+      },
+      currentPrice: {
+        type: Number,
+        default: null,
+      },
+    }],
+    default: [],
+  },
+  budget: {
+    type: Number,
+    required: false,
+  },
 });
 
 const Portfolio = mongoose.model("Portfolio", portfolioSchema);
