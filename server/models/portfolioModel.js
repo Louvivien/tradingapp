@@ -101,6 +101,10 @@ const portfolioSchema = new Schema({
     required: false,
     default: null,
   },
+  rebalanceCount: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const Portfolio = mongoose.model("Portfolio", portfolioSchema);

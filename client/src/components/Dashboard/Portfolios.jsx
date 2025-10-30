@@ -41,6 +41,17 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
     return Math.round((num + Number.EPSILON) * 100) / 100;
   };
 
+  const formatCurrencyValue = (value) => {
+    if (value === null || value === undefined) {
+      return '—';
+    }
+    const numeric = Number(value);
+    if (Number.isNaN(numeric)) {
+      return '—';
+    }
+    return `$${roundNumber(numeric).toLocaleString()}`;
+  };
+
   const openSaleModal = (stock) => {
     setStock(stock);
     setSaleOpen(true);
@@ -176,16 +187,38 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
           const cashLimitValue = Number(portfolio.cashLimit ?? portfolio.budget ?? null);
           const limitBaseline = Number.isFinite(cashLimitValue) && cashLimitValue > 0 ? cashLimitValue : null;
 
-          const currentValueForLimit = allStocksHaveAvgCost ? totalCurrentTotal : null;
-          const limitDifference = limitBaseline !== null && currentValueForLimit !== null
-            ? currentValueForLimit - limitBaseline
+          const currentValue = Number.isFinite(Number(portfolio.currentValue))
+            ? Number(portfolio.currentValue)
+            : (allStocksHaveAvgCost ? totalCurrentTotal : null);
+          const initialInvestmentValue = Number.isFinite(Number(portfolio.initialInvestment))
+            ? Number(portfolio.initialInvestment)
+            : 0;
+          const computedPnlValue = portfolio.pnlValue !== undefined && portfolio.pnlValue !== null && Number.isFinite(Number(portfolio.pnlValue))
+            ? Number(portfolio.pnlValue)
+            : (currentValue !== null ? currentValue - initialInvestmentValue : null);
+          const pnlPercent = portfolio.pnlPercent !== undefined && portfolio.pnlPercent !== null && Number.isFinite(Number(portfolio.pnlPercent))
+            ? Number(portfolio.pnlPercent)
+            : (computedPnlValue !== null && initialInvestmentValue > 0 ? (computedPnlValue / initialInvestmentValue) * 100 : null);
+
+          const limitDifference = limitBaseline !== null && currentValue !== null
+            ? currentValue - limitBaseline
             : null;
-          const limitDiffPct = limitDifference !== null && limitBaseline > 0
-            ? (limitDifference / limitBaseline) * 100
+          const limitUsagePct = limitBaseline !== null && currentValue !== null && limitBaseline > 0
+            ? Math.min(100, Math.max(0, (currentValue / limitBaseline) * 100))
             : null;
-          const limitUsagePct = limitBaseline !== null && currentValueForLimit !== null && limitBaseline > 0
-            ? Math.min(100, Math.max(0, (currentValueForLimit / limitBaseline) * 100))
-            : null;
+          const rebalanceCount = Number.isFinite(Number(portfolio.rebalanceCount)) ? Number(portfolio.rebalanceCount) : 0;
+          const pnlValue = computedPnlValue;
+          const pnlDisplay = (() => {
+            if (pnlValue === null || Number.isNaN(pnlValue)) {
+              return null;
+            }
+            const arrow = pnlValue >= 0 ? '▲' : '▼';
+            const amount = `$${Math.abs(roundNumber(pnlValue)).toLocaleString()}`;
+            const percentText = pnlPercent !== null && !Number.isNaN(pnlPercent)
+              ? ` (${Math.abs(pnlPercent).toFixed(2)}%)`
+              : '';
+            return `${arrow} ${amount}${percentText}`;
+          })();
 
 
 
@@ -229,7 +262,7 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
 
               </div>
               <Typography variant="body2" color="textSecondary" sx={{ ml: 6, mt: 0.5 }}>
-                Status: {formatStatus(portfolio.status)} · Frequency: {formatRecurrenceLabel(portfolio.recurrence)} · Next reallocation: {formatDateTime(portfolio.nextRebalanceAt)}
+                Status: {formatStatus(portfolio.status)} · Frequency: {formatRecurrenceLabel(portfolio.recurrence)} · Next reallocation: {formatDateTime(portfolio.nextRebalanceAt)} · Rebalances: {rebalanceCount}
               </Typography>
               <Box sx={{ display: "flex", alignItems: "center", ml: 6, mt: 1, gap: 1 }}>
                 <TextField
@@ -250,20 +283,15 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
                 {updatingRecurrence[portfolio.strategy_id] && <CircularProgress size={18} />}
               </Box>
               <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
-                Assets: {assetCount} · Purchase total: {purchaseSummary} · Current total: {currentSummary}{" "}
-                {totalDiffPct !== null ? `· Difference: ${totalDiffPct.toFixed(2)}%` : ''}
+                Initial investment: {formatCurrencyValue(initialInvestmentValue)} · Current value: {currentValue !== null ? formatCurrencyValue(currentValue) : '—'}
+                {pnlDisplay && (
+                  <> · P/L: <span className={pnlValue >= 0 ? styles.positive : styles.negative}>{pnlDisplay}</span></>
+                )}
               </Typography>
               {limitBaseline !== null && (
                 <React.Fragment>
                   <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
                     Cash limit: ${roundNumber(limitBaseline).toLocaleString()}
-                    {limitDifference !== null && (
-                      <>
-                        {" · "}
-                        {limitDifference >= 0 ? "▲" : "▼"} ${Math.abs(roundNumber(limitDifference)).toLocaleString()}
-                        {limitDiffPct !== null && ` (${limitDiffPct >= 0 ? "+" : "-"}${Math.abs(limitDiffPct).toFixed(2)}%)`}
-                      </>
-                    )}
                   </Typography>
                   {limitUsagePct !== null && (
                     <Box sx={{ ml: 6, mt: 0.5, mr: 2 }}>

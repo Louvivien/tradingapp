@@ -1228,6 +1228,11 @@ exports.getPortfolios = async (req, res) => {
         };
       });
 
+      const totalCurrentValue = stocks.reduce((sum, stock) => sum + toNumber(stock.currentTotal, 0), 0);
+      const initialInvestment = toNumber(portfolio.initialInvestment, 0);
+      const pnlValue = totalCurrentValue - initialInvestment;
+      const pnlPercent = initialInvestment > 0 ? (pnlValue / initialInvestment) * 100 : null;
+
       return {
         name: portfolio.name,
         strategy_id: portfolio.strategy_id,
@@ -1235,10 +1240,14 @@ exports.getPortfolios = async (req, res) => {
         lastRebalancedAt: portfolio.lastRebalancedAt,
         nextRebalanceAt: portfolio.nextRebalanceAt,
         cashBuffer: toNumber(portfolio.cashBuffer, 0),
-        initialInvestment: toNumber(portfolio.initialInvestment, 0),
+        initialInvestment,
+        currentValue: totalCurrentValue,
+        pnlValue,
+        pnlPercent,
         targetPositions: normalizedTargets,
         budget: toNumber(portfolio.budget, null),
         cashLimit: toNumber(portfolio.cashLimit, toNumber(portfolio.budget, null)),
+        rebalanceCount: toNumber(portfolio.rebalanceCount, 0),
         status: (() => {
           const next = portfolio.nextRebalanceAt ? new Date(portfolio.nextRebalanceAt) : null;
           const last = portfolio.lastRebalancedAt ? new Date(portfolio.lastRebalancedAt) : null;
@@ -1337,6 +1346,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
         targetPositions: targets,
         budget: toNumber(limitValue, null),
         cashLimit: toNumber(limitValue, null),
+        rebalanceCount: 0,
         stocks: Array.isArray(orders)
           ? orders.map((order) => ({
               symbol: sanitizeSymbol(order.symbol),
@@ -1431,6 +1441,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
       targetPositions: targets,
       budget: toNumber(limitValue, null),
       cashLimit: toNumber(limitValue, null),
+      rebalanceCount: 0,
       stocks,
     });
 

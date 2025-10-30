@@ -354,6 +354,7 @@ const rebalancePortfolio = async (portfolio) => {
   if (!portfolio.initialInvestment) {
     portfolio.initialInvestment = Math.max(0, buySpend);
   }
+  portfolio.rebalanceCount = (toNumber(portfolio.rebalanceCount, 0) || 0) + 1;
   portfolio.lastRebalancedAt = now;
   portfolio.nextRebalanceAt = computeNextRebalanceAt(recurrence, now);
   portfolio.recurrence = recurrence;
