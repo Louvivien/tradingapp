@@ -19,6 +19,8 @@ const { recordStrategyLog } = require('../services/strategyLogger');
 
 
 
+const VALID_RECURRENCES = new Set(['every_minute','every_5_minutes','every_15_minutes','hourly','daily','weekly','monthly']);
+
 
 //Work in progress: prompt engineering (see jira https://ai-trading-bot.atlassian.net/browse/AI-76)
 
@@ -153,7 +155,14 @@ exports.createCollaborative = async (req, res) => {
   try {
     let input = req.body.collaborative;
     const UserID = req.body.userID;
-    const strategyName = req.body.strategyName;
+    const rawStrategyName = typeof req.body.strategyName === 'string' ? req.body.strategyName.trim() : '';
+    if (!rawStrategyName) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Please provide a name for this strategy.",
+      });
+    }
+    const strategyName = rawStrategyName;
     const strategy = input;
 
     if (/Below is a trading[\s\S]*strategy does\?/.test(input)) {
@@ -208,9 +217,25 @@ exports.createCollaborative = async (req, res) => {
 
     const { positions, summary, decisions } = parsedResult;
     const recurrence = normalizeRecurrence(req.body?.recurrence);
-    const budgetInput = toNumber(req.body?.budget, null);
+    const cashLimitInput = toNumber(
+      req.body?.cashLimit !== undefined ? req.body.cashLimit : req.body?.budget,
+      null
+    );
+
+    if (!cashLimitInput || cashLimitInput <= 0) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Please provide a positive cash limit for the collaborative strategy.",
+      });
+    }
+
     const normalizedTargets = normalizeTargetPositions(positions);
-    const initialInvestmentEstimate = estimateInitialInvestment(normalizedTargets, budgetInput);
+    if (!normalizedTargets.length) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Unable to determine target positions for this strategy.",
+      });
+    }
 
     console.log('Strategy summary: ', summary || 'No summary provided.');
     console.log('Orders payload: ', JSON.stringify(positions, null, 2));
@@ -223,19 +248,167 @@ exports.createCollaborative = async (req, res) => {
 
     const alpacaApi = new Alpaca(alpacaConfig);
     console.log("connected to alpaca");
+    const account = await alpacaApi.getAccount();
+    const accountCash = toNumber(account?.cash, 0);
+    const planningBudget = Math.min(
+      cashLimitInput,
+      accountCash > 0 ? accountCash : cashLimitInput
+    );
 
-    const orderPromises = positions.map(asset => {
-      const symbol = sanitizeSymbol(asset?.['Asset ticker'] || asset?.symbol || asset?.ticker);
-      if (!symbol) {
-        return Promise.resolve(null);
+    if (!planningBudget || planningBudget <= 0) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Insufficient available cash to fund the collaborative strategy with the selected limit.",
+      });
+    }
+
+    const dataKeys = alpacaConfig.getDataKeys ? alpacaConfig.getDataKeys() : null;
+    const uniqueSymbols = Array.from(
+      new Set(
+        normalizedTargets
+          .map((target) => target.symbol)
+          .filter(Boolean)
+      )
+    );
+
+    if (!uniqueSymbols.length) {
+      return res.status(400).json({
+        status: "fail",
+        message: "No valid tickers found in the collaborative strategy.",
+      });
+    }
+
+    const priceMap = {};
+
+    if (dataKeys?.client && dataKeys?.apiUrl && dataKeys?.keyId && dataKeys?.secretKey) {
+      await Promise.all(
+        uniqueSymbols.map(async (symbol) => {
+          try {
+            const { data } = await dataKeys.client.get(
+              `${dataKeys.apiUrl}/v2/stocks/${symbol}/trades/latest`,
+              {
+                headers: {
+                  'APCA-API-KEY-ID': dataKeys.keyId,
+                  'APCA-API-SECRET-KEY': dataKeys.secretKey,
+                },
+              }
+            );
+            const lastTradePrice = toNumber(data?.trade?.p, null);
+            if (lastTradePrice && lastTradePrice > 0) {
+              priceMap[symbol] = lastTradePrice;
+            }
+          } catch (error) {
+            console.warn(`Failed to fetch latest price for ${symbol}:`, error.message);
+          }
+        })
+      );
+    }
+
+    const sortedTargets = normalizedTargets
+      .filter((target) => target.symbol && target.targetWeight > 0)
+      .sort((a, b) => (b.targetWeight || 0) - (a.targetWeight || 0));
+
+    const orderPlan = [];
+    let plannedCost = 0;
+
+    const resolveFallbackPrice = (target) => {
+      const quantity = toNumber(target.targetQuantity, null);
+      const value = toNumber(target.targetValue, null);
+      if (quantity && quantity > 0 && value && value > 0) {
+        return value / quantity;
       }
-      const qty = Math.floor(Math.max(0, toNumber(asset?.['Quantity'], 0)));
+      return null;
+    };
+
+    for (const target of sortedTargets) {
+      const symbol = target.symbol;
+      const explicitPrice = toNumber(priceMap[symbol], null);
+      const fallbackPrice = resolveFallbackPrice(target);
+      const price = explicitPrice && explicitPrice > 0
+        ? explicitPrice
+        : (fallbackPrice && fallbackPrice > 0 ? fallbackPrice : null);
+
+      if (!price || price <= 0) {
+        console.warn(`Skipping ${symbol}; unable to determine a valid price.`);
+        continue;
+      }
+
+      const desiredValue = planningBudget * target.targetWeight;
+      let qty = Math.floor(desiredValue / price);
+
+      const remainingBudget = planningBudget - plannedCost;
+      if (qty * price > remainingBudget) {
+        qty = Math.floor(remainingBudget / price);
+      }
+
+      if (qty <= 0 && remainingBudget >= price) {
+        qty = 1;
+      }
 
       if (qty <= 0) {
-        console.log(`Quantity for ${symbol} is ${qty}. Order not placed.`);
-        return Promise.resolve(null);
+        continue;
       }
 
+      const cost = qty * price;
+      plannedCost += cost;
+      orderPlan.push({
+        symbol,
+        qty,
+        price,
+        cost,
+      });
+
+      if (plannedCost >= planningBudget) {
+        break;
+      }
+    }
+
+    let remainingBudget = planningBudget - plannedCost;
+    if (remainingBudget > 0 && orderPlan.length) {
+      for (const plan of orderPlan) {
+        if (remainingBudget < plan.price) {
+          continue;
+        }
+        const additionalQty = Math.floor(remainingBudget / plan.price);
+        if (additionalQty <= 0) {
+          continue;
+        }
+        const additionalCost = additionalQty * plan.price;
+        plan.qty += additionalQty;
+        plan.cost += additionalCost;
+        plannedCost += additionalCost;
+        remainingBudget -= additionalCost;
+        if (plannedCost >= planningBudget || remainingBudget <= 0) {
+          break;
+        }
+      }
+    }
+
+    const finalizedPlan = orderPlan.filter((entry) => entry.qty > 0);
+    if (!finalizedPlan.length) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Cash limit is too low to purchase any assets for this strategy.",
+      });
+    }
+
+    plannedCost = finalizedPlan.reduce((sum, entry) => sum + entry.cost, 0);
+    console.log(
+      'Collaborative strategy order plan within cash limit:',
+      finalizedPlan.map((entry) => ({ symbol: entry.symbol, qty: entry.qty, price: entry.price })),
+      'Total estimated cost:',
+      plannedCost.toFixed(2)
+    );
+
+    const executedTargetsRaw = finalizedPlan.map((entry) => ({
+      symbol: entry.symbol,
+      targetQuantity: entry.qty,
+      targetValue: entry.cost,
+      targetWeight: plannedCost > 0 ? entry.cost / plannedCost : 0,
+    }));
+    const executedTargets = normalizeTargetPositions(executedTargetsRaw);
+
+    const orderPromises = finalizedPlan.map(({ symbol, qty }) => {
       return retry(() => {
         return axios({
           method: 'post',
@@ -257,11 +430,12 @@ exports.createCollaborative = async (req, res) => {
         });
       }, 5, 2000).catch((error) => {
         console.error(`Failed to place order for ${symbol}: ${error}`);
-        return null;
+          return null;
       });
     });
 
     const orders = (await Promise.all(orderPromises)).filter(Boolean);
+    const initialInvestmentEstimate = plannedCost;
     if (!orders.length) {
       console.error('Failed to place all orders.');
       return res.status(400).json({
@@ -276,8 +450,9 @@ exports.createCollaborative = async (req, res) => {
       orders,
       UserID,
       {
-        budget: budgetInput,
-        targetPositions: normalizedTargets,
+        budget: cashLimitInput,
+        cashLimit: cashLimitInput,
+        targetPositions: executedTargets,
         recurrence,
         initialInvestment: initialInvestmentEstimate,
       }
@@ -812,6 +987,87 @@ exports.getStrategyLogs = async (req, res) => {
   }
 };
 
+exports.updateStrategyRecurrence = async (req, res) => {
+  try {
+    const { userId, strategyId } = req.params;
+    const { recurrence } = req.body || {};
+
+    if (!recurrence) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Recurrence value is required.',
+      });
+    }
+
+    if (!VALID_RECURRENCES.has(String(recurrence))) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Recurrence value is not supported.',
+      });
+    }
+
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: 'Credentials could not be validated.',
+      });
+    }
+
+    const normalizedRecurrence = normalizeRecurrence(recurrence);
+    if (!normalizedRecurrence) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Recurrence value is not supported.',
+      });
+    }
+
+    const portfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: String(userId) });
+    if (!portfolio) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Portfolio not found for this strategy.',
+      });
+    }
+
+    const strategy = await Strategy.findOne({ strategy_id: strategyId });
+
+    const now = new Date();
+    const nextRebalanceAt = computeNextRebalanceAt(normalizedRecurrence, now);
+
+    portfolio.recurrence = normalizedRecurrence;
+    portfolio.nextRebalanceAt = nextRebalanceAt;
+    await portfolio.save();
+
+    if (strategy) {
+      strategy.recurrence = normalizedRecurrence;
+      await strategy.save();
+    }
+
+    await recordStrategyLog({
+      strategyId,
+      userId: String(userId),
+      strategyName: portfolio.name,
+      message: 'Strategy frequency updated',
+      details: {
+        recurrence: normalizedRecurrence,
+        nextRebalanceAt,
+      },
+    });
+
+    return res.status(200).json({
+      status: 'success',
+      recurrence: normalizedRecurrence,
+      nextRebalanceAt,
+    });
+  } catch (error) {
+    console.error('Error updating strategy recurrence:', error.message);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Failed to update recurrence',
+    });
+  }
+};
+
 
 
 exports.getPortfolios = async (req, res) => {
@@ -982,6 +1238,7 @@ exports.getPortfolios = async (req, res) => {
         initialInvestment: toNumber(portfolio.initialInvestment, 0),
         targetPositions: normalizedTargets,
         budget: toNumber(portfolio.budget, null),
+        cashLimit: toNumber(portfolio.cashLimit, toNumber(portfolio.budget, null)),
         status: (() => {
           const next = portfolio.nextRebalanceAt ? new Date(portfolio.nextRebalanceAt) : null;
           const last = portfolio.lastRebalancedAt ? new Date(portfolio.lastRebalancedAt) : null;
@@ -1024,10 +1281,12 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
 
   const {
     budget = null,
+    cashLimit = null,
     targetPositions = [],
     recurrence = 'daily',
     initialInvestment: initialInvestmentInput = null,
   } = options || {};
+  const limitValue = toNumber(cashLimit, null) ?? toNumber(budget, null);
 
   let strategy_id;
 
@@ -1061,7 +1320,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
 
     const initialInvestmentEstimate = initialInvestmentInput && initialInvestmentInput > 0
       ? initialInvestmentInput
-      : estimateInitialInvestment(targets, budget);
+      : estimateInitialInvestment(targets, limitValue);
 
     if (!clock.is_open) {
       console.log('Market is closed.');
@@ -1072,11 +1331,12 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
         strategy_id,
         recurrence: normalizedRecurrence,
         initialInvestment: initialInvestmentEstimate,
-        cashBuffer: Math.max(0, toNumber(budget, 0) - (initialInvestmentEstimate || 0)),
+        cashBuffer: Math.max(0, toNumber(limitValue, 0) - (initialInvestmentEstimate || 0)),
         lastRebalancedAt: null,
         nextRebalanceAt: computeNextRebalanceAt(normalizedRecurrence, now),
         targetPositions: targets,
-        budget: toNumber(budget, null),
+        budget: toNumber(limitValue, null),
+        cashLimit: toNumber(limitValue, null),
         stocks: Array.isArray(orders)
           ? orders.map((order) => ({
               symbol: sanitizeSymbol(order.symbol),
@@ -1097,6 +1357,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
         details: {
           recurrence: normalizedRecurrence,
           initialInvestment: initialInvestmentEstimate,
+          cashLimit: toNumber(limitValue, null),
           orderCount: Array.isArray(orders) ? orders.length : 0,
         },
       });
@@ -1156,7 +1417,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
     });
 
     const determinedInitialInvestment = totalInvested || initialInvestmentEstimate || 0;
-    const cashBuffer = Math.max(0, toNumber(budget, 0) - determinedInitialInvestment);
+    const cashBuffer = Math.max(0, toNumber(limitValue, 0) - determinedInitialInvestment);
 
     const portfolio = new Portfolio({
       userId: String(UserID),
@@ -1168,7 +1429,8 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
       lastRebalancedAt: now,
       nextRebalanceAt: computeNextRebalanceAt(normalizedRecurrence, now),
       targetPositions: targets,
-      budget: toNumber(budget, null),
+      budget: toNumber(limitValue, null),
+      cashLimit: toNumber(limitValue, null),
       stocks,
     });
 
@@ -1182,6 +1444,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
         recurrence: normalizedRecurrence,
         initialInvestment: determinedInitialInvestment,
         cashBuffer,
+        cashLimit: toNumber(limitValue, null),
         orderCount: Array.isArray(orders) ? orders.length : 0,
       },
     });

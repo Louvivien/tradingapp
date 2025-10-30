@@ -96,6 +96,11 @@ const portfolioSchema = new Schema({
     type: Number,
     required: false,
   },
+  cashLimit: {
+    type: Number,
+    required: false,
+    default: null,
+  },
 });
 
 const Portfolio = mongoose.model("Portfolio", portfolioSchema);

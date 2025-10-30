@@ -151,6 +151,7 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
                 accountBalance={accountBalance}
                 portfolios={portfolios}
                 onViewStrategyLogs={onViewStrategyLogs}
+                refreshPortfolios={getPortfolio}
               />
             </StyledPaper>
           </Grid>

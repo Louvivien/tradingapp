@@ -52,6 +52,7 @@ const Strategies = () => {
   const [aifundbudget, setAiFundBudget] = useState("");
 
   const [strategyName, setstrategyName] = useState("");
+  const [collaborativeCashLimit, setCollaborativeCashLimit] = useState("");
   const [responseReceived, setResponseReceived] = useState(false);
   const { userData, setUserData } = useContext(UserContext);
   const [output, setOutput] = useState([]); 
@@ -181,13 +182,23 @@ const Strategies = () => {
 
 
   const handlecollaborativeSubmit = async (e) => {
+    if (!strategyName || !strategyName.trim()) {
+      setError("Please provide a strategy name.");
+      return;
+    }
+
+    if (!collaborativeCashLimit || Number(collaborativeCashLimit) <= 0) {
+      setError("Please provide a positive cash limit for this strategy.");
+      return;
+    }
+
     setError(null);
     setResponseReceived(false);
     setStrategySummary("");
     setStrategyDecisions([]);
     setOutput([]);
-    setLoading(true);
     setCollaborativeSchedule(null);
+    setLoading(true);
 
     const headers = {
       "x-auth-token": userData.token,
@@ -202,6 +213,7 @@ const Strategies = () => {
         userID,
         strategyName,
         recurrence: collaborativeRecurrence,
+        cashLimit: collaborativeCashLimit,
       };
       const response = await Axios.post(url, payload, {headers});
     
@@ -419,6 +431,17 @@ return (
               />
         <br />
         <TextField
+          variant="outlined"
+          label="Cash limit for this strategy"
+          value={collaborativeCashLimit}
+          onChange={(e) => setCollaborativeCashLimit(e.target.value)}
+          fullWidth
+          margin="normal"
+          type="number"
+          inputProps={{ min: 0, step: "0.01" }}
+        />
+        <br />
+        <TextField
           select
           variant="outlined"
           label="Rebalance frequency"
@@ -436,7 +459,7 @@ return (
         <br />
         <br />
 
-          <Button variant="contained" color="primary" className={styles.submit} onClick={handlecollaborativeSubmit}>
+          <Button variant="contained" color="primary" className={styles.submit} onClick={handlecollaborativeSubmit} disabled={loading}>
             Create this strategy
           </Button>
         </>

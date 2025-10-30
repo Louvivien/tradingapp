@@ -36,29 +36,17 @@ const app = express();
 const port = process.env.PORT || 3000;
 const {getStrategies} = require("./controllers/strategiesController");
 
-// Load environment variables from .env file
+// Load environment variables from .env file when available; otherwise rely on existing env vars (useful for Render)
 const envPath = path.resolve(__dirname, './config/.env');
 console.log(`[Config] Loading environment variables from: ${envPath}`);
-
-// Check if .env file exists
-if (!fs.existsSync(envPath)) {
-  console.error('[Config Error] .env file not found at:', envPath);
-  console.error('[Config Error] Please create a .env file in the server/config directory with the following variables:');
-  console.error('[Config Error] - ALPACA_API_KEY_ID (for paper trading)');
-  console.error('[Config Error] - ALPACA_API_SECRET_KEY (for paper trading)');
-  console.error('[Config Error] - ALPACA_LIVE_API_KEY_ID (for market data)');
-  console.error('[Config Error] - ALPACA_LIVE_API_SECRET_KEY (for market data)');
-  console.error('[Config Error] - MONGO_URI (MongoDB connection string)');
-  console.error('[Config Error] - MONGO_PASSWORD (MongoDB password)');
-  console.error('[Config Error] - CryptoJS_secret_key (for encryption)');
-  process.exit(1);
-}
-
-const result = dotenv.config({ path: envPath });
-
-if (result.error) {
-  console.error('[Config Error] Failed to load .env file:', result.error);
-  process.exit(1);
+if (fs.existsSync(envPath)) {
+  const result = dotenv.config({ path: envPath });
+  if (result.error) {
+    console.error('[Config Error] Failed to load .env file:', result.error);
+    process.exit(1);
+  }
+} else {
+  console.warn('[Config] .env file not found. Falling back to environment variables provided at runtime.');
 }
 
 // Validate required environment variables
@@ -203,6 +191,5 @@ const startServer = async () => {
 startServer();
 
 schedulePortfolioRebalances();
-
 
 

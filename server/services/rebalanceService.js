@@ -228,9 +228,15 @@ const rebalancePortfolio = async (portfolio) => {
 
   const baseBudget = portfolio.initialInvestment || 0;
   const cashBuffer = toNumber(portfolio.cashBuffer, 0);
-  const maxBudget = baseBudget + cashBuffer;
+  const cashLimit = toNumber(portfolio.cashLimit, toNumber(portfolio.budget, null));
+  const effectiveLimit = cashLimit && cashLimit > 0 ? cashLimit : Infinity;
+  const maxBudget = Math.min(baseBudget + cashBuffer, effectiveLimit);
   const currentTotal = currentPortfolioValue + accountCash;
-  const budget = Math.min(maxBudget > 0 ? maxBudget : currentTotal, currentTotal);
+  const budget = Math.min(
+    maxBudget > 0 ? maxBudget : currentTotal,
+    currentTotal,
+    effectiveLimit,
+  );
 
   let normalizedTargets = normalizeTargets(portfolio.targetPositions);
   if (!normalizedTargets.length) {
@@ -341,6 +347,10 @@ const rebalancePortfolio = async (portfolio) => {
 
   const now = new Date();
   portfolio.cashBuffer = Math.max(0, availableCash);
+  if (cashLimit && cashLimit > 0) {
+    const maxAllowedBuffer = Math.max(0, cashLimit - (portfolio.initialInvestment || 0));
+    portfolio.cashBuffer = Math.min(portfolio.cashBuffer, maxAllowedBuffer);
+  }
   if (!portfolio.initialInvestment) {
     portfolio.initialInvestment = Math.max(0, buySpend);
   }

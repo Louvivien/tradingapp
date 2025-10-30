@@ -1,5 +1,5 @@
 import React, { useContext, useState } from "react";
-import { Link, Collapse, IconButton, Modal, Button, Typography, useTheme } from "@mui/material";
+import { Link, Collapse, IconButton, Modal, Button, Typography, useTheme, LinearProgress, Box, TextField, MenuItem, CircularProgress } from "@mui/material";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -20,7 +20,7 @@ import { logError } from "../../utils/logger";
 
 
 
-const Portfolios = ({ portfolios, onViewStrategyLogs }) => {
+const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
   const navigate = useNavigate();
   const [saleOpen, setSaleOpen] = useState(false);
   const { userData, setUserData } = useContext(UserContext);
@@ -30,6 +30,8 @@ const Portfolios = ({ portfolios, onViewStrategyLogs }) => {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [strategyToDelete, setStrategyToDelete] = useState(null);
   const theme = useTheme();
+  const [recurrenceError, setRecurrenceError] = useState(null);
+  const [updatingRecurrence, setUpdatingRecurrence] = useState({});
 
 
 
@@ -88,6 +90,37 @@ const Portfolios = ({ portfolios, onViewStrategyLogs }) => {
     }
   };
 
+  const handleRecurrenceChange = async (portfolio, newRecurrence) => {
+    if (!newRecurrence || newRecurrence === portfolio.recurrence) {
+      return;
+    }
+
+    setUpdatingRecurrence((prev) => ({
+      ...prev,
+      [portfolio.strategy_id]: true,
+    }));
+    setRecurrenceError(null);
+
+    try {
+      const url = `${config.base_url}/api/strategies/recurrence/${userData.user.id}/${portfolio.strategy_id}`;
+      const headers = {
+        "x-auth-token": userData.token,
+      };
+
+      await Axios.patch(url, { recurrence: newRecurrence }, { headers });
+      if (typeof refreshPortfolios === "function") {
+        await refreshPortfolios();
+      }
+    } catch (error) {
+      setRecurrenceError(error.response?.data?.message || error.message);
+    } finally {
+      setUpdatingRecurrence((prev) => ({
+        ...prev,
+        [portfolio.strategy_id]: false,
+      }));
+    }
+  };
+
 
   return (
     <React.Fragment>
@@ -101,6 +134,11 @@ const Portfolios = ({ portfolios, onViewStrategyLogs }) => {
         </IconButton>
         Strategies portfolios
       </Title>
+      {recurrenceError && (
+        <Typography color="error" sx={{ ml: 6, mb: 1 }}>
+          {recurrenceError}
+        </Typography>
+      )}
 
       <Collapse in={openStrategies}>
         {portfolios.map((portfolio) => {
@@ -134,6 +172,19 @@ const Portfolios = ({ portfolios, onViewStrategyLogs }) => {
             : '—';
           const totalDiffPct = allStocksHaveAvgCost && totalPurchaseTotal > 0
             ? ((totalCurrentTotal - totalPurchaseTotal) / totalPurchaseTotal) * 100
+            : null;
+          const cashLimitValue = Number(portfolio.cashLimit ?? portfolio.budget ?? null);
+          const limitBaseline = Number.isFinite(cashLimitValue) && cashLimitValue > 0 ? cashLimitValue : null;
+
+          const currentValueForLimit = allStocksHaveAvgCost ? totalCurrentTotal : null;
+          const limitDifference = limitBaseline !== null && currentValueForLimit !== null
+            ? currentValueForLimit - limitBaseline
+            : null;
+          const limitDiffPct = limitDifference !== null && limitBaseline > 0
+            ? (limitDifference / limitBaseline) * 100
+            : null;
+          const limitUsagePct = limitBaseline !== null && currentValueForLimit !== null && limitBaseline > 0
+            ? Math.min(100, Math.max(0, (currentValueForLimit / limitBaseline) * 100))
             : null;
 
 
@@ -180,10 +231,54 @@ const Portfolios = ({ portfolios, onViewStrategyLogs }) => {
               <Typography variant="body2" color="textSecondary" sx={{ ml: 6, mt: 0.5 }}>
                 Status: {formatStatus(portfolio.status)} · Frequency: {formatRecurrenceLabel(portfolio.recurrence)} · Next reallocation: {formatDateTime(portfolio.nextRebalanceAt)}
               </Typography>
+              <Box sx={{ display: "flex", alignItems: "center", ml: 6, mt: 1, gap: 1 }}>
+                <TextField
+                  select
+                  label="Rebalance frequency"
+                  size="small"
+                  value={portfolio.recurrence || ""}
+                  onChange={(event) => handleRecurrenceChange(portfolio, event.target.value)}
+                  disabled={!!updatingRecurrence[portfolio.strategy_id]}
+                  sx={{ minWidth: 220 }}
+                >
+                  {Object.entries(RECURRENCE_LABELS).map(([value, label]) => (
+                    <MenuItem key={value} value={value}>
+                      {label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                {updatingRecurrence[portfolio.strategy_id] && <CircularProgress size={18} />}
+              </Box>
               <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
                 Assets: {assetCount} · Purchase total: {purchaseSummary} · Current total: {currentSummary}{" "}
                 {totalDiffPct !== null ? `· Difference: ${totalDiffPct.toFixed(2)}%` : ''}
               </Typography>
+              {limitBaseline !== null && (
+                <React.Fragment>
+                  <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
+                    Cash limit: ${roundNumber(limitBaseline).toLocaleString()}
+                    {limitDifference !== null && (
+                      <>
+                        {" · "}
+                        {limitDifference >= 0 ? "▲" : "▼"} ${Math.abs(roundNumber(limitDifference)).toLocaleString()}
+                        {limitDiffPct !== null && ` (${limitDiffPct >= 0 ? "+" : "-"}${Math.abs(limitDiffPct).toFixed(2)}%)`}
+                      </>
+                    )}
+                  </Typography>
+                  {limitUsagePct !== null && (
+                    <Box sx={{ ml: 6, mt: 0.5, mr: 2 }}>
+                      <LinearProgress
+                        variant="determinate"
+                        value={limitUsagePct}
+                        color={limitDifference !== null && limitDifference < 0 ? "warning" : "success"}
+                      />
+                      <Typography variant="caption" color="textSecondary">
+                        {limitUsagePct.toFixed(1)}% of limit used
+                      </Typography>
+                    </Box>
+                  )}
+                </React.Fragment>
+              )}
               {portfolio.cashBuffer > 0 && (
                 <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
                   Cash buffer available: ${roundNumber(portfolio.cashBuffer).toLocaleString()}
