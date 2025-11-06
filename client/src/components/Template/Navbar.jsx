@@ -8,28 +8,28 @@ import InfoIcon from "@mui/icons-material/Info";
 import PsychologyIcon from '@mui/icons-material/Psychology';
 
 
-const Navbar = ({ currentPage, setCurrentPage }) => {
+const Navbar = ({ currentPage, onNavigate }) => {
  
  
  
   const onNewsButtonClick = (e) => {
     e.preventDefault();
-    setCurrentPage("news");
+    onNavigate("news");
   };
 
   const onDashboardButtonClick = (e) => {
     e.preventDefault();
-    setCurrentPage("dashboard");
+    onNavigate("dashboard");
   };
 
   const onStrategiesButtonClick = (e) => {
     e.preventDefault();
-    setCurrentPage("strategies");
+    onNavigate("strategies");
   };
 
   const onSearchButtonClick = (e) => {
     e.preventDefault();
-    setCurrentPage("search");
+    onNavigate("search");
   };
 
   return (

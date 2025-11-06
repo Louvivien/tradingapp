@@ -13,7 +13,6 @@ import {
   Paper,
   Button,
   Tab,
-  Alert,
   Tabs,
   MenuItem,
 } from "@mui/material";
@@ -131,7 +130,8 @@ const Strategies = () => {
 
 
   const handleLibrarySelect = (event) => {
-    setLibrarySelection(event.target.value);
+    const { value } = event.target;
+    setLibrarySelection(value);
   };
 
   const handleLoadSavedStrategy = () => {
@@ -148,7 +148,7 @@ const Strategies = () => {
   };
 
   const handleCollaborativeChange = (event) => {
-    const value = event.target.value;
+    const { value } = event.target;
     setcollaborative(value);
     if (activeLibraryStrategyId && value !== loadedStrategyContent) {
       setActiveLibraryStrategyId(null);
@@ -468,14 +468,9 @@ return (
 
         <div>
           <br />
-          <Alert severity="warning">We are currently experiencing technical{" "}         
-          <Link href="https://github.com/Louvivien/tradingapp/issues/4" target="_blank" rel="noopener noreferrer">
-          issues
-      </Link> with this feature </Alert>
-          <br />
     <Typography variant="body1" size="small">
       Here you can copy paste a strategy from{" "}  
-      <Link href="https://www.composer.trade/" target="_blank" rel="noopener noreferrer">
+      <Link href="https://app.composer.trade/discover?sort=annualized_return&dir=desc" target="_blank" rel="noopener noreferrer">
          Composer
       </Link>
     </Typography>

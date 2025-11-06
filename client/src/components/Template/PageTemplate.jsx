@@ -89,6 +89,7 @@ const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, ini
     id: initialStrategyId,
     name: initialStrategyName,
   });
+  const isStrategyLogsRoute = /^\/strategies\/[^/]+\/logs/.test(location.pathname);
 
 
 
@@ -127,7 +128,6 @@ const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, ini
   }, [initialPage]);
 
   useEffect(() => {
-    const isStrategyLogsRoute = /^\/strategies\/[^/]+\/logs/.test(location.pathname);
     if (isStrategyLogsRoute) {
       if (currentPage !== "strategyLogs") {
         setCurrentPage("strategyLogs");
@@ -139,7 +139,7 @@ const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, ini
         name: "",
       });
     }
-  }, [location.pathname, currentPage]);
+  }, [isStrategyLogsRoute, currentPage]);
 
 
   const logout = () => {
@@ -183,6 +183,22 @@ const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, ini
     });
     setCurrentPage("strategyLogs");
     navigate(`/strategies/${id}/logs?name=${encodeURIComponent(name || "")}`);
+  };
+
+  const handleNavigation = (page) => {
+    if (page === "strategyLogs") {
+      return;
+    }
+    if (isStrategyLogsRoute) {
+      navigate("/");
+    }
+    if (page !== "strategyLogs") {
+      setSelectedStrategyForLogs({
+        id: null,
+        name: "",
+      });
+    }
+    setCurrentPage(page);
   };
 
   // console.log("userData.user ", userData.user);
@@ -244,7 +260,7 @@ const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, ini
         </div>
         <Divider />
         <List>
-          <Navbar currentPage={currentPage} setCurrentPage={setCurrentPage} />
+          <Navbar currentPage={currentPage} onNavigate={handleNavigation} />
         </List>
         <Divider />
         <List>
