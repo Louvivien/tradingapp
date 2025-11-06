@@ -1,5 +1,7 @@
 const Axios = require("axios");
 const { getAlpacaConfig } = require("../config/alpacaConfig");
+const { runIndicatorsViaCodeInterpreter } = require("../utils/openaiCodeIndicators");
+const { runComposerStrategy } = require("../utils/openaiComposerStrategy");
 
 exports.getStockMetaData = async (req, res) => {
   try {
@@ -196,6 +198,79 @@ const getRandomTicker = () => {
     ticker: data.stockData[randomIndex].ticker,
     name: data.stockData[randomIndex].name,
   };
+};
+
+exports.getWorkflowIndicators = async (req, res) => {
+  try {
+    const { ticker } = req.params;
+    if (!ticker) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Ticker is required.",
+      });
+    }
+
+    const upperTicker = String(ticker).trim().toUpperCase();
+
+    const output = await runIndicatorsViaCodeInterpreter(upperTicker);
+
+    const result = {
+      symbol: output.symbol || upperTicker,
+      ma10_return: output.ma10_return ?? null,
+      stdev63_return: output.stdev63_return ?? null,
+      ma100_close: output.ma100_close ?? null,
+    };
+
+    return res.status(200).json({
+      status: "success",
+      data: result,
+      raw: output,
+    });
+  } catch (error) {
+    console.error('[WorkflowIndicators]', error);
+    return res.status(500).json({
+      status: "fail",
+      message: error.message || "Failed to compute indicators via workflow.",
+    });
+  }
+};
+
+exports.evaluateComposerStrategy = async (req, res) => {
+  try {
+    const { strategyText, budget } = req.body || {};
+    if (!strategyText || typeof strategyText !== 'string' || !strategyText.trim()) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'strategyText (Composer defsymphony script) is required.',
+      });
+    }
+
+    const parsedBudget = Number.isFinite(Number(budget)) && Number(budget) > 0 ? Number(budget) : 1000;
+
+    const composerResult = await runComposerStrategy({
+      strategyText,
+      budget: parsedBudget,
+    });
+
+    if (!composerResult || !Array.isArray(composerResult.positions) || !composerResult.positions.length) {
+      return res.status(502).json({
+        status: 'fail',
+        message: 'Composer evaluation returned no positions.',
+        raw: composerResult,
+      });
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      data: composerResult,
+    });
+  } catch (error) {
+    console.error('[ComposerStrategy]', error);
+    return res.status(500).json({
+      status: 'fail',
+      message: error.message || 'Composer evaluation failed.',
+    });
+  }
 };
 
 exports.getRandomStockData = async (req, res) => {

@@ -7,6 +7,10 @@ import UserContext from "./context/UserContext";
 import Axios from "axios";
 import config from "./config/Config";
 
+// Debug log for API base resolution
+// eslint-disable-next-line no-console
+console.log("[App] API base URL:", config.base_url);
+
 const StrategyLogsRoute = () => {
   const { strategyId } = useParams();
   const location = useLocation();

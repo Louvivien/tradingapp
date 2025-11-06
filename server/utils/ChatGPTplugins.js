@@ -17,7 +17,8 @@ const extractGPT = async (input) => {
     "Return an object with three keys: `summary`, `positions`, and `decisions`. " +
     "`summary` must describe the overall investment thesis (Markdown allowed). " +
     "`positions` must be an array of objects containing the keys 'Asset name', 'Asset ticker', 'Quantity', and 'Total Cost'. " +
-    "`decisions` must be an array where each element links a symbol to the precise signals or reasoning that triggered the buy (fields: 'Asset ticker' and 'Rationale').";
+    "`decisions` must be an array where each element links a symbol to the precise signals or reasoning that triggered the buy (fields: 'Asset ticker' and 'Rationale'). " +
+    "Inputs may contain Composer/defsymphony-style DSL (e.g., weight-equal, select-top). Interpret these constructs: extract every `asset` ticker, apply equal weights when precise quantities cannot be derived, and describe the selection logic in the rationale. If numeric outputs are impossible, provide proportional allocations and explain the assumptions.";
 
   try {
     console.log("Sending request to OpenAI chat completions...");

@@ -16,10 +16,314 @@ const { distance } = require('fastest-levenshtein');
 const Axios = require("axios");
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('../services/strategyLogger');
+const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
 
-
+const RECURRENCE_LABELS = {
+  every_minute: 'Every minute',
+  every_5_minutes: 'Every 5 minutes',
+  every_15_minutes: 'Every 15 minutes',
+  hourly: 'Hourly',
+  daily: 'Daily',
+  weekly: 'Weekly',
+  monthly: 'Monthly',
+};
 
 const VALID_RECURRENCES = new Set(['every_minute','every_5_minutes','every_15_minutes','hourly','daily','weekly','monthly']);
+
+const formatCurrency = (value) => {
+  const num = toNumber(value, null);
+  if (!Number.isFinite(num)) {
+    return null;
+  }
+  return `$${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+const formatSharePrice = (value) => {
+  const num = toNumber(value, null);
+  if (!Number.isFinite(num)) {
+    return null;
+  }
+  return `$${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+const formatPercentage = (value) => {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  return `${value.toFixed(1)}%`;
+};
+
+const formatDateTimeHuman = (value) => {
+  if (!value) {
+    return '—';
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date?.getTime())) {
+    return String(value);
+  }
+  return date.toLocaleString();
+};
+
+const formatRecurrenceLabel = (value) => {
+  const normalized = normalizeRecurrence(value);
+  return RECURRENCE_LABELS[normalized] || normalized;
+};
+
+const mapDecisionRationales = (decisions = []) => {
+  const rationaleMap = new Map();
+  decisions.forEach((decision) => {
+    const symbol = sanitizeSymbol(
+      decision?.['Asset ticker']
+        || decision?.symbol
+        || decision?.ticker
+        || decision?.Ticker
+    );
+    if (!symbol) {
+      return;
+    }
+    const rationale =
+      decision?.Rationale
+      || decision?.rationale
+      || decision?.reason
+      || decision?.explanation
+      || '';
+    if (rationale) {
+      rationaleMap.set(symbol, rationale.trim());
+    }
+  });
+  return rationaleMap;
+};
+
+const extractTickersFromScript = (script) => {
+  if (!script || typeof script !== 'string') {
+    return [];
+  }
+  const tickers = new Set();
+  const assetRegex = /\(asset\s+"([A-Z][A-Z0-9\.]{0,9})"\s+"[^"]*"\)/g;
+  let match;
+  while ((match = assetRegex.exec(script)) !== null) {
+    tickers.add(match[1]);
+  }
+  if (!tickers.size) {
+    // Fallback: look for quoted tickers (all caps, <=6 chars) not immediately preceded by letters
+    const genericRegex = /"([A-Z]{2,10}(?:\.[A-Z0-9]{1,4})?)"/g;
+    while ((match = genericRegex.exec(script)) !== null) {
+      const candidate = match[1];
+      if (/^[A-Z]{1,6}(?:\.[A-Z0-9]{1,4})?$/.test(candidate)) {
+        tickers.add(candidate);
+      }
+    }
+  }
+  return Array.from(tickers);
+};
+
+const buildFallbackFromRawStrategy = (strategyText) => {
+  const tickers = extractTickersFromScript(strategyText);
+  if (!tickers.length) {
+    return null;
+  }
+  const weight = 1 / tickers.length;
+  const positions = tickers.map((ticker) => ({
+    symbol: ticker,
+    targetWeight: weight,
+    targetQuantity: null,
+    targetValue: null,
+  }));
+  const decisions = tickers.map((ticker) => ({
+    symbol: ticker,
+    Rationale: 'Allocated via fallback parser; original script requires runtime filters so an equal-weight plan is used.',
+  }));
+  const summary = `Fallback allocation: equal-weight exposure across ${tickers.length} tickers parsed from the provided strategy script.`;
+  return { positions, decisions, summary };
+};
+
+const validateAlpacaTradableSymbols = async (alpacaConfig, symbols = []) => {
+  if (!alpacaConfig?.getTradingKeys || !Array.isArray(symbols) || !symbols.length) {
+    return { tradable: [], invalid: [] };
+  }
+
+  const tradingKeys = alpacaConfig.getTradingKeys();
+  if (!tradingKeys?.client || !tradingKeys?.apiUrl || !tradingKeys?.keyId || !tradingKeys?.secretKey) {
+    return { tradable: [], invalid: [] };
+  }
+
+  const uniqueSymbols = Array.from(
+    new Set(
+      symbols
+        .map((symbol) => (typeof symbol === 'string' ? symbol.trim().toUpperCase() : null))
+        .filter(Boolean)
+    )
+  );
+
+  if (!uniqueSymbols.length) {
+    return { tradable: [], invalid: [] };
+  }
+
+  const tradable = [];
+  const invalid = [];
+
+  await Promise.all(
+    uniqueSymbols.map(async (symbol) => {
+      try {
+        const { data } = await tradingKeys.client.get(
+          `${tradingKeys.apiUrl}/v2/assets/${encodeURIComponent(symbol)}`,
+          {
+            headers: {
+              'APCA-API-KEY-ID': tradingKeys.keyId,
+              'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+            },
+          }
+        );
+
+        const assetStatus = (data?.status || '').toLowerCase();
+        const isTradable = data?.tradable !== false && (assetStatus === '' || assetStatus === 'active');
+        if (isTradable) {
+          tradable.push(symbol);
+        } else {
+          console.warn(`[AlpacaValidation] ${symbol} is not tradable (status: ${data?.status}, tradable: ${data?.tradable}).`);
+          invalid.push(symbol);
+        }
+      } catch (error) {
+        const message = error?.response?.data?.message || error.message;
+        console.warn(`[AlpacaValidation] Unable to validate ${symbol}: ${message}`);
+        invalid.push(symbol);
+      }
+    })
+  );
+
+  return { tradable, invalid };
+};
+
+const buildCreationHumanSummary = ({
+  strategyName,
+  summaryText,
+  decisions = [],
+  orders = [],
+  recurrence,
+  nextRebalanceAt = null,
+  cashLimit = null,
+  initialInvestment = null,
+  status = 'executed',
+  originalScript = null,
+  reasoning = [],
+  tooling = null,
+}) => {
+  const lines = [];
+  const statusLabel = status === 'pending'
+    ? 'prepared (orders queued while market is closed)'
+    : 'initialized';
+
+  lines.push(`Strategy "${strategyName}" ${statusLabel}.`);
+  lines.push(`• Rebalance cadence: ${formatRecurrenceLabel(recurrence)}.`);
+
+  if (cashLimit !== null) {
+    const cashLine = formatCurrency(cashLimit);
+    if (cashLine) {
+      lines.push(`• Cash limit: ${cashLine}.`);
+    }
+  }
+
+  if (initialInvestment !== null) {
+    const investmentLine = formatCurrency(initialInvestment);
+    if (investmentLine) {
+      lines.push(`• Initial capital earmarked: ${investmentLine}.`);
+    }
+  }
+
+  if (nextRebalanceAt) {
+    lines.push(`• Next scheduled rebalance: ${formatDateTimeHuman(nextRebalanceAt)}.`);
+  }
+
+  if (summaryText) {
+    lines.push('');
+    lines.push('Strategy overview:');
+    summaryText
+      .split(/\n+/)
+      .map((paragraph) => paragraph.trim())
+      .filter(Boolean)
+      .forEach((paragraph) => {
+        lines.push(`• ${paragraph}`);
+      });
+  }
+
+  const decisionsMap = mapDecisionRationales(decisions);
+  if (decisionsMap.size) {
+    lines.push('');
+    lines.push('Rationale by asset:');
+    Array.from(decisionsMap.entries()).forEach(([symbol, rationale]) => {
+      lines.push(`• ${symbol}: ${rationale}`);
+    });
+  }
+
+  if (tooling?.codeInterpreter?.used) {
+    lines.push('');
+    lines.push('Tooling:');
+    lines.push('• Code interpreter executed the Composer defsymphony evaluation to compute strategy metrics.');
+    const tickers = Array.isArray(tooling.codeInterpreter.tickers)
+      ? tooling.codeInterpreter.tickers.filter(Boolean)
+      : [];
+    if (tickers.length) {
+      lines.push(`• Instrument universe parsed: ${tickers.join(', ')}.`);
+    }
+    const blueprint = Array.isArray(tooling.codeInterpreter.blueprint)
+      ? tooling.codeInterpreter.blueprint.filter(Boolean)
+      : [];
+    if (blueprint.length) {
+      lines.push(`• Evaluation steps: ${blueprint.join(' -> ')}.`);
+    }
+  }
+
+  if (Array.isArray(reasoning) && reasoning.length) {
+    lines.push('');
+    lines.push('Agent reasoning:');
+    reasoning.forEach((entry) => {
+      if (entry) {
+        lines.push(`• ${entry}`);
+      }
+    });
+  }
+
+  if (orders.length) {
+    lines.push('');
+    lines.push(status === 'pending' ? 'Orders to submit:' : 'Orders executed:');
+    orders.forEach((order) => {
+      const symbol = sanitizeSymbol(order.symbol);
+      const qty = toNumber(order.qty, null);
+      if (!symbol || !qty) {
+        return;
+      }
+      const price = formatSharePrice(order.price || (order.cost && qty ? order.cost / qty : null));
+      const weight = Number.isFinite(order.targetWeight)
+        ? formatPercentage(order.targetWeight * 100)
+        : null;
+      const rationale = decisionsMap.get(symbol);
+      const segments = [
+        `BUY ${qty} ${symbol}`,
+        price ? `@ approx. ${price}` : null,
+        weight ? `(target weight ${weight})` : null,
+      ].filter(Boolean);
+      let line = `• ${segments.join(' ')}`;
+      if (rationale) {
+        line += ` — ${rationale}`;
+      }
+      lines.push(line);
+    });
+  }
+
+  if (status === 'pending') {
+    lines.push('');
+    lines.push('Orders will be sent automatically once markets reopen.');
+  }
+
+  if (originalScript) {
+    lines.push('');
+    lines.push('Original strategy script:');
+    lines.push(originalScript);
+  }
+
+  return lines.join('\n');
+};
+
 
 
 //Work in progress: prompt engineering (see jira https://ai-trading-bot.atlassian.net/browse/AI-76)
@@ -153,8 +457,39 @@ const estimateInitialInvestment = (targets = [], budget = null) => {
 
 exports.createCollaborative = async (req, res) => {
   try {
-    let input = req.body.collaborative;
     const UserID = req.body.userID;
+    const userKey = String(UserID || '');
+    const sourceStrategyId = req.body.sourceStrategyId;
+    let input = typeof req.body.collaborative === 'string' ? req.body.collaborative : '';
+
+    if (!userKey || req.user !== userKey) {
+      return res.status(403).json({
+        status: "fail",
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    if ((!input || !input.trim()) && sourceStrategyId) {
+      const storedStrategy = await Strategy.findOne({
+        strategy_id: sourceStrategyId,
+        userId: userKey,
+      });
+      if (!storedStrategy) {
+        return res.status(404).json({
+          status: "fail",
+          message: "Selected strategy could not be found.",
+        });
+      }
+      input = storedStrategy.strategy || '';
+    }
+
+    if (!input || !input.trim()) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Please provide a strategy description.",
+      });
+    }
+
     const rawStrategyName = typeof req.body.strategyName === 'string' ? req.body.strategyName.trim() : '';
     if (!rawStrategyName) {
       return res.status(400).json({
@@ -163,12 +498,16 @@ exports.createCollaborative = async (req, res) => {
       });
     }
     const strategyName = rawStrategyName;
-    const strategy = input;
 
     if (/Below is a trading[\s\S]*strategy does\?/.test(input)) {
       input = input.replace(/Below is a trading[\s\S]*strategy does\?/, "");
     }
 
+    const strategy = input;
+    const cashLimitInput = toNumber(
+      req.body?.cashLimit !== undefined ? req.body.cashLimit : req.body?.budget,
+      null
+    );
     const parseJsonData = (fullMessage) => {
       if (!fullMessage) {
         throw new Error("Empty response from OpenAI");
@@ -196,7 +535,10 @@ exports.createCollaborative = async (req, res) => {
       }
     };
 
-    const existingStrategy = await Strategy.findOne({ name: strategyName });
+    const existingStrategy = await Strategy.findOne({
+      userId: userKey,
+      name: strategyName,
+    });
     if (existingStrategy) {
       return res.status(409).json({
         status: "fail",
@@ -204,23 +546,78 @@ exports.createCollaborative = async (req, res) => {
       });
     }
 
-    let parsedResult;
+    let workingPositions = [];
+    let workingSummary = '';
+    let workingDecisions = [];
+    let composerUsed = false;
+    let composerReasoning = [];
+    let composerMeta = null;
+
     try {
-      parsedResult = await extractGPT(input).then(parseJsonData);
-    } catch (error) {
-      console.error('Error in extractGPT:', error);
-      return res.status(400).json({
-        status: "fail",
-        message: error.message,
+      const composerResult = await runComposerStrategy({
+        strategyText: strategy,
+        budget: cashLimitInput,
       });
+
+      if (composerResult?.positions?.length) {
+        composerUsed = true;
+        workingSummary = composerResult.summary || '';
+        composerReasoning = Array.isArray(composerResult.reasoning) ? composerResult.reasoning : [];
+        composerMeta = composerResult.meta || composerMeta;
+        if (Array.isArray(composerResult.reasoning) && composerResult.reasoning.length) {
+          workingDecisions = composerResult.reasoning.map((text, index) => ({
+            symbol: composerResult.positions[index]?.symbol || `STEP_${index + 1}`,
+            Rationale: text,
+          }));
+        }
+
+        workingPositions = composerResult.positions
+          .map((pos) => {
+            const symbol = sanitizeSymbol(pos.symbol);
+            const weight = toNumber(pos.weight, null);
+            const quantity = toNumber(pos.quantity, null);
+            const cost = toNumber(pos.estimated_cost, null);
+            if (!symbol) {
+              return null;
+            }
+            return {
+              symbol,
+              targetWeight: Number.isFinite(weight) ? weight : null,
+              targetQuantity: Number.isFinite(quantity) ? quantity : null,
+              targetValue: Number.isFinite(cost) ? cost : null,
+              rationale: pos.rationale || null,
+            };
+          })
+          .filter(Boolean);
+
+        if (!workingDecisions.length && Array.isArray(composerResult.positions)) {
+          workingDecisions = composerResult.positions.map((pos) => ({
+            symbol: sanitizeSymbol(pos.symbol),
+            Rationale: pos.rationale || 'Selected by Composer evaluation.',
+          }));
+        }
+      }
+    } catch (error) {
+      console.error('[ComposerEvaluation]', error.message);
     }
 
-    const { positions, summary, decisions } = parsedResult;
+    if (!composerUsed) {
+      let parsedResult;
+      try {
+        parsedResult = await extractGPT(input).then(parseJsonData);
+      } catch (error) {
+        console.error('Error in extractGPT:', error);
+        return res.status(400).json({
+          status: "fail",
+          message: error.message,
+        });
+      }
+
+      workingPositions = Array.isArray(parsedResult.positions) ? parsedResult.positions : [];
+      workingSummary = parsedResult.summary || '';
+      workingDecisions = Array.isArray(parsedResult.decisions) ? parsedResult.decisions : [];
+    }
     const recurrence = normalizeRecurrence(req.body?.recurrence);
-    const cashLimitInput = toNumber(
-      req.body?.cashLimit !== undefined ? req.body.cashLimit : req.body?.budget,
-      null
-    );
 
     if (!cashLimitInput || cashLimitInput <= 0) {
       return res.status(400).json({
@@ -229,18 +626,32 @@ exports.createCollaborative = async (req, res) => {
       });
     }
 
-    const normalizedTargets = normalizeTargetPositions(positions);
+    let normalizedTargets = normalizeTargetPositions(workingPositions);
     if (!normalizedTargets.length) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Unable to determine target positions for this strategy.",
-      });
+      const fallbackPlan = buildFallbackFromRawStrategy(strategy);
+      if (!fallbackPlan) {
+        return res.status(400).json({
+          status: "fail",
+          message: "Unable to determine target positions for this strategy.",
+        });
+      }
+      workingPositions = fallbackPlan.positions;
+      normalizedTargets = normalizeTargetPositions(workingPositions);
+      if (!normalizedTargets.length) {
+        return res.status(400).json({
+          status: "fail",
+          message: "Unable to derive a tradable allocation from this strategy.",
+        });
+      }
+      workingSummary = [workingSummary, fallbackPlan.summary].filter(Boolean).join('\n\n') || fallbackPlan.summary;
+      workingDecisions = [...workingDecisions, ...fallbackPlan.decisions];
+      composerReasoning = composerReasoning.length ? composerReasoning : ['Applied equal-weight fallback due to missing parsed targets.'];
     }
 
-    console.log('Strategy summary: ', summary || 'No summary provided.');
-    console.log('Orders payload: ', JSON.stringify(positions, null, 2));
-    if (decisions?.length) {
-      console.log('Decision rationale:', JSON.stringify(decisions, null, 2));
+    console.log('Strategy summary: ', workingSummary || 'No summary provided.');
+    console.log('Orders payload: ', JSON.stringify(workingPositions, null, 2));
+    if (workingDecisions?.length) {
+      console.log('Decision rationale:', JSON.stringify(workingDecisions, null, 2));
     }
 
     const alpacaConfig = await getAlpacaConfig(UserID);
@@ -278,6 +689,14 @@ exports.createCollaborative = async (req, res) => {
       });
     }
 
+    const { invalid: nonTradableSymbols } = await validateAlpacaTradableSymbols(alpacaConfig, uniqueSymbols);
+    if (nonTradableSymbols.length) {
+      return res.status(400).json({
+        status: "fail",
+        message: `The following tickers are not tradable on Alpaca: ${nonTradableSymbols.join(', ')}.`,
+      });
+    }
+
     const priceMap = {};
 
     if (dataKeys?.client && dataKeys?.apiUrl && dataKeys?.keyId && dataKeys?.secretKey) {
@@ -309,6 +728,7 @@ exports.createCollaborative = async (req, res) => {
       .sort((a, b) => (b.targetWeight || 0) - (a.targetWeight || 0));
 
     const orderPlan = [];
+    const symbolsWithoutPrices = new Set();
     let plannedCost = 0;
 
     const resolveFallbackPrice = (target) => {
@@ -330,6 +750,7 @@ exports.createCollaborative = async (req, res) => {
 
       if (!price || price <= 0) {
         console.warn(`Skipping ${symbol}; unable to determine a valid price.`);
+        symbolsWithoutPrices.add(symbol);
         continue;
       }
 
@@ -386,6 +807,12 @@ exports.createCollaborative = async (req, res) => {
 
     const finalizedPlan = orderPlan.filter((entry) => entry.qty > 0);
     if (!finalizedPlan.length) {
+      if (symbolsWithoutPrices.size) {
+        return res.status(400).json({
+          status: "fail",
+          message: `Unable to fetch market prices for: ${Array.from(symbolsWithoutPrices).join(', ')}. Please verify these tickers or try again later.`,
+        });
+      }
       return res.status(400).json({
         status: "fail",
         message: "Cash limit is too low to purchase any assets for this strategy.",
@@ -455,6 +882,11 @@ exports.createCollaborative = async (req, res) => {
         targetPositions: executedTargets,
         recurrence,
         initialInvestment: initialInvestmentEstimate,
+        summary: workingSummary,
+        decisions: workingDecisions,
+        reasoning: composerReasoning,
+        orderPlan: finalizedPlan,
+        composerMeta,
       }
     );
 
@@ -469,9 +901,12 @@ exports.createCollaborative = async (req, res) => {
     return res.status(200).json({
       status: "success",
       orders,
-      summary: summary || "",
-      decisions: decisions || [],
+      summary: workingSummary || "",
+      decisions: workingDecisions || [],
+      reasoning: composerReasoning || [],
       schedule,
+      strategyId: portfolioRecord?.strategy_id || null,
+      strategyName,
     });
   } catch (error) {
     console.error(`Error in createCollaborative:`, error);
@@ -491,12 +926,27 @@ exports.createCollaborative = async (req, res) => {
       // Get the strategy ID from the request parameters
       const strategyId = req.params.strategyId;
       const UserID = req.params.userId;
-  
+      const userKey = String(UserID || '');
+
+      if (!userKey || req.user !== userKey) {
+        return res.status(403).json({
+          status: "fail",
+          message: "Credentials couldn't be validated.",
+        });
+      }
+
       console.log('strategyId', strategyId);
-  
-      // Find the strategy in the database
-      const strategy = await Strategy.findOne({ strategy_id: strategyId });
-  
+
+      const strategy = await Strategy.findOne({
+        strategy_id: strategyId,
+        $or: [
+          { userId: userKey },
+          { userId: { $exists: false } },
+          { userId: null },
+          { userId: '' },
+        ],
+      });
+
       if (!strategy) {
         return res.status(404).json({
           status: "fail",
@@ -505,8 +955,8 @@ exports.createCollaborative = async (req, res) => {
       }
   
       // Find the portfolio in the database
-      const portfolio = await Portfolio.findOne({ strategy_id: strategyId });
-  
+      const portfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: userKey });
+
       if (!portfolio) {
         return res.status(404).json({
           status: "fail",
@@ -515,7 +965,15 @@ exports.createCollaborative = async (req, res) => {
       }
   
       // Delete the strategy
-      await Strategy.deleteOne({ strategy_id: strategyId })
+      await Strategy.deleteOne({
+        strategy_id: strategyId,
+        $or: [
+          { userId: userKey },
+          { userId: { $exists: false } },
+          { userId: null },
+          { userId: '' },
+        ],
+      })
       .catch(error => {
         console.error(`Error deleting strategy: ${error}`);
         return res.status(500).json({
@@ -525,7 +983,7 @@ exports.createCollaborative = async (req, res) => {
       });
   
       // Delete the portfolio
-      await Portfolio.deleteOne({ strategy_id: strategyId })
+      await Portfolio.deleteOne({ strategy_id: strategyId, userId: userKey })
       .catch(error => {
         console.error(`Error deleting portfolio: ${error}`);
         return res.status(500).json({
@@ -534,10 +992,37 @@ exports.createCollaborative = async (req, res) => {
         });
       });
   
-      // Send a sell order for all the stocks in the portfolio
       const alpacaConfig = await getAlpacaConfig(UserID);
       const alpacaApi = new Alpaca(alpacaConfig);
-  
+      const clock = await alpacaApi.getClock().catch((error) => {
+        console.error('Failed to retrieve market clock for deletion:', error.message);
+        return null;
+      });
+
+      const marketOpen = clock?.is_open === true;
+
+      if (!marketOpen) {
+        console.log('[Delete Strategy] Market closed, skipping liquidation orders.');
+        await recordStrategyLog({
+          strategyId,
+          userId: userKey,
+          strategyName: strategy.name,
+          message: 'Strategy deleted while market closed',
+          details: {
+            liquidationAttempted: false,
+            humanSummary: [
+              `Strategy "${strategy.name}" deleted while markets were closed.`,
+              '• No liquidation orders were sent; positions remain until the next trading session.',
+            ].join('\n'),
+          },
+        });
+        return res.status(200).json({
+          status: "success",
+          message: "Strategy deleted. Market was closed, so no liquidation orders were placed.",
+          sellOrders: [],
+        });
+      }
+
       let sellOrderPromises = portfolio.stocks.map(stock => {
         return alpacaApi.createOrder({
           symbol: stock.symbol,
@@ -600,15 +1085,26 @@ exports.createCollaborative = async (req, res) => {
 
   //still it does not use all the budget it seems
  
- exports.enableAIFund = async (req, res) => {
+exports.enableAIFund = async (req, res) => {
     try {
         let budget = toNumber(req.body.budget, 0);
         const UserID = req.body.userID;
+        const userKey = String(UserID || '');
         const strategyName = req.body.strategyName;
         const strategy = "AiFund";
         const recurrence = normalizeRecurrence(req.body?.recurrence);
 
-        const existingStrategy = await Strategy.findOne({ name: strategyName });
+        if (!userKey || req.user !== userKey) {
+          return res.status(403).json({
+            status: "fail",
+            message: "Credentials couldn't be validated.",
+          });
+        }
+
+        const existingStrategy = await Strategy.findOne({
+          userId: userKey,
+          name: strategyName,
+        });
         if (existingStrategy) {
           return res.status(409).json({
             status: "fail",
@@ -626,7 +1122,8 @@ exports.createCollaborative = async (req, res) => {
           return {
             'Asset ticker': asset.Ticker,
             'Quantity': 0, // Quantity will be calculated later
-            'Current Price': 0 // Current price will be updated later
+            'Current Price': 0, // Current price will be updated later
+            'Score': asset.Score,
           };
         });
   
@@ -738,7 +1235,29 @@ exports.createCollaborative = async (req, res) => {
       }
 
           
-        
+        const aiFundDecisions = orderList.map((asset) => {
+          const symbol = sanitizeSymbol(asset['Asset ticker']);
+          if (!symbol) {
+            return null;
+          }
+          const score = toNumber(asset['Score'], null);
+          const quantity = toNumber(asset['Quantity'], null);
+          const rationaleSegments = [];
+          if (Number.isFinite(score)) {
+            rationaleSegments.push(`sentiment score ${score.toFixed(2)}`);
+          }
+          if (Number.isFinite(quantity)) {
+            rationaleSegments.push(`allocating ${quantity} shares`);
+          }
+          const rationale = rationaleSegments.length
+            ? `${rationaleSegments.join(' → ')}.`
+            : 'Allocated by sentiment ranking.';
+          return {
+            symbol,
+            Rationale: rationale,
+          };
+        }).filter(Boolean);
+
               const normalizedTargets = normalizeTargetPositions(
                 orderList.map((asset) => ({
                   symbol: asset['Asset ticker'],
@@ -801,13 +1320,21 @@ exports.createCollaborative = async (req, res) => {
           strategyName,
           orders,
           UserID,
-          {
-            budget,
-            targetPositions: normalizedTargets,
-            recurrence,
-            initialInvestment: initialInvestmentEstimate,
-          }
-        );
+        {
+          budget,
+          targetPositions: normalizedTargets,
+          recurrence,
+          initialInvestment: initialInvestmentEstimate,
+          summary: 'AI Fund strategy generated from latest sentiment scoring.',
+          decisions: aiFundDecisions,
+          orderPlan: orderList.map((item) => ({
+            symbol: item['Asset ticker'],
+            qty: toNumber(item['Quantity'], null),
+            price: toNumber(item['Current Price'], null),
+            targetWeight: null,
+          })),
+        }
+      );
 
         const schedule = portfolioRecord
           ? {
@@ -821,6 +1348,8 @@ exports.createCollaborative = async (req, res) => {
         status: "success",
         orders,
         schedule,
+        strategyId: portfolioRecord?.strategy_id || null,
+        strategyName,
       });
     } catch (error) {
       console.error(`Error in enableAIFund: ${error}`);
@@ -847,12 +1376,20 @@ exports.disableAIFund = async (req, res) => {
       try {
         // Get the strategy ID 
         const strategyId = "01";
-        const UserID = req.params.userId;
+        const UserID = req.body.userID;
+        const userKey = String(UserID || '');
+
+        if (!userKey || req.user !== userKey) {
+          return res.status(403).json({
+            status: "fail",
+            message: "Credentials couldn't be validated.",
+          });
+        }
     
         console.log('strategyId', strategyId);
     
         // Find the strategy in the database
-        const strategy = await Strategy.findOne({ strategy_id: strategyId });
+        const strategy = await Strategy.findOne({ strategy_id: strategyId, userId: userKey });
     
         if (!strategy) {
           return res.status(404).json({
@@ -862,7 +1399,7 @@ exports.disableAIFund = async (req, res) => {
         }
     
         // Find the portfolio in the database
-        const portfolio = await Portfolio.findOne({ strategy_id: strategyId });
+        const portfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: userKey });
     
         if (!portfolio) {
           return res.status(404).json({
@@ -872,7 +1409,7 @@ exports.disableAIFund = async (req, res) => {
         }
     
         // Delete the strategy
-        await Strategy.deleteOne({ strategy_id: strategyId })
+        await Strategy.deleteOne({ strategy_id: strategyId, userId: userKey })
         .catch(error => {
           console.error(`Error deleting strategy: ${error}`);
           return res.status(500).json({
@@ -882,7 +1419,7 @@ exports.disableAIFund = async (req, res) => {
         });
     
         // Delete the portfolio
-        await Portfolio.deleteOne({ strategy_id: strategyId })
+        await Portfolio.deleteOne({ strategy_id: strategyId, userId: userKey })
         .catch(error => {
           console.error(`Error deleting portfolio: ${error}`);
           return res.status(500).json({
@@ -1029,7 +1566,7 @@ exports.updateStrategyRecurrence = async (req, res) => {
       });
     }
 
-    const strategy = await Strategy.findOne({ strategy_id: strategyId });
+    const strategy = await Strategy.findOne({ strategy_id: strategyId, userId: String(userId) });
 
     const now = new Date();
     const nextRebalanceAt = computeNextRebalanceAt(normalizedRecurrence, now);
@@ -1294,8 +1831,14 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
     targetPositions = [],
     recurrence = 'daily',
     initialInvestment: initialInvestmentInput = null,
+    summary = '',
+    decisions = [],
+    reasoning = [],
+    orderPlan = null,
+    composerMeta = null,
   } = options || {};
   const limitValue = toNumber(cashLimit, null) ?? toNumber(budget, null);
+  const finalizedPlan = Array.isArray(orderPlan) ? orderPlan : [];
 
   let strategy_id;
 
@@ -1318,10 +1861,13 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
     }
 
     const strategy = new Strategy({
+      userId: String(UserID || ''),
       name: strategyName,
       strategy: strategyinput,
       strategy_id,
       recurrence: normalizedRecurrence,
+      summary: typeof summary === 'string' ? summary : '',
+      decisions: Array.isArray(decisions) ? decisions : [],
     });
 
     await strategy.save();
@@ -1359,17 +1905,70 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
       });
 
       const savedPortfolio = await portfolio.save();
+      const thoughtProcessPayload = {
+        summary: typeof summary === 'string' ? summary : '',
+        decisions: Array.isArray(decisions) ? decisions : [],
+      };
+
+      if (composerMeta?.codeInterpreter) {
+        thoughtProcessPayload.tooling = {
+          codeInterpreter: composerMeta.codeInterpreter,
+        };
+      }
+
+      if (Array.isArray(reasoning) && reasoning.length) {
+        thoughtProcessPayload.reasoning = reasoning;
+      }
+
+      const plannedOrders = finalizedPlan.map((entry) => {
+        const symbol = sanitizeSymbol(entry.symbol);
+        const qty = toNumber(entry.qty, null);
+        let cost = toNumber(entry.cost, null);
+        let price = toNumber(entry.price, null);
+        if (!Number.isFinite(cost) && Number.isFinite(price) && Number.isFinite(qty)) {
+          cost = price * qty;
+        }
+        if ((!Number.isFinite(price) || price === null) && Number.isFinite(cost) && Number.isFinite(qty) && qty > 0) {
+          price = cost / qty;
+        }
+        return {
+          symbol,
+          qty,
+          price,
+          cost,
+          targetWeight: toNumber(entry.targetWeight, null),
+        };
+      }).filter((entry) => entry.symbol && entry.qty > 0);
+
+      const baseDetails = {
+        recurrence: normalizedRecurrence,
+        initialInvestment: initialInvestmentEstimate,
+        cashLimit: toNumber(limitValue, null),
+        orderCount: plannedOrders.length,
+        orders: plannedOrders,
+        thoughtProcess: thoughtProcessPayload,
+        humanSummary: buildCreationHumanSummary({
+          strategyName,
+          summaryText: summary,
+          decisions,
+          reasoning,
+          orders: plannedOrders,
+          recurrence: normalizedRecurrence,
+          nextRebalanceAt: computeNextRebalanceAt(normalizedRecurrence, now),
+          cashLimit: toNumber(limitValue, null),
+          initialInvestment: initialInvestmentEstimate,
+          status: 'pending',
+          originalScript: strategy,
+          tooling: thoughtProcessPayload.tooling,
+        }),
+      };
+
       await recordStrategyLog({
         strategyId: strategy_id,
         userId: String(UserID),
         strategyName,
         message: 'Strategy created (orders pending fill)',
-        details: {
-          recurrence: normalizedRecurrence,
-          initialInvestment: initialInvestmentEstimate,
-          cashLimit: toNumber(limitValue, null),
-          orderCount: Array.isArray(orders) ? orders.length : 0,
-        },
+        details: baseDetails,
       });
       console.log('Portfolio for strategy ' + strategyName + ' has been created. Market is closed so the orders are not filled yet.');
       return savedPortfolio.toObject();
@@ -1446,18 +2045,75 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
     });
 
     const savedPortfolio = await portfolio.save();
+    const thoughtProcessPayload = {
+      summary: typeof summary === 'string' ? summary : '',
+      decisions: Array.isArray(decisions) ? decisions : [],
+    };
+
+    if (composerMeta?.codeInterpreter) {
+      thoughtProcessPayload.tooling = {
+        codeInterpreter: composerMeta.codeInterpreter,
+      };
+    }
+
+    if (Array.isArray(reasoning) && reasoning.length) {
+      thoughtProcessPayload.reasoning = reasoning;
+    }
+
+    const executedOrders = (Array.isArray(orderPlan) && orderPlan.length ? orderPlan : orders).map((entry) => {
+      const symbol = sanitizeSymbol(entry.symbol);
+      const qty = toNumber(entry.qty, null);
+      let cost = toNumber(entry.cost, null);
+      let price = toNumber(entry.price, null);
+      if (!Number.isFinite(cost) && Number.isFinite(price) && Number.isFinite(qty)) {
+        cost = price * qty;
+      }
+      if ((!Number.isFinite(price) || price === null) && Number.isFinite(cost) && Number.isFinite(qty) && qty > 0) {
+        price = cost / qty;
+      }
+      return {
+        symbol,
+        qty,
+        price,
+        cost,
+        targetWeight: toNumber(entry.targetWeight, null),
+      };
+    }).filter((entry) => entry.symbol && entry.qty > 0);
+
+    const logDetails = {
+      recurrence: normalizedRecurrence,
+      initialInvestment: determinedInitialInvestment,
+      cashBuffer,
+      cashLimit: toNumber(limitValue, null),
+      orderCount: executedOrders.length,
+      orders: executedOrders,
+    };
+
+    if (thoughtProcessPayload.summary || thoughtProcessPayload.decisions.length || thoughtProcessPayload.tooling) {
+      logDetails.thoughtProcess = thoughtProcessPayload;
+    }
+
+    logDetails.humanSummary = buildCreationHumanSummary({
+      strategyName,
+      summaryText: summary,
+      decisions,
+      reasoning,
+      orders: executedOrders.length ? executedOrders : orders,
+      recurrence: normalizedRecurrence,
+      nextRebalanceAt: portfolio.nextRebalanceAt,
+      cashLimit: toNumber(limitValue, null),
+      initialInvestment: determinedInitialInvestment,
+      status: 'executed',
+      originalScript: strategy,
+      tooling: thoughtProcessPayload.tooling,
+    });
+
     await recordStrategyLog({
       strategyId: strategy_id,
       userId: String(UserID),
       strategyName,
       message: 'Strategy created',
-      details: {
-        recurrence: normalizedRecurrence,
-        initialInvestment: determinedInitialInvestment,
-        cashBuffer,
-        cashLimit: toNumber(limitValue, null),
-        orderCount: Array.isArray(orders) ? orders.length : 0,
-      },
+      details: logDetails,
     });
     console.log('Portfolio for strategy ' + strategyName + ' has been created.');
     return savedPortfolio.toObject();
@@ -1535,23 +2191,46 @@ const getPricesData = async (stocks, marketOpen, userId) => {
 
 exports.getStrategies = async (req, res) => {
   try {
-    if (req.user !== req.params.userId) {
-      return res.status(200).json({
+    const userId = String(req.params.userId || '');
+    if (!userId || req.user !== userId) {
+      return res.status(403).json({
         status: "fail",
         message: "Credentials couldn't be validated.",
       });
     }
 
-    const strategies = await Strategy.find();
+    let strategies = await Strategy.find({ userId })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const hasUserAIFund = strategies.some((strategy) => strategy.strategy_id === '01');
+    if (!hasUserAIFund) {
+      const globalAIFund = await Strategy.findOne({
+        strategy_id: '01',
+        $or: [{ userId: null }, { userId: { $exists: false } }, { userId: '' }],
+      }).lean();
+      if (globalAIFund) {
+        strategies = [globalAIFund, ...strategies];
+      }
+    }
 
     return res.status(200).json({
       status: "success",
-      strategies: strategies
+      strategies: strategies.map((strategy) => ({
+        id: strategy.strategy_id,
+        name: strategy.name,
+        recurrence: strategy.recurrence,
+        strategy: strategy.strategy,
+        summary: strategy.summary || '',
+        decisions: Array.isArray(strategy.decisions) ? strategy.decisions : [],
+        createdAt: strategy.createdAt,
+        updatedAt: strategy.updatedAt,
+        isAIFund: strategy.strategy_id === '01',
+      })),
     });
-
   } catch (error) {
     console.error('Error fetching strategies:', error);
-    return res.status(200).json({
+    return res.status(500).json({
       status: "fail",
       message: "Something unexpected happened.",
     });

@@ -89,6 +89,11 @@ app.use(cors());
 
 // Logs
 app.use((req, res, next) => {
+  if (req.url.startsWith('//')) {
+    const originalUrl = req.url;
+    req.url = req.url.replace(/^\/+/, '/');
+    console.warn(`[HTTP] Normalized leading slashes: ${originalUrl} -> ${req.url}`);
+  }
   console.log(`[HTTP] Incoming ${req.method} request for ${req.url}`);
   next();
 });
@@ -191,5 +196,4 @@ const startServer = async () => {
 startServer();
 
 schedulePortfolioRebalances();
-
 

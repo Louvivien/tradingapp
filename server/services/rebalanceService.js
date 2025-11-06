@@ -3,8 +3,19 @@ const Strategy = require('../models/strategyModel');
 const { getAlpacaConfig } = require('../config/alpacaConfig');
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('./strategyLogger');
+const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
 
 const TOLERANCE = 0.01;
+
+const RECURRENCE_LABELS = {
+  every_minute: 'Every minute',
+  every_5_minutes: 'Every 5 minutes',
+  every_15_minutes: 'Every 15 minutes',
+  hourly: 'Hourly',
+  daily: 'Daily',
+  weekly: 'Weekly',
+  monthly: 'Monthly',
+};
 
 const toNumber = (value, fallback = 0) => {
   const num = Number(value);
@@ -16,6 +27,185 @@ const roundToTwo = (value) => {
     return null;
   }
   return Math.round((value + Number.EPSILON) * 100) / 100;
+};
+
+const formatCurrency = (value) => {
+  const num = toNumber(value, null);
+  if (!Number.isFinite(num)) {
+    return null;
+  }
+  return `$${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+const formatSharePrice = (value) => {
+  const num = toNumber(value, null);
+  if (!Number.isFinite(num)) {
+    return null;
+  }
+  return `$${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+};
+
+const formatPercentage = (value) => {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  return `${value.toFixed(1)}%`;
+};
+
+const formatDateTimeHuman = (value) => {
+  if (!value) {
+    return '—';
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date?.getTime())) {
+    return String(value);
+  }
+  return date.toLocaleString();
+};
+
+const formatRecurrenceLabel = (value) => {
+  const normalized = normalizeRecurrence(value);
+  return RECURRENCE_LABELS[normalized] || normalized;
+};
+
+const buildRebalanceHumanSummary = ({
+  strategyName,
+  recurrence,
+  executedSells = [],
+  executedBuys = [],
+  decisionTrace = [],
+  cashSummary = {},
+  nextRebalanceAt = null,
+  holds = [],
+  reasoning = [],
+  tooling = null,
+}) => {
+  const lines = [];
+  lines.push(`Rebalance completed for "${strategyName}".`);
+  lines.push(`• Cadence: ${formatRecurrenceLabel(recurrence)}.`);
+  if (nextRebalanceAt) {
+    lines.push(`• Next scheduled rebalance: ${formatDateTimeHuman(nextRebalanceAt)}.`);
+  }
+
+  if (Array.isArray(reasoning) && reasoning.length) {
+    lines.push('');
+    lines.push('Agent reasoning:');
+    reasoning.forEach((entry) => {
+      if (entry) {
+        lines.push(`• ${entry}`);
+      }
+    });
+  }
+
+  if (tooling?.codeInterpreter?.used) {
+    lines.push('');
+    lines.push('Tooling:');
+    lines.push('• Code interpreter evaluated the Composer strategy and computed the requested metrics before sizing orders.');
+    const tickers = Array.isArray(tooling.codeInterpreter.tickers)
+      ? tooling.codeInterpreter.tickers.filter(Boolean)
+      : [];
+    if (tickers.length) {
+      lines.push(`• Instrument universe parsed: ${tickers.join(', ')}.`);
+    }
+    const blueprint = Array.isArray(tooling.codeInterpreter.blueprint)
+      ? tooling.codeInterpreter.blueprint.filter(Boolean)
+      : [];
+    if (blueprint.length) {
+      lines.push(`• Evaluation steps: ${blueprint.join(' -> ')}.`);
+    }
+  }
+
+  const decisionMap = new Map(
+    decisionTrace.map((entry) => [entry.symbol, entry])
+  );
+
+  if (executedSells.length) {
+    lines.push('');
+    lines.push('Sell orders:');
+    executedSells.forEach(({ symbol, qty, price }) => {
+      const decision = decisionMap.get(symbol);
+      const segments = [
+        `SELL ${qty} ${symbol}`,
+        formatSharePrice(price) ? `@ approx. ${formatSharePrice(price)}` : null,
+        Number.isFinite(decision?.targetWeightPercent)
+          ? `(target weight ${formatPercentage(decision.targetWeightPercent)})`
+          : null,
+      ].filter(Boolean);
+      let line = `• ${segments.join(' ')}`;
+      if (decision?.explanation) {
+        line += ` — ${decision.explanation}`;
+      }
+      lines.push(line);
+    });
+  } else {
+    lines.push('');
+    lines.push('Sell orders: none required.');
+  }
+
+  if (executedBuys.length) {
+    lines.push('');
+    lines.push('Buy orders:');
+    executedBuys.forEach(({ symbol, qty, price }) => {
+      const decision = decisionMap.get(symbol);
+      const segments = [
+        `BUY ${qty} ${symbol}`,
+        formatSharePrice(price) ? `@ approx. ${formatSharePrice(price)}` : null,
+        Number.isFinite(decision?.targetWeightPercent)
+          ? `(target weight ${formatPercentage(decision.targetWeightPercent)})`
+          : null,
+      ].filter(Boolean);
+      let line = `• ${segments.join(' ')}`;
+      if (decision?.explanation) {
+        line += ` — ${decision.explanation}`;
+      }
+      lines.push(line);
+    });
+  } else {
+    lines.push('');
+    lines.push('Buy orders: none required.');
+  }
+
+  if (holds.length) {
+    lines.push('');
+    lines.push('Positions unchanged:');
+    holds.forEach((entry) => {
+      const explanation = entry.explanation || 'Already aligned with target allocation.';
+      lines.push(`• ${entry.symbol}: ${explanation}`);
+    });
+  }
+
+  const {
+    startingCash = null,
+    sellProceeds = null,
+    spentOnBuys = null,
+    endingCash = null,
+    cashBuffer = null,
+  } = cashSummary || {};
+
+  const cashSegments = [];
+  if (startingCash !== null) {
+    cashSegments.push(`started with ${formatCurrency(startingCash)}`);
+  }
+  if (sellProceeds !== null) {
+    cashSegments.push(`raised ${formatCurrency(sellProceeds)} from sales`);
+  }
+  if (spentOnBuys !== null) {
+    cashSegments.push(`deployed ${formatCurrency(spentOnBuys)} into buys`);
+  }
+  if (endingCash !== null) {
+    cashSegments.push(`ending cash ${formatCurrency(endingCash)}`);
+  }
+
+  if (cashSegments.length) {
+    lines.push('');
+    lines.push(`Cash summary: ${cashSegments.filter(Boolean).join(', ')}.`);
+  }
+
+  if (cashBuffer !== null) {
+    lines.push(`• Cash buffer now ${formatCurrency(cashBuffer)}.`);
+  }
+
+  return lines.join('\n');
 };
 
 const normalizeTargets = (targets = []) => {
@@ -99,6 +289,25 @@ const fetchLatestPrices = async (symbols, dataKeys) => {
   return priceCache;
 };
 
+const fetchMarketClock = async (tradingKeys) => {
+  if (!tradingKeys?.client || !tradingKeys?.apiUrl) {
+    return null;
+  }
+
+  try {
+    const { data } = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/clock`, {
+      headers: {
+        'APCA-API-KEY-ID': tradingKeys.keyId,
+        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+      },
+    });
+    return data;
+  } catch (error) {
+    console.warn(`[Rebalance] Failed to fetch market clock: ${error.message}`);
+    return null;
+  }
+};
+
 const buildAdjustments = async ({
   targets,
   budget,
@@ -174,7 +383,11 @@ const rebalancePortfolio = async (portfolio) => {
     return;
   }
 
-  const strategy = await Strategy.findOne({ strategy_id: portfolio.strategy_id });
+  const strategyQuery = { strategy_id: portfolio.strategy_id };
+  if (portfolio.userId) {
+    strategyQuery.userId = String(portfolio.userId);
+  }
+  const strategy = await Strategy.findOne(strategyQuery);
   const recurrence = normalizeRecurrence(portfolio.recurrence || strategy?.recurrence);
   const alpacaConfig = await getAlpacaConfig(portfolio.userId);
 
@@ -184,6 +397,63 @@ const rebalancePortfolio = async (portfolio) => {
 
   const tradingKeys = alpacaConfig.getTradingKeys();
   const dataKeys = alpacaConfig.getDataKeys();
+  const now = new Date();
+  const baseThoughtProcess = {
+    strategySummary: strategy?.summary || null,
+    originalDecisions: Array.isArray(strategy?.decisions) ? strategy.decisions : [],
+    reasoning: [],
+    composerPositions: [],
+    tooling: {
+      codeInterpreter: {
+        used: false,
+        blueprint: [],
+        tickers: [],
+      },
+    },
+  };
+
+  const clockData = await fetchMarketClock(tradingKeys);
+  if (clockData && clockData.is_open === false) {
+    const fallbackNext = computeNextRebalanceAt(recurrence, now);
+    const nextOpen = clockData.next_open ? new Date(clockData.next_open) : null;
+    const nextOpenValid = nextOpen && !Number.isNaN(nextOpen.getTime());
+    let scheduledAt = nextOpenValid ? nextOpen : fallbackNext;
+
+    if (scheduledAt <= now) {
+      const bufferDate = new Date(now.getTime() + 60000);
+      const bufferedNext = computeNextRebalanceAt(recurrence, bufferDate);
+      scheduledAt = fallbackNext > now ? fallbackNext : bufferedNext;
+    }
+
+    portfolio.nextRebalanceAt = scheduledAt;
+    portfolio.recurrence = recurrence;
+    await portfolio.save();
+
+    await recordStrategyLog({
+      strategyId: portfolio.strategy_id,
+      userId: portfolio.userId,
+      strategyName: portfolio.name,
+      message: 'Skipped rebalance: market closed',
+      details: {
+        recurrence,
+        marketStatus: 'closed',
+        nextOpen: clockData.next_open || null,
+        rescheduledFor: scheduledAt.toISOString(),
+        thoughtProcess: {
+          ...baseThoughtProcess,
+          reason: 'Market closed at attempted rebalance time; rescheduled to next open window.',
+        },
+        humanSummary: [
+          `Rebalance postponed for "${portfolio.name}" because markets were closed.`,
+          `• Planned cadence: ${formatRecurrenceLabel(recurrence)}.`,
+          nextOpenValid ? `• Exchange reopens at ${formatDateTimeHuman(nextOpen)}.` : null,
+          `• Next attempt scheduled for ${formatDateTimeHuman(scheduledAt)}.`,
+        ].filter(Boolean).join('\n'),
+      },
+    });
+
+    return;
+  }
 
   const [positionsResponse, accountResponse] = await Promise.all([
     tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
@@ -238,6 +508,21 @@ const rebalancePortfolio = async (portfolio) => {
     effectiveLimit,
   );
 
+  let composerEvaluation = null;
+  if (strategy?.strategy && /\(defsymphony/i.test(strategy.strategy)) {
+    const composerBudget = budget > 0 ? budget : currentTotal || accountCash;
+    if (composerBudget && composerBudget > 0) {
+      try {
+        composerEvaluation = await runComposerStrategy({
+          strategyText: strategy.strategy,
+          budget: composerBudget,
+        });
+      } catch (error) {
+        console.warn('[Rebalance] Composer evaluation failed:', error.message);
+      }
+    }
+  }
+
   let normalizedTargets = normalizeTargets(portfolio.targetPositions);
   if (!normalizedTargets.length) {
     normalizedTargets = normalizeTargets(
@@ -247,6 +532,45 @@ const rebalancePortfolio = async (portfolio) => {
         targetValue: stock.avgCost && stock.quantity ? stock.avgCost * stock.quantity : null,
       }))
     );
+  }
+
+  if (composerEvaluation?.positions?.length) {
+    const meta = composerEvaluation.meta || {};
+    const interpreterMeta = meta.codeInterpreter || {};
+    baseThoughtProcess.tooling = {
+      ...baseThoughtProcess.tooling,
+      codeInterpreter: {
+        used: true,
+        blueprint: Array.isArray(interpreterMeta.blueprint) ? interpreterMeta.blueprint : [],
+        tickers: Array.isArray(interpreterMeta.tickers) ? interpreterMeta.tickers : [],
+        note: 'Composer strategy evaluated via code interpreter.',
+      },
+    };
+
+    const composerTargets = normalizeTargets(
+      composerEvaluation.positions.map((pos) => ({
+        symbol: pos.symbol ? String(pos.symbol).trim().toUpperCase() : null,
+        targetWeight: toNumber(pos.weight, null),
+        targetQuantity: toNumber(pos.quantity, null),
+        targetValue: toNumber(pos.estimated_cost, null),
+      }))
+    );
+
+    if (composerTargets.length) {
+      normalizedTargets = composerTargets;
+      portfolio.targetPositions = composerTargets.map((target) => ({
+        symbol: target.symbol,
+        targetWeight: target.targetWeight,
+        targetValue: target.targetWeight && budget > 0 ? target.targetWeight * budget : null,
+        targetQuantity: target.targetWeight && budget > 0 ? null : target.targetQuantity,
+      }));
+
+      baseThoughtProcess.strategySummary = composerEvaluation.summary || baseThoughtProcess.strategySummary;
+      if (Array.isArray(composerEvaluation.reasoning)) {
+        baseThoughtProcess.reasoning = composerEvaluation.reasoning;
+      }
+      baseThoughtProcess.composerPositions = composerEvaluation.positions;
+    }
   }
 
   if (!normalizedTargets.length) {
@@ -268,6 +592,8 @@ const rebalancePortfolio = async (portfolio) => {
 
   const sells = [];
   const buys = [];
+  const executedSells = [];
+  const executedBuys = [];
 
   adjustments.forEach((adjustment) => {
     const qtyDiff = adjustment.desiredQty - adjustment.currentQty;
@@ -300,6 +626,11 @@ const rebalancePortfolio = async (portfolio) => {
         time_in_force: 'gtc',
       });
       sellProceeds += sell.qty * sell.price;
+      executedSells.push({
+        symbol: sell.symbol,
+        qty: sell.qty,
+        price: sell.price,
+      });
     } catch (error) {
       console.error(`[Rebalance] Sell order failed for ${sell.symbol}:`, error.message);
     }
@@ -321,6 +652,11 @@ const rebalancePortfolio = async (portfolio) => {
         });
         availableCash -= estimatedCost;
         buySpend += estimatedCost;
+        executedBuys.push({
+          symbol: buy.symbol,
+          qty: buy.qty,
+          price: buy.price,
+        });
       } catch (error) {
         console.error(`[Rebalance] Buy order failed for ${buy.symbol}:`, error.message);
       }
@@ -338,6 +674,11 @@ const rebalancePortfolio = async (portfolio) => {
           const cost = affordableQty * buy.price;
           availableCash -= cost;
           buySpend += cost;
+          executedBuys.push({
+            symbol: buy.symbol,
+            qty: affordableQty,
+            price: buy.price,
+          });
         } catch (error) {
           console.error(`[Rebalance] Partial buy order failed for ${buy.symbol}:`, error.message);
         }
@@ -345,12 +686,54 @@ const rebalancePortfolio = async (portfolio) => {
     }
   }
 
-  const now = new Date();
+  const decisionTrace = adjustments.map((adjustment) => {
+    const qtyDiff = adjustment.desiredQty - adjustment.currentQty;
+    const action = Math.abs(qtyDiff) <= TOLERANCE
+      ? 'hold'
+      : qtyDiff > 0
+        ? 'buy'
+        : 'sell';
+    const pct = Number.isFinite(adjustment.targetWeight)
+      ? Math.round(adjustment.targetWeight * 10000) / 100
+      : null;
+    const explanation = (() => {
+      if (action === 'hold') {
+        return 'Holding position; allocation already within tolerance of target weight.';
+      }
+      const direction = action === 'buy' ? 'increase' : 'reduce';
+      return `Need to ${direction} exposure to align ${pct !== null ? `${pct}%` : 'target'} weight. Desired ${adjustment.desiredQty} shares versus current ${adjustment.currentQty}.`;
+    })();
+    return {
+      symbol: adjustment.symbol,
+      action,
+      currentQty: adjustment.currentQty,
+      desiredQty: adjustment.desiredQty,
+      currentValue: roundToTwo(adjustment.currentValue),
+      desiredValue: roundToTwo(adjustment.desiredValue),
+      targetWeightPercent: pct,
+      explanation,
+    };
+  });
+
+  const thoughtProcess = {
+    ...baseThoughtProcess,
+    adjustments: decisionTrace,
+    cashSummary: {
+      startingCash: roundToTwo(accountCash),
+      sellProceeds: roundToTwo(sellProceeds),
+      spentOnBuys: roundToTwo(buySpend),
+      endingCash: roundToTwo(availableCash),
+      cashBuffer: null, // placeholder, updated after buffer computed
+    },
+  };
+  const holdDecisions = decisionTrace.filter((entry) => entry.action === 'hold');
+
   portfolio.cashBuffer = Math.max(0, availableCash);
   if (cashLimit && cashLimit > 0) {
     const maxAllowedBuffer = Math.max(0, cashLimit - (portfolio.initialInvestment || 0));
     portfolio.cashBuffer = Math.min(portfolio.cashBuffer, maxAllowedBuffer);
   }
+  thoughtProcess.cashSummary.cashBuffer = roundToTwo(portfolio.cashBuffer);
   if (!portfolio.initialInvestment) {
     portfolio.initialInvestment = Math.max(0, buySpend);
   }
@@ -358,6 +741,24 @@ const rebalancePortfolio = async (portfolio) => {
   portfolio.lastRebalancedAt = now;
   portfolio.nextRebalanceAt = computeNextRebalanceAt(recurrence, now);
   portfolio.recurrence = recurrence;
+
+  const humanSummary = buildRebalanceHumanSummary({
+    strategyName: portfolio.name,
+    recurrence,
+    executedSells,
+    executedBuys,
+    decisionTrace,
+    holds: holdDecisions,
+    cashSummary: {
+      startingCash: accountCash,
+      sellProceeds,
+      spentOnBuys: buySpend,
+      endingCash: availableCash,
+      cashBuffer: portfolio.cashBuffer,
+    },
+    nextRebalanceAt: portfolio.nextRebalanceAt,
+    tooling: baseThoughtProcess.tooling,
+  });
 
   await portfolio.save();
 
@@ -368,14 +769,28 @@ const rebalancePortfolio = async (portfolio) => {
     message: 'Portfolio rebalanced',
     details: {
       recurrence,
-      sells: sells.map((sell) => ({ symbol: sell.symbol, qty: sell.qty })),
-      buys: buys.map((buy) => ({ symbol: buy.symbol, qty: buy.qty })),
+      sells: executedSells.map((sell) => ({
+        symbol: sell.symbol,
+        qty: sell.qty,
+        price: sell.price,
+      })),
+      buys: executedBuys.map((buy) => ({
+        symbol: buy.symbol,
+        qty: buy.qty,
+        price: buy.price,
+      })),
+      holds: holdDecisions.map((entry) => ({
+        symbol: entry.symbol,
+        explanation: entry.explanation,
+      })),
       budget,
       buySpend: roundToTwo(buySpend),
       sellProceeds: roundToTwo(sellProceeds),
       remainingCash: roundToTwo(availableCash),
       cashBuffer: roundToTwo(portfolio.cashBuffer),
       accountCash: roundToTwo(accountCash),
+      thoughtProcess,
+      humanSummary,
     },
   });
 };

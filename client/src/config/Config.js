@@ -41,9 +41,10 @@ const resolveBaseUrl = () => {
   );
 
   if (envValue) {
+    const sanitizedEnvValue = envValue.replace(/\/+$/, '');
     let envHostIsLocal = false;
     try {
-      envHostIsLocal = isLocalHost(new URL(envValue).hostname);
+      envHostIsLocal = isLocalHost(new URL(sanitizedEnvValue).hostname);
     } catch (error) {
       envHostIsLocal = false;
     }
@@ -51,7 +52,7 @@ const resolveBaseUrl = () => {
     if (runtimeLocation && !isLocalHost(runtimeLocation.hostname) && envHostIsLocal) {
       // Env points to localhost but the current host is remote; fall through.
     } else {
-      return envValue;
+      return sanitizedEnvValue;
     }
   }
 
@@ -69,7 +70,7 @@ const resolveBaseUrl = () => {
   };
 
   if (isLocalHost(hostname)) {
-    return buildOrigin(hostname, "3000");
+    return buildOrigin(hostname, "5100");
   }
 
   const subdomainMatch = hostname.match(/^(\d+)([-.])(.*)$/);
