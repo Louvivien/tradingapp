@@ -2,12 +2,14 @@ const User = require("../models/userModel");
 const Strategy = require("../models/strategyModel");
 const Portfolio = require("../models/portfolioModel");
 const StrategyLog = require("../models/strategyLogModel");
+const StrategyTemplate = require('../models/strategyTemplateModel');
 const News = require("../models/newsModel");
 const { getAlpacaConfig } = require("../config/alpacaConfig");
 const Alpaca = require('@alpacahq/alpaca-trade-api');
 const axios = require("axios");
 const moment = require('moment');
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const extractGPT = require("../utils/ChatGPTplugins");
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -17,6 +19,12 @@ const Axios = require("axios");
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('../services/strategyLogger');
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
+const {
+  addSubscriber,
+  removeSubscriber,
+  publishProgress,
+  completeProgress,
+} = require('../utils/progressBus');
 
 const RECURRENCE_LABELS = {
   every_minute: 'Every minute',
@@ -137,6 +145,44 @@ const buildFallbackFromRawStrategy = (strategyText) => {
   return { positions, decisions, summary };
 };
 
+const upsertStrategyTemplate = async ({
+  userId,
+  name,
+  strategyText,
+  summary,
+  decisions,
+  recurrence,
+  strategyId = null,
+}) => {
+  try {
+    if (!userId || !name || !strategyText) {
+      return null;
+    }
+    const normalizedRecurrence = normalizeRecurrence(recurrence);
+    return await StrategyTemplate.findOneAndUpdate(
+      { userId: String(userId), name },
+      {
+        userId: String(userId),
+        name,
+        strategy: strategyText,
+        summary: summary || '',
+        decisions: Array.isArray(decisions) ? decisions : [],
+        recurrence: normalizedRecurrence,
+        strategyId: strategyId || null,
+        lastUsedAt: new Date(),
+      },
+      {
+        upsert: true,
+        new: true,
+        setDefaultsOnInsert: true,
+      }
+    );
+  } catch (error) {
+    console.warn('[StrategyTemplate] Failed to save template:', error.message);
+    return null;
+  }
+};
+
 const validateAlpacaTradableSymbols = async (alpacaConfig, symbols = []) => {
   if (!alpacaConfig?.getTradingKeys || !Array.isArray(symbols) || !symbols.length) {
     return { tradable: [], invalid: [] };
@@ -192,6 +238,75 @@ const validateAlpacaTradableSymbols = async (alpacaConfig, symbols = []) => {
   );
 
   return { tradable, invalid };
+};
+
+const fetchLatestPriceFromYahoo = async (symbol) => {
+  if (!symbol) {
+    return null;
+  }
+  try {
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+      symbol
+    )}?range=1d&interval=1m`;
+    const { data } = await Axios.get(url, { timeout: 5000 });
+    const result = data?.chart?.result?.[0];
+    if (!result) {
+      return null;
+    }
+    const metaPrice = toNumber(result?.meta?.regularMarketPrice, null);
+    if (metaPrice && metaPrice > 0) {
+      return metaPrice;
+    }
+    const quote = result?.indicators?.quote?.[0] || {};
+    const closes = Array.isArray(quote.close) ? quote.close : [];
+    for (let i = closes.length - 1; i >= 0; i -= 1) {
+      const price = toNumber(closes[i], null);
+      if (price && price > 0) {
+        return price;
+      }
+    }
+  } catch (error) {
+    console.warn(`[Yahoo] Failed to fetch price for ${symbol}:`, error.message);
+  }
+  return null;
+};
+
+const MASSIVE_PRICE_BASE_URLS = [
+  'https://api.massive.com/v2',
+  'https://api.polygon.io/v2',
+];
+
+const fetchLatestPriceFromMassive = async (symbol) => {
+  const apiKey = process.env.MASSIVE_API_KEY;
+  if (!symbol || !apiKey) {
+    return null;
+  }
+  for (const baseUrl of MASSIVE_PRICE_BASE_URLS) {
+    try {
+      const { data } = await Axios.get(
+        `${baseUrl}/last/trade/${encodeURIComponent(symbol)}`,
+        {
+          params: { apiKey },
+          timeout: 5000,
+        }
+      );
+      const price =
+        toNumber(data?.last?.price, null) ??
+        toNumber(data?.last?.p, null) ??
+        toNumber(data?.results?.p, null);
+      if (price && price > 0) {
+        return price;
+      }
+    } catch (error) {
+      const status = error?.response?.status || null;
+      const errMessage = error?.response?.data?.error || error.message;
+      console.warn(
+        `[Massive] Failed to fetch price for ${symbol} via ${baseUrl}:`,
+        status ? `${status} ${errMessage}` : errMessage
+      );
+    }
+  }
+  return null;
 };
 
 const buildCreationHumanSummary = ({
@@ -255,21 +370,28 @@ const buildCreationHumanSummary = ({
     });
   }
 
-  if (tooling?.codeInterpreter?.used) {
+  const localTool = tooling?.localEvaluator;
+  if (localTool?.used) {
     lines.push('');
     lines.push('Tooling:');
-    lines.push('• Code interpreter executed the Composer defsymphony evaluation to compute strategy metrics.');
-    const tickers = Array.isArray(tooling.codeInterpreter.tickers)
-      ? tooling.codeInterpreter.tickers.filter(Boolean)
+    lines.push('• Local defsymphony evaluator used cached Alpaca prices to size orders.');
+    const tickers = Array.isArray(localTool.tickers)
+      ? localTool.tickers.filter(Boolean)
       : [];
     if (tickers.length) {
-      lines.push(`• Instrument universe parsed: ${tickers.join(', ')}.`);
+      lines.push(`• Cached instrument universe: ${tickers.join(', ')}.`);
     }
-    const blueprint = Array.isArray(tooling.codeInterpreter.blueprint)
-      ? tooling.codeInterpreter.blueprint.filter(Boolean)
+    const blueprint = Array.isArray(localTool.blueprint)
+      ? localTool.blueprint.filter(Boolean)
       : [];
     if (blueprint.length) {
       lines.push(`• Evaluation steps: ${blueprint.join(' -> ')}.`);
+    }
+    if (localTool.lookbackDays) {
+      lines.push(`• Price cache lookback window: ${localTool.lookbackDays} days.`);
+    }
+    if (localTool.fallbackReason) {
+      lines.push(`• Reason for local evaluation: ${localTool.fallbackReason}.`);
     }
   }
 
@@ -461,12 +583,38 @@ exports.createCollaborative = async (req, res) => {
     const userKey = String(UserID || '');
     const sourceStrategyId = req.body.sourceStrategyId;
     let input = typeof req.body.collaborative === 'string' ? req.body.collaborative : '';
+    const rawJobId = typeof req.body.jobId === 'string' ? req.body.jobId.trim() : '';
+    if (!rawJobId) {
+      return res.status(400).json({
+        status: "fail",
+        message: "jobId is required for progress tracking.",
+      });
+    }
+
+    const jobId = rawJobId;
+    const progressFail = (statusCode, message, step = 'error') => {
+      publishProgress(jobId, { step, status: 'failed', message });
+      completeProgress(jobId, { step: 'finished', status: 'failed', message });
+      return res.status(statusCode).json({
+        status: "fail",
+        message,
+        jobId,
+      });
+    };
+
+    publishProgress(jobId, {
+      step: 'received',
+      status: 'in_progress',
+      message: 'Strategy request received.',
+    });
+    publishProgress(jobId, {
+      step: 'validation',
+      status: 'in_progress',
+      message: 'Validating request payload.',
+    });
 
     if (!userKey || req.user !== userKey) {
-      return res.status(403).json({
-        status: "fail",
-        message: "Credentials couldn't be validated.",
-      });
+      return progressFail(403, "Credentials couldn't be validated.", 'validation');
     }
 
     if ((!input || !input.trim()) && sourceStrategyId) {
@@ -475,27 +623,18 @@ exports.createCollaborative = async (req, res) => {
         userId: userKey,
       });
       if (!storedStrategy) {
-        return res.status(404).json({
-          status: "fail",
-          message: "Selected strategy could not be found.",
-        });
+        return progressFail(404, "Selected strategy could not be found.", 'validation');
       }
       input = storedStrategy.strategy || '';
     }
 
     if (!input || !input.trim()) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Please provide a strategy description.",
-      });
+      return progressFail(400, "Please provide a strategy description.", 'validation');
     }
 
     const rawStrategyName = typeof req.body.strategyName === 'string' ? req.body.strategyName.trim() : '';
     if (!rawStrategyName) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Please provide a name for this strategy.",
-      });
+      return progressFail(400, "Please provide a name for this strategy.", 'validation');
     }
     const strategyName = rawStrategyName;
 
@@ -540,108 +679,96 @@ exports.createCollaborative = async (req, res) => {
       name: strategyName,
     });
     if (existingStrategy) {
-      return res.status(409).json({
-        status: "fail",
-        message: `A strategy named "${strategyName}" already exists. Please choose another name.`,
-      });
+      return progressFail(409, `A strategy named "${strategyName}" already exists. Please choose another name.`, 'validation');
     }
 
     let workingPositions = [];
     let workingSummary = '';
     let workingDecisions = [];
-    let composerUsed = false;
     let composerReasoning = [];
     let composerMeta = null;
 
     try {
+      publishProgress(jobId, {
+        step: 'composer_evaluation',
+        status: 'in_progress',
+        message: 'Running Composer evaluation.',
+      });
       const composerResult = await runComposerStrategy({
         strategyText: strategy,
         budget: cashLimitInput,
       });
 
-      if (composerResult?.positions?.length) {
-        composerUsed = true;
-        workingSummary = composerResult.summary || '';
-        composerReasoning = Array.isArray(composerResult.reasoning) ? composerResult.reasoning : [];
-        composerMeta = composerResult.meta || composerMeta;
-        if (Array.isArray(composerResult.reasoning) && composerResult.reasoning.length) {
-          workingDecisions = composerResult.reasoning.map((text, index) => ({
-            symbol: composerResult.positions[index]?.symbol || `STEP_${index + 1}`,
-            Rationale: text,
-          }));
-        }
-
-        workingPositions = composerResult.positions
-          .map((pos) => {
-            const symbol = sanitizeSymbol(pos.symbol);
-            const weight = toNumber(pos.weight, null);
-            const quantity = toNumber(pos.quantity, null);
-            const cost = toNumber(pos.estimated_cost, null);
-            if (!symbol) {
-              return null;
-            }
-            return {
-              symbol,
-              targetWeight: Number.isFinite(weight) ? weight : null,
-              targetQuantity: Number.isFinite(quantity) ? quantity : null,
-              targetValue: Number.isFinite(cost) ? cost : null,
-              rationale: pos.rationale || null,
-            };
-          })
-          .filter(Boolean);
-
-        if (!workingDecisions.length && Array.isArray(composerResult.positions)) {
-          workingDecisions = composerResult.positions.map((pos) => ({
-            symbol: sanitizeSymbol(pos.symbol),
-            Rationale: pos.rationale || 'Selected by Composer evaluation.',
-          }));
-        }
+      if (!composerResult?.positions?.length) {
+        return progressFail(502, "Composer evaluation returned no positions.", 'composer_evaluation');
       }
+
+      workingSummary = composerResult.summary || '';
+      composerReasoning = Array.isArray(composerResult.reasoning) ? composerResult.reasoning : [];
+      composerMeta = composerResult.meta || composerMeta;
+      if (Array.isArray(composerResult.reasoning) && composerResult.reasoning.length) {
+        workingDecisions = composerResult.reasoning.map((text, index) => ({
+          symbol: composerResult.positions[index]?.symbol || `STEP_${index + 1}`,
+          Rationale: text,
+        }));
+      }
+
+      workingPositions = composerResult.positions
+        .map((pos) => {
+          const symbol = sanitizeSymbol(pos.symbol);
+          const weight = toNumber(pos.weight, null);
+          const quantity = toNumber(pos.quantity, null);
+          const cost = toNumber(pos.estimated_cost, null);
+          if (!symbol) {
+            return null;
+          }
+          return {
+            symbol,
+            targetWeight: Number.isFinite(weight) ? weight : null,
+            targetQuantity: Number.isFinite(quantity) ? quantity : null,
+            targetValue: Number.isFinite(cost) ? cost : null,
+            rationale: pos.rationale || null,
+          };
+        })
+        .filter(Boolean);
+
+      if (!workingDecisions.length && Array.isArray(composerResult.positions)) {
+        workingDecisions = composerResult.positions.map((pos) => ({
+          symbol: sanitizeSymbol(pos.symbol),
+          Rationale: pos.rationale || 'Selected by Composer evaluation.',
+        }));
+      }
+      publishProgress(jobId, {
+        step: 'composer_evaluation',
+        status: 'completed',
+        message: 'Composer evaluation completed.',
+      });
     } catch (error) {
-      console.error('[ComposerEvaluation]', error.message);
-    }
-
-    if (!composerUsed) {
-      let parsedResult;
-      try {
-        parsedResult = await extractGPT(input).then(parseJsonData);
-      } catch (error) {
-        console.error('Error in extractGPT:', error);
-        return res.status(400).json({
-          status: "fail",
-          message: error.message,
-        });
-      }
-
-      workingPositions = Array.isArray(parsedResult.positions) ? parsedResult.positions : [];
-      workingSummary = parsedResult.summary || '';
-      workingDecisions = Array.isArray(parsedResult.decisions) ? parsedResult.decisions : [];
+      console.error('[ComposerEvaluation]', error);
+      return progressFail(502, `Composer evaluation failed: ${error.message || 'unknown error'}`, 'composer_evaluation');
     }
     const recurrence = normalizeRecurrence(req.body?.recurrence);
 
+    publishProgress(jobId, {
+      step: 'validation',
+      status: 'completed',
+      message: 'Inputs validated.',
+    });
+
     if (!cashLimitInput || cashLimitInput <= 0) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Please provide a positive cash limit for the collaborative strategy.",
-      });
+      return progressFail(400, "Please provide a positive cash limit for the collaborative strategy.", 'validation');
     }
 
     let normalizedTargets = normalizeTargetPositions(workingPositions);
     if (!normalizedTargets.length) {
       const fallbackPlan = buildFallbackFromRawStrategy(strategy);
       if (!fallbackPlan) {
-        return res.status(400).json({
-          status: "fail",
-          message: "Unable to determine target positions for this strategy.",
-        });
+        return progressFail(400, "Unable to determine target positions for this strategy.", 'evaluation');
       }
       workingPositions = fallbackPlan.positions;
       normalizedTargets = normalizeTargetPositions(workingPositions);
       if (!normalizedTargets.length) {
-        return res.status(400).json({
-          status: "fail",
-          message: "Unable to derive a tradable allocation from this strategy.",
-        });
+        return progressFail(400, "Unable to derive a tradable allocation from this strategy.", 'evaluation');
       }
       workingSummary = [workingSummary, fallbackPlan.summary].filter(Boolean).join('\n\n') || fallbackPlan.summary;
       workingDecisions = [...workingDecisions, ...fallbackPlan.decisions];
@@ -699,6 +826,12 @@ exports.createCollaborative = async (req, res) => {
 
     const priceMap = {};
 
+    publishProgress(jobId, {
+      step: 'market_data',
+      status: 'in_progress',
+      message: 'Fetching latest market prices.',
+    });
+
     if (dataKeys?.client && dataKeys?.apiUrl && dataKeys?.keyId && dataKeys?.secretKey) {
       await Promise.all(
         uniqueSymbols.map(async (symbol) => {
@@ -722,6 +855,38 @@ exports.createCollaborative = async (req, res) => {
         })
       );
     }
+
+    const yahooFallbackSymbols = uniqueSymbols.filter((symbol) => !priceMap[symbol]);
+    if (yahooFallbackSymbols.length) {
+      await Promise.all(
+        yahooFallbackSymbols.map(async (symbol) => {
+          const yahooPrice = await fetchLatestPriceFromYahoo(symbol);
+          if (yahooPrice && yahooPrice > 0) {
+            priceMap[symbol] = yahooPrice;
+            console.log(`[MarketData] Yahoo fallback price used for ${symbol}.`);
+          }
+        })
+      );
+    }
+
+    const massiveFallbackSymbols = uniqueSymbols.filter((symbol) => !priceMap[symbol]);
+    if (massiveFallbackSymbols.length) {
+      await Promise.all(
+        massiveFallbackSymbols.map(async (symbol) => {
+          const massivePrice = await fetchLatestPriceFromMassive(symbol);
+          if (massivePrice && massivePrice > 0) {
+            priceMap[symbol] = massivePrice;
+            console.log(`[MarketData] Massive fallback price used for ${symbol}.`);
+          }
+        })
+      );
+    }
+
+    publishProgress(jobId, {
+      step: 'market_data',
+      status: 'completed',
+      message: 'Market price data fetched.',
+    });
 
     const sortedTargets = normalizedTargets
       .filter((target) => target.symbol && target.targetWeight > 0)
@@ -835,6 +1000,12 @@ exports.createCollaborative = async (req, res) => {
     }));
     const executedTargets = normalizeTargetPositions(executedTargetsRaw);
 
+    publishProgress(jobId, {
+      step: 'placing_orders',
+      status: 'in_progress',
+      message: 'Submitting orders to Alpaca.',
+    });
+
     const orderPromises = finalizedPlan.map(({ symbol, qty }) => {
       return retry(() => {
         return axios({
@@ -856,8 +1027,25 @@ exports.createCollaborative = async (req, res) => {
           return { qty, symbol, orderID: response.data.client_order_id };
         });
       }, 5, 2000).catch((error) => {
-        console.error(`Failed to place order for ${symbol}: ${error}`);
-          return null;
+        const status = error?.response?.status;
+        const responseData = error?.response?.data;
+        const headers = error?.response?.headers || {};
+        const requestId =
+          headers['apca-request-id']
+          || headers['x-request-id']
+          || headers['x-request-id'.toLowerCase()]
+          || 'n/a';
+        const sanitizedBody =
+          responseData && typeof responseData === 'object'
+            ? JSON.stringify(responseData)
+            : (responseData || 'No response body');
+        console.error(
+          `[OrderError] Failed to place order for ${symbol}. status=${status || 'unknown'} requestId=${requestId} body=${sanitizedBody}`
+        );
+        if (error?.message) {
+          console.error(`[OrderError] Axios message for ${symbol}: ${error.message}`);
+        }
+        return null;
       });
     });
 
@@ -865,12 +1053,14 @@ exports.createCollaborative = async (req, res) => {
     const initialInvestmentEstimate = plannedCost;
     if (!orders.length) {
       console.error('Failed to place all orders.');
-      return res.status(400).json({
-        status: "fail",
-        message: "Failed to place orders. Try again.",
-      });
+      return progressFail(400, "Failed to place orders. Try again.", 'placing_orders');
     }
 
+    publishProgress(jobId, {
+      step: 'placing_orders',
+      status: 'completed',
+      message: 'Orders submitted to Alpaca.',
+    });
     const portfolioRecord = await exports.addPortfolio(
       strategy,
       strategyName,
@@ -898,6 +1088,22 @@ exports.createCollaborative = async (req, res) => {
         }
       : null;
 
+    await upsertStrategyTemplate({
+      userId: userKey,
+      name: strategyName,
+      strategyText: strategy,
+      summary: workingSummary,
+      decisions: workingDecisions,
+      recurrence,
+      strategyId: portfolioRecord?.strategy_id || null,
+    });
+
+    completeProgress(jobId, {
+      step: 'finished',
+      status: 'success',
+      message: 'Strategy created successfully.',
+    });
+
     return res.status(200).json({
       status: "success",
       orders,
@@ -907,12 +1113,24 @@ exports.createCollaborative = async (req, res) => {
       schedule,
       strategyId: portfolioRecord?.strategy_id || null,
       strategyName,
+      jobId,
     });
   } catch (error) {
     console.error(`Error in createCollaborative:`, error);
+    publishProgress(req.body.jobId, {
+      step: 'error',
+      status: 'failed',
+      message: error.message || 'Unexpected server error',
+    });
+    completeProgress(req.body.jobId, {
+      step: 'finished',
+      status: 'failed',
+      message: error.message || 'Unexpected server error',
+    });
     return res.status(500).json({
       status: "fail",
       message: `Something unexpected happened: ${error.message}`,
+      jobId: req.body.jobId || null,
     });
   }
 };
@@ -1910,10 +2128,11 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
         decisions: Array.isArray(decisions) ? decisions : [],
       };
 
-      if (composerMeta?.codeInterpreter) {
+      if (composerMeta?.localEvaluator) {
         thoughtProcessPayload.tooling = {
-          codeInterpreter: composerMeta.codeInterpreter,
+          ...(thoughtProcessPayload.tooling || {}),
         };
+        thoughtProcessPayload.tooling.localEvaluator = composerMeta.localEvaluator;
       }
 
       if (Array.isArray(reasoning) && reasoning.length) {
@@ -2050,10 +2269,11 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
       decisions: Array.isArray(decisions) ? decisions : [],
     };
 
-    if (composerMeta?.codeInterpreter) {
+    if (composerMeta?.localEvaluator) {
       thoughtProcessPayload.tooling = {
-        codeInterpreter: composerMeta.codeInterpreter,
+        ...(thoughtProcessPayload.tooling || {}),
       };
+      thoughtProcessPayload.tooling.localEvaluator = composerMeta.localEvaluator;
     }
 
     if (Array.isArray(reasoning) && reasoning.length) {
@@ -2226,6 +2446,7 @@ exports.getStrategies = async (req, res) => {
         createdAt: strategy.createdAt,
         updatedAt: strategy.updatedAt,
         isAIFund: strategy.strategy_id === '01',
+        sourceType: 'portfolio',
       })),
     });
   } catch (error) {
@@ -2233,6 +2454,45 @@ exports.getStrategies = async (req, res) => {
     return res.status(500).json({
       status: "fail",
       message: "Something unexpected happened.",
+    });
+  }
+};
+
+exports.getStrategyTemplates = async (req, res) => {
+  try {
+    const userId = String(req.params.userId || '');
+    if (!userId || req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const templates = await StrategyTemplate.find({ userId })
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      status: 'success',
+      templates: templates.map((template) => ({
+        id: String(template._id),
+        name: template.name,
+        strategy: template.strategy,
+        summary: template.summary || '',
+        decisions: Array.isArray(template.decisions) ? template.decisions : [],
+        recurrence: template.recurrence,
+        lastUsedAt: template.lastUsedAt,
+        createdAt: template.createdAt,
+        updatedAt: template.updatedAt,
+        strategyId: template.strategyId || null,
+        sourceType: 'template',
+      })),
+    });
+  } catch (error) {
+    console.error('[StrategyTemplates] Failed to fetch templates:', error);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Unable to load saved Composer strategies.',
     });
   }
 };
@@ -2467,3 +2727,56 @@ function retry(fn, retriesLeft = 5, interval = 1000) {
       });
   });
 }
+exports.streamStrategyProgress = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const token = req.query?.token;
+
+    if (!jobId) {
+      return res.status(400).json({
+        status: "fail",
+        message: "jobId is required.",
+      });
+    }
+
+    if (!token) {
+      return res.status(401).json({
+        status: "fail",
+        message: "Authorization denied, missing token.",
+      });
+    }
+
+    try {
+      jwt.verify(token, process.env.JWT_SECRET);
+    } catch (error) {
+      return res.status(401).json({
+        status: "fail",
+        message: "Authorization denied, invalid token.",
+      });
+    }
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders?.();
+
+    addSubscriber(jobId, res);
+    res.write(`data: ${JSON.stringify({
+      jobId,
+      step: 'connected',
+      status: 'listening',
+      timestamp: new Date().toISOString(),
+    })}\n\n`);
+
+    req.on('close', () => {
+      removeSubscriber(jobId, res);
+    });
+  } catch (error) {
+    console.error('[ProgressStream] Error:', error.message);
+    try {
+      res.status(500).end();
+    } catch (err) {
+      // ignore
+    }
+  }
+};

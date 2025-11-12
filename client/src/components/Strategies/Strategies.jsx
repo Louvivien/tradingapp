@@ -1,4 +1,4 @@
-import React, { useState, useContext, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useContext, useEffect, useCallback, useMemo, useRef } from "react";
 import UserContext from "../../context/UserContext";
 import {
   Typography,
@@ -68,9 +68,13 @@ const Strategies = () => {
   const [collaborativeSchedule, setCollaborativeSchedule] = useState(null);
   const [aiFundSchedule, setAiFundSchedule] = useState(null);
   const [savedStrategies, setSavedStrategies] = useState([]);
+  const [strategyTemplates, setStrategyTemplates] = useState([]);
   const [librarySelection, setLibrarySelection] = useState("");
   const [activeLibraryStrategyId, setActiveLibraryStrategyId] = useState(null);
   const [loadedStrategyContent, setLoadedStrategyContent] = useState("");
+  const [currentJobId, setCurrentJobId] = useState(null);
+  const [progressEvents, setProgressEvents] = useState([]);
+  const progressSourceRef = useRef(null);
 
   const fetchStrategies = useCallback(async () => {
     if (!authToken || !userId) {
@@ -105,10 +109,57 @@ const Strategies = () => {
     fetchStrategies();
   }, [fetchStrategies]);
 
-  const collaborativeLibrary = useMemo(
-    () => savedStrategies.filter((item) => !item.isAIFund),
-    [savedStrategies]
-  );
+  const fetchStrategyTemplates = useCallback(async () => {
+    if (!authToken || !userId) {
+      setStrategyTemplates([]);
+      return;
+    }
+
+    const headers = {
+      "x-auth-token": authToken,
+    };
+
+    const url = `${config.base_url}/api/strategies/templates/${userId}`;
+
+    try {
+      const response = await Axios.get(url, { headers });
+      if (response.status === 200 && response.data.status === "success") {
+        setStrategyTemplates(
+          Array.isArray(response.data.templates) ? response.data.templates : []
+        );
+      }
+    } catch (err) {
+      console.error("Failed to fetch strategy templates:", err);
+    }
+  }, [authToken, userId]);
+
+  useEffect(() => {
+    fetchStrategyTemplates();
+  }, [fetchStrategyTemplates]);
+
+  const collaborativeLibrary = useMemo(() => {
+    const templates = strategyTemplates.map((item) => ({
+      ...item,
+      sourceType: item.sourceType || "template",
+    }));
+    const portfolios = savedStrategies
+      .filter((item) => !item.isAIFund)
+      .map((item) => ({
+        ...item,
+        sourceType: "portfolio",
+      }));
+
+    const seen = new Set();
+    const merged = [...templates, ...portfolios].filter((item) => {
+      const key = `${item.sourceType}:${item.id}`;
+      if (seen.has(key)) {
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+    return merged;
+  }, [strategyTemplates, savedStrategies]);
 
   const selectedLibraryStrategy = useMemo(
     () => collaborativeLibrary.find((item) => item.id === librarySelection) || null,
@@ -134,6 +185,46 @@ const Strategies = () => {
     setLibrarySelection(value);
   };
 
+  useEffect(() => {
+    return () => {
+      if (progressSourceRef.current) {
+        progressSourceRef.current.close();
+      }
+    };
+  }, []);
+
+  const closeProgressStream = () => {
+    if (progressSourceRef.current) {
+      progressSourceRef.current.close();
+      progressSourceRef.current = null;
+    }
+  };
+
+  const openProgressStream = (jobId) => {
+    if (!jobId || !userData?.token) {
+      return;
+    }
+    closeProgressStream();
+    setProgressEvents([]);
+    const tokenParam = encodeURIComponent(userData.token);
+    const source = new EventSource(`${config.base_url}/api/strategies/progress/${jobId}?token=${tokenParam}`);
+    source.onmessage = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        setProgressEvents((prev) => [...prev, payload]);
+        if (payload.step === 'finished') {
+          closeProgressStream();
+        }
+      } catch (error) {
+        // ignore malformed events
+      }
+    };
+    source.onerror = () => {
+      closeProgressStream();
+    };
+    progressSourceRef.current = source;
+  };
+
   const handleLoadSavedStrategy = () => {
     if (!selectedLibraryStrategy) {
       return;
@@ -143,8 +234,13 @@ const Strategies = () => {
     if (selectedLibraryStrategy.recurrence) {
       setCollaborativeRecurrence(selectedLibraryStrategy.recurrence);
     }
-    setActiveLibraryStrategyId(selectedLibraryStrategy.id);
-    setLoadedStrategyContent(selectedLibraryStrategy.strategy || "");
+    if (selectedLibraryStrategy.sourceType === "portfolio") {
+      setActiveLibraryStrategyId(selectedLibraryStrategy.id);
+      setLoadedStrategyContent(selectedLibraryStrategy.strategy || "");
+    } else {
+      setActiveLibraryStrategyId(null);
+      setLoadedStrategyContent(selectedLibraryStrategy.strategy || "");
+    }
   };
 
   const handleCollaborativeChange = (event) => {
@@ -272,12 +368,20 @@ const Strategies = () => {
     const url = config.base_url + "/api/strategies/collaborative/";
 
     try {
+      const jobId =
+        (window.crypto && typeof window.crypto.randomUUID === "function"
+          ? window.crypto.randomUUID()
+          : `${Date.now()}-${Math.random().toString(16).slice(2)}`);
+      setCurrentJobId(jobId);
+      openProgressStream(jobId);
+
       const payload = {
         collaborative,
         userID: userId,
         strategyName,
         recurrence: collaborativeRecurrence,
         cashLimit: collaborativeCashLimit,
+        jobId,
       };
       if (activeLibraryStrategyId) {
         payload.sourceStrategyId = activeLibraryStrategyId;
@@ -293,6 +397,7 @@ const Strategies = () => {
           setCollaborativeSchedule(response.data.schedule || null);
           const newStrategyId = response.data.strategyId || null;
           await fetchStrategies();
+          await fetchStrategyTemplates();
           if (newStrategyId) {
             setLibrarySelection(newStrategyId);
             setActiveLibraryStrategyId(newStrategyId);
@@ -309,6 +414,7 @@ const Strategies = () => {
       setStrategyDecisions([]);
       setCollaborativeSchedule(null);
     } finally {
+      closeProgressStream();
       setLoading(false);
     }
     
@@ -496,6 +602,7 @@ return (
                   {collaborativeLibrary.map((strategyOption) => (
                     <MenuItem key={strategyOption.id} value={strategyOption.id}>
                       {strategyOption.name}
+                      {strategyOption.sourceType === "template" ? " (Saved code)" : ""}
                     </MenuItem>
                   ))}
                 </TextField>
@@ -622,6 +729,21 @@ return (
             >
               Create this strategy
             </Button>
+            {currentJobId && (
+              <Box mt={2}>
+                <Typography variant="subtitle2">Progress</Typography>
+                {progressEvents.length === 0 && (
+                  <Typography variant="body2" color="textSecondary">
+                    Waiting for updates...
+                  </Typography>
+                )}
+                {progressEvents.map((event, index) => (
+                  <Typography key={`${currentJobId}-${index}`} variant="body2">
+                    {formatDateTime(event.timestamp)} · {event.step || 'update'} — {event.message || event.status}
+                  </Typography>
+                ))}
+              </Box>
+            )}
           </>
         </div>
 

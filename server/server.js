@@ -82,8 +82,9 @@ console.log('[Config] - Live Trading API Key ID:', process.env.ALPACA_LIVE_API_K
 console.log('[Config] - Live Trading Secret Key:', process.env.ALPACA_LIVE_API_SECRET_KEY ? 'Set' : 'Missing');
 
 // Middleware
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+const bodyParserLimit = process.env.REQUEST_BODY_LIMIT || '5mb';
+app.use(express.urlencoded({ extended: true, limit: bodyParserLimit }));
+app.use(express.json({ limit: bodyParserLimit }));
 app.use(cookieParser("secretcode"));
 app.use(cors());
 
@@ -196,4 +197,3 @@ const startServer = async () => {
 startServer();
 
 schedulePortfolioRebalances();
-

@@ -128,12 +128,12 @@ const StrategyLogs = ({ strategyId, strategyName, onClose = () => {} }) => {
       const composerPositions = Array.isArray(thoughtProcess?.composerPositions)
         ? thoughtProcess.composerPositions
         : [];
-      const codeInterpreterInfo = thoughtProcess?.tooling?.codeInterpreter;
-      const blueprintList = Array.isArray(codeInterpreterInfo?.blueprint)
-        ? codeInterpreterInfo.blueprint.filter(Boolean)
+      const localEvaluatorInfo = thoughtProcess?.tooling?.localEvaluator;
+      const localBlueprintList = Array.isArray(localEvaluatorInfo?.blueprint)
+        ? localEvaluatorInfo.blueprint.filter(Boolean)
         : [];
-      const toolingTickers = Array.isArray(codeInterpreterInfo?.tickers)
-        ? codeInterpreterInfo.tickers.filter(Boolean)
+      const localTickers = Array.isArray(localEvaluatorInfo?.tickers)
+        ? localEvaluatorInfo.tickers.filter(Boolean)
         : [];
       const buyList = Array.isArray(details?.buys) ? details.buys : [];
       const sellList = Array.isArray(details?.sells) ? details.sells : [];
@@ -171,26 +171,38 @@ const StrategyLogs = ({ strategyId, strategyName, onClose = () => {} }) => {
               ))}
             </Box>
           )}
-          {codeInterpreterInfo?.used && (
+          {localEvaluatorInfo?.used && (
             <Box sx={{ mt: 1 }}>
               <Typography variant="subtitle2">Tooling</Typography>
-              <Typography variant="body2">
-                • Code interpreter evaluated the Composer strategy and computed the requested metrics.
-              </Typography>
-              {toolingTickers.length > 0 && (
+              <>
                 <Typography variant="body2">
-                  • Instrument universe parsed: {toolingTickers.join(', ')}.
+                  • Local defsymphony evaluator sized allocations using cached Alpaca prices.
                 </Typography>
-              )}
-              {blueprintList.length > 0 && (
-                <Box sx={{ mt: 0.5 }}>
-                  {blueprintList.map((step, index) => (
-                    <Typography key={`${log._id}-ci-step-${index}`} variant="body2">
-                      • Step {index + 1}: {step}
-                    </Typography>
-                  ))}
-                </Box>
-              )}
+                {localTickers.length > 0 && (
+                  <Typography variant="body2">
+                    • Cached instrument universe: {localTickers.join(', ')}.
+                  </Typography>
+                )}
+                {typeof localEvaluatorInfo.lookbackDays === "number" && (
+                  <Typography variant="body2">
+                    • Price cache lookback window: {localEvaluatorInfo.lookbackDays} days.
+                  </Typography>
+                )}
+                {localEvaluatorInfo.fallbackReason && (
+                  <Typography variant="body2">
+                    • Reason for local evaluation: {localEvaluatorInfo.fallbackReason}.
+                  </Typography>
+                )}
+                {localBlueprintList.length > 0 && (
+                  <Box sx={{ mt: 0.5 }}>
+                    {localBlueprintList.map((step, index) => (
+                      <Typography key={`${log._id}-local-step-${index}`} variant="body2">
+                        • Step {index + 1}: {step}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
+              </>
             </Box>
           )}
           {composerPositions.length > 0 && (

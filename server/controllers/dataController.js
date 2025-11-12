@@ -1,7 +1,9 @@
 const Axios = require("axios");
 const { getAlpacaConfig } = require("../config/alpacaConfig");
-const { runIndicatorsViaCodeInterpreter } = require("../utils/openaiCodeIndicators");
+const { computeWorkflowIndicators } = require('../services/indicatorService');
 const { runComposerStrategy } = require("../utils/openaiComposerStrategy");
+const { getCachedPrices } = require('../services/priceCacheService');
+const { evaluateDefsymphonyStrategy } = require('../services/defsymphonyEvaluator');
 
 exports.getStockMetaData = async (req, res) => {
   try {
@@ -212,13 +214,14 @@ exports.getWorkflowIndicators = async (req, res) => {
 
     const upperTicker = String(ticker).trim().toUpperCase();
 
-    const output = await runIndicatorsViaCodeInterpreter(upperTicker);
+    const output = await computeWorkflowIndicators(upperTicker);
 
     const result = {
       symbol: output.symbol || upperTicker,
       ma10_return: output.ma10_return ?? null,
       stdev63_return: output.stdev63_return ?? null,
       ma100_close: output.ma100_close ?? null,
+      data_source: output.data_source || null,
     };
 
     return res.status(200).json({
@@ -269,6 +272,65 @@ exports.evaluateComposerStrategy = async (req, res) => {
     return res.status(500).json({
       status: 'fail',
       message: error.message || 'Composer evaluation failed.',
+    });
+  }
+};
+
+exports.evaluateComposerStrategyLocal = async (req, res) => {
+  try {
+    const { strategyText, budget } = req.body || {};
+    if (!strategyText || typeof strategyText !== 'string' || !strategyText.trim()) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'strategyText (Composer defsymphony script) is required.',
+      });
+    }
+
+    const parsedBudget = Number.isFinite(Number(budget)) && Number(budget) > 0 ? Number(budget) : 1000;
+    const result = await evaluateDefsymphonyStrategy({
+      strategyText,
+      budget: parsedBudget,
+    });
+
+    return res.status(200).json({
+      status: 'success',
+      data: result,
+    });
+  } catch (error) {
+    console.error('[ComposerLocal]', error);
+    return res.status(500).json({
+      status: 'fail',
+      message: error.message || 'Local Composer evaluation failed.',
+    });
+  }
+};
+
+exports.getCachedHistoricalPrices = async (req, res) => {
+  try {
+    const { symbol } = req.params;
+    if (!symbol) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Symbol is required.",
+      });
+    }
+
+    const { start, end } = req.query || {};
+    const result = await getCachedPrices({
+      symbol,
+      startDate: start,
+      endDate: end,
+    });
+
+    return res.status(200).json({
+      status: "success",
+      data: result,
+    });
+  } catch (error) {
+    console.error('[PriceCache]', error.message);
+    return res.status(500).json({
+      status: "fail",
+      message: error.message || 'Failed to fetch historical prices.',
     });
   }
 };

@@ -70,7 +70,7 @@ const resolveBaseUrl = () => {
   };
 
   if (isLocalHost(hostname)) {
-    return buildOrigin(hostname, "5100");
+    return buildOrigin(hostname, "3000");
   }
 
   const subdomainMatch = hostname.match(/^(\d+)([-.])(.*)$/);

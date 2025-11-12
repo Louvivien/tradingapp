@@ -2,85 +2,29 @@
 > client@1.0.0 start
 > react-scripts start
 
-Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+Browserslist: browsers data (caniuse-lite) is 7 months old. Please run:
   npx update-browserslist-db@latest
   Why you should do it regularly: https://github.com/browserslist/update-db#readme
-(node:63041) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(node:29538) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
 (Use `node --trace-deprecation ...` to show where the warning was created)
-(node:63041) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(node:29538) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
 Starting the development server...
 
-Compiled successfully!
+Compiled with warnings.
 
-You can now view client in the browser.
+[eslint] 
+src/components/Strategies/Strategies.jsx
+  Line 101:9:  Unexpected console statement  no-console
+  Line 104:7:  Unexpected console statement  no-console
+  Line 132:7:  Unexpected console statement  no-console
 
-  Local:            http://localhost:3001
-  On Your Network:  http://192.168.1.76:3001
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
 
-Note that the development build is not optimized.
-To create a production build, use npm run build.
+WARNING in [eslint] 
+src/components/Strategies/Strategies.jsx
+  Line 101:9:  Unexpected console statement  no-console
+  Line 104:7:  Unexpected console statement  no-console
+  Line 132:7:  Unexpected console statement  no-console
 
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
-Compiling...
-Compiled successfully!
-webpack compiled successfully
+webpack compiled with 1 warning

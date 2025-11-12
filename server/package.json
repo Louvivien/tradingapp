@@ -39,7 +39,6 @@
     "moment": "^2.29.4",
     "mongoose": "^7.0.3",
     "node-cron": "^3.0.2",
-    "openai": "^4.58.1",
     "path": "^0.12.7",
     "requests": "^0.3.0",
     "socket.io": "^4.6.1",

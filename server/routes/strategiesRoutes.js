@@ -10,8 +10,10 @@ const {
   enableAIFund,
   disableAIFund,
   getStrategies,
+  getStrategyTemplates,
   getStrategyLogs,
   updateStrategyRecurrence,
+  streamStrategyProgress,
 } = require("../controllers/strategiesController");
 
 
@@ -24,8 +26,10 @@ router.route("/aifund/").post(auth, createCollaborative);
 router.route("/aifund/enable").post(auth, enableAIFund);
 router.route("/aifund/disable").post(auth, disableAIFund);
 router.route("/all/:userId").get(auth, getStrategies);
+router.route("/templates/:userId").get(auth, getStrategyTemplates);
 router.route("/logs/:userId/:strategyId").get(auth, getStrategyLogs);
 router.route("/recurrence/:userId/:strategyId").patch(auth, updateStrategyRecurrence);
+router.route("/progress/:jobId").get(streamStrategyProgress);
 
 
 

@@ -8,6 +8,8 @@ const {
   getPortfolioData,
   getWorkflowIndicators,
   evaluateComposerStrategy,
+  getCachedHistoricalPrices,
+  evaluateComposerStrategyLocal,
 } = require("../controllers/dataController");
 
 router.route("/prices/:ticker").get(getStockInfo);
@@ -16,6 +18,8 @@ router.route("/random").get(getRandomStockData);
 router.route("/portfolio/:userId").get(auth, getPortfolioData);
 router.route("/analytics/:ticker").get(getWorkflowIndicators);
 router.route("/composer/evaluate").post(evaluateComposerStrategy);
+router.route("/cache/prices/:symbol").get(getCachedHistoricalPrices);
+router.route("/composer/evaluate-local").post(evaluateComposerStrategyLocal);
 
 console.log('[Routes] Data routes registered:', router.stack.map((layer) => layer.route?.path).filter(Boolean));
 

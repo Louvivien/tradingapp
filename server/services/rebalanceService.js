@@ -97,21 +97,24 @@ const buildRebalanceHumanSummary = ({
     });
   }
 
-  if (tooling?.codeInterpreter?.used) {
+  const localTool = tooling?.localEvaluator;
+  if (localTool?.used) {
     lines.push('');
     lines.push('Tooling:');
-    lines.push('• Code interpreter evaluated the Composer strategy and computed the requested metrics before sizing orders.');
-    const tickers = Array.isArray(tooling.codeInterpreter.tickers)
-      ? tooling.codeInterpreter.tickers.filter(Boolean)
-      : [];
+    lines.push('• Local defsymphony evaluator computed allocations using cached Alpaca prices.');
+    const tickers = Array.isArray(localTool.tickers) ? localTool.tickers.filter(Boolean) : [];
     if (tickers.length) {
-      lines.push(`• Instrument universe parsed: ${tickers.join(', ')}.`);
+      lines.push(`• Cached instrument universe: ${tickers.join(', ')}.`);
     }
-    const blueprint = Array.isArray(tooling.codeInterpreter.blueprint)
-      ? tooling.codeInterpreter.blueprint.filter(Boolean)
-      : [];
+    const blueprint = Array.isArray(localTool.blueprint) ? localTool.blueprint.filter(Boolean) : [];
     if (blueprint.length) {
       lines.push(`• Evaluation steps: ${blueprint.join(' -> ')}.`);
+    }
+    if (localTool.lookbackDays) {
+      lines.push(`• Price cache lookback window: ${localTool.lookbackDays} days.`);
+    }
+    if (localTool.fallbackReason) {
+      lines.push(`• Reason for local evaluation: ${localTool.fallbackReason}.`);
     }
   }
 
@@ -404,10 +407,12 @@ const rebalancePortfolio = async (portfolio) => {
     reasoning: [],
     composerPositions: [],
     tooling: {
-      codeInterpreter: {
+      localEvaluator: {
         used: false,
         blueprint: [],
         tickers: [],
+        lookbackDays: null,
+        fallbackReason: null,
       },
     },
   };
@@ -519,6 +524,7 @@ const rebalancePortfolio = async (portfolio) => {
         });
       } catch (error) {
         console.warn('[Rebalance] Composer evaluation failed:', error.message);
+        throw new Error(`Composer evaluation failed: ${error.message}`);
       }
     }
   }
@@ -536,16 +542,20 @@ const rebalancePortfolio = async (portfolio) => {
 
   if (composerEvaluation?.positions?.length) {
     const meta = composerEvaluation.meta || {};
-    const interpreterMeta = meta.codeInterpreter || {};
-    baseThoughtProcess.tooling = {
-      ...baseThoughtProcess.tooling,
-      codeInterpreter: {
-        used: true,
-        blueprint: Array.isArray(interpreterMeta.blueprint) ? interpreterMeta.blueprint : [],
-        tickers: Array.isArray(interpreterMeta.tickers) ? interpreterMeta.tickers : [],
-        note: 'Composer strategy evaluated via code interpreter.',
-      },
-    };
+    const localMeta = meta.localEvaluator || {};
+    if (localMeta.used) {
+      baseThoughtProcess.tooling = {
+        ...baseThoughtProcess.tooling,
+        localEvaluator: {
+          used: true,
+          blueprint: Array.isArray(localMeta.blueprint) ? localMeta.blueprint : [],
+          tickers: Array.isArray(localMeta.tickers) ? localMeta.tickers : [],
+          lookbackDays: localMeta.lookbackDays || null,
+          fallbackReason: meta.fallbackReason || localMeta.fallbackReason || null,
+          note: 'Composer strategy evaluated via local defsymphony interpreter.',
+        },
+      };
+    }
 
     const composerTargets = normalizeTargets(
       composerEvaluation.positions.map((pos) => ({
