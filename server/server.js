@@ -166,6 +166,12 @@ app.use("/api/news", newsRouter);
 app.use("/api/stock", stockRouter);
 app.use("/api/order", orderRouter);
 app.use("/api/strategies", strategiesRouter);
+app.get("/api/ping", (req, res) => {
+  res.json({
+    status: "ok",
+    timestamp: Date.now(),
+  });
+});
 
 // Initialize the server
 const startServer = async () => {

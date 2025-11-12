@@ -78,6 +78,28 @@ function App() {
     checkLoggedIn();
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    const sendPing = () => {
+      Axios.get(`${config.base_url}/api/ping`)
+        .catch(() => {
+          if (!cancelled) {
+            // eslint-disable-next-line no-console
+            console.warn("[KeepAlive] Failed to reach backend ping endpoint.");
+          }
+        });
+    };
+
+    sendPing();
+    const intervalId = setInterval(sendPing, 5 * 60 * 1000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, []);
+
   return (
     <Router>
       <UserContext.Provider value={{ userData, setUserData }}>
