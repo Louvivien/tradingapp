@@ -68,6 +68,117 @@ const formatRecurrenceLabel = (value) => {
   return RECURRENCE_LABELS[normalized] || normalized;
 };
 
+const sanitizeSymbol = (value) => {
+  if (!value) {
+    return null;
+  }
+  return String(value).trim().toUpperCase();
+};
+
+const buildHoldingsState = (stocks = []) => {
+  const holdings = new Map();
+  if (!Array.isArray(stocks)) {
+    return holdings;
+  }
+  stocks.forEach((stock) => {
+    const symbol = sanitizeSymbol(stock?.symbol);
+    if (!symbol) {
+      return;
+    }
+    holdings.set(symbol, {
+      symbol,
+      quantity: Math.max(0, toNumber(stock?.quantity, 0)),
+      avgCost: toNumber(stock?.avgCost, null),
+      currentPrice: toNumber(stock?.currentPrice, null),
+      orderID: stock?.orderID || null,
+    });
+  });
+  return holdings;
+};
+
+const updateHoldingsForTrade = (
+  holdings,
+  {
+    symbol,
+    qtyChange,
+    price = null,
+    orderId = null,
+    overwriteOrderId = false,
+  } = {},
+) => {
+  if (!holdings || typeof holdings.set !== 'function') {
+    return;
+  }
+  const normalizedSymbol = sanitizeSymbol(symbol);
+  if (!normalizedSymbol) {
+    return;
+  }
+  const delta = toNumber(qtyChange, null);
+  if (!Number.isFinite(delta) || delta === 0) {
+    return;
+  }
+
+  const entry = holdings.get(normalizedSymbol) || {
+    symbol: normalizedSymbol,
+    quantity: 0,
+    avgCost: null,
+    currentPrice: null,
+    orderID: null,
+  };
+  const prevQty = entry.quantity || 0;
+  const nextQty = prevQty + delta;
+
+  const fillPrice = toNumber(price, null);
+  if (delta > 0 && Number.isFinite(fillPrice)) {
+    const prevCost = Number.isFinite(entry.avgCost) ? entry.avgCost * prevQty : null;
+    const baselineCost = prevCost !== null ? prevCost : prevQty * fillPrice;
+    const totalCost = (baselineCost || 0) + delta * fillPrice;
+    entry.avgCost = nextQty > 0 ? totalCost / nextQty : entry.avgCost;
+  }
+
+  entry.quantity = Math.max(0, nextQty);
+  if (Number.isFinite(fillPrice)) {
+    entry.currentPrice = fillPrice;
+  }
+
+  if (delta > 0) {
+    if (overwriteOrderId && orderId) {
+      entry.orderID = orderId;
+    } else if (!entry.orderID) {
+      entry.orderID = orderId || `rebalance-${Date.now()}-${normalizedSymbol}`;
+    }
+  }
+
+  if (entry.quantity <= 0) {
+    holdings.delete(normalizedSymbol);
+  } else {
+    holdings.set(normalizedSymbol, entry);
+  }
+};
+
+const serializeHoldingsState = (holdings, priceCache = {}) => {
+  if (!holdings || typeof holdings.values !== 'function') {
+    return [];
+  }
+  return Array.from(holdings.values())
+    .map((entry) => {
+      const symbolPrice = toNumber(priceCache?.[entry.symbol], null);
+      const currentPrice = Number.isFinite(symbolPrice)
+        ? symbolPrice
+        : toNumber(entry.currentPrice, toNumber(entry.avgCost, null));
+      const normalizedAvgCost = toNumber(entry.avgCost, null);
+      const normalizedQty = Math.max(0, toNumber(entry.quantity, 0));
+      return {
+        symbol: entry.symbol,
+        quantity: normalizedQty,
+        avgCost: Number.isFinite(normalizedAvgCost) ? normalizedAvgCost : null,
+        currentPrice: currentPrice !== null ? currentPrice : null,
+        orderID: entry.orderID || `rebalance-${entry.symbol}`,
+      };
+    })
+    .filter((entry) => entry.quantity > 0);
+};
+
 const buildRebalanceHumanSummary = ({
   strategyName,
   recurrence,
@@ -317,10 +428,15 @@ const buildAdjustments = async ({
   positionMap,
   priceCache,
   dataKeys,
+  trackedHoldings = {},
 }) => {
-  const symbolsNeedingPrice = targets
-    .filter((target) => !priceCache[target.symbol])
-    .map((target) => target.symbol);
+  const symbolUniverse = new Set([
+    ...targets.map((target) => target.symbol),
+    ...Object.keys(trackedHoldings),
+  ]);
+  const symbolsNeedingPrice = Array.from(symbolUniverse).filter(
+    (symbol) => symbol && !priceCache[symbol],
+  );
 
   if (symbolsNeedingPrice.length) {
     const fetched = await fetchLatestPrices(symbolsNeedingPrice, dataKeys);
@@ -329,10 +445,13 @@ const buildAdjustments = async ({
 
   const adjustments = targets.map((target) => {
     const position = positionMap[target.symbol];
-    const currentQty = position ? toNumber(position.qty, 0) : 0;
+    const tracked = trackedHoldings[target.symbol];
+    const trackedQty = tracked ? Math.max(0, toNumber(tracked.quantity, 0)) : 0;
+    const accountQty = position ? Math.max(0, toNumber(position.qty, 0)) : 0;
+    const currentQty = tracked ? (accountQty > 0 ? Math.min(trackedQty, accountQty) : trackedQty) : 0;
     const currentPrice = priceCache[target.symbol]
-      || toNumber(position?.current_price, null)
-      || toNumber(position?.avg_entry_price, null)
+      || toNumber(position?.current_price, toNumber(position?.avg_entry_price, null))
+      || toNumber(tracked?.currentPrice, toNumber(tracked?.avgCost, null))
       || 0;
     const currentValue = currentQty * currentPrice;
     const desiredValue = Math.max(0, target.targetWeight * budget);
@@ -348,18 +467,32 @@ const buildAdjustments = async ({
     };
   });
 
-  // Ensure positions not present in targets are liquidated
-  Object.keys(positionMap).forEach((symbol) => {
+  // Ensure tracked positions not present in targets are liquidated
+  Object.keys(trackedHoldings).forEach((symbol) => {
     if (!targets.find((target) => target.symbol === symbol)) {
+      const tracked = trackedHoldings[symbol];
+      const trackedQty = tracked ? Math.max(0, toNumber(tracked.quantity, 0)) : 0;
+      if (trackedQty <= 0) {
+        return;
+      }
       const position = positionMap[symbol];
-      const price = toNumber(position.current_price, toNumber(position.avg_entry_price, 0));
+      const accountQty = position ? Math.max(0, toNumber(position.qty, 0)) : 0;
+      const qtyToUse = accountQty > 0 ? Math.min(trackedQty, accountQty) : trackedQty;
+      if (!qtyToUse) {
+        return;
+      }
+      const price =
+        priceCache[symbol]
+        || toNumber(position?.current_price, toNumber(position?.avg_entry_price, null))
+        || toNumber(tracked?.currentPrice, toNumber(tracked?.avgCost, null))
+        || 0;
       adjustments.push({
         symbol,
-        currentQty: toNumber(position.qty, 0),
+        currentQty: qtyToUse,
         desiredQty: 0,
         currentPrice: price,
         desiredValue: 0,
-        currentValue: toNumber(position.market_value, 0),
+        currentValue: qtyToUse * price,
         targetWeight: 0,
       });
     }
@@ -479,34 +612,73 @@ const rebalancePortfolio = async (portfolio) => {
   const accountCash = toNumber(accountResponse.data?.cash, 0);
   const positionMap = {};
   const priceCache = {};
+  const holdingsState = buildHoldingsState(portfolio.stocks);
+  const trackedHoldings = {};
 
   positions.forEach((position) => {
-    positionMap[position.symbol] = position;
+    const symbol = sanitizeSymbol(position.symbol);
+    if (!symbol) {
+      return;
+    }
+    positionMap[symbol] = position;
     const price = toNumber(position.current_price, toNumber(position.avg_entry_price, null));
     if (price) {
-      priceCache[position.symbol] = price;
+      priceCache[symbol] = price;
     }
   });
 
-  const currentPortfolioValue = positions.reduce(
-    (sum, position) => sum + toNumber(position.market_value, 0),
+  holdingsState.forEach((entry, symbol) => {
+    trackedHoldings[symbol] = entry;
+    if (priceCache[symbol] == null) {
+      const fallbackPrice = toNumber(entry.currentPrice, toNumber(entry.avgCost, null));
+      if (Number.isFinite(fallbackPrice) && fallbackPrice > 0) {
+        priceCache[symbol] = fallbackPrice;
+      }
+    }
+  });
+
+  const computeTrackedValue = (symbol) => {
+    const entry = trackedHoldings[symbol];
+    if (!entry) {
+      return 0;
+    }
+    const trackedQty = Math.max(0, toNumber(entry.quantity, 0));
+    if (!trackedQty) {
+      return 0;
+    }
+    const position = positionMap[symbol];
+    const accountQty = position ? Math.max(0, toNumber(position.qty, 0)) : 0;
+    const effectiveQty = accountQty > 0 ? Math.min(trackedQty, accountQty) : trackedQty;
+    const price =
+      priceCache[symbol]
+      || toNumber(position?.current_price, toNumber(position?.avg_entry_price, null))
+      || toNumber(entry.currentPrice, toNumber(entry.avgCost, null))
+      || 0;
+    return effectiveQty * price;
+  };
+
+  const currentPortfolioValue = Object.keys(trackedHoldings).reduce(
+    (sum, symbol) => sum + computeTrackedValue(symbol),
     0,
   );
 
   if (!portfolio.initialInvestment) {
-    const estimatedInvestment = positions.reduce(
-      (sum, position) => sum + toNumber(position.cost_basis, 0),
-      0,
-    );
+    const estimatedInvestment = Array.from(holdingsState.values()).reduce((sum, entry) => {
+      if (!Number.isFinite(entry.avgCost)) {
+        return sum;
+      }
+      return sum + entry.avgCost * Math.max(0, toNumber(entry.quantity, 0));
+    }, 0);
     portfolio.initialInvestment = estimatedInvestment || toNumber(portfolio.budget, 0) || currentPortfolioValue;
   }
 
   const baseBudget = portfolio.initialInvestment || 0;
   const cashBuffer = toNumber(portfolio.cashBuffer, 0);
+  let strategyCash = Math.max(0, cashBuffer);
   const cashLimit = toNumber(portfolio.cashLimit, toNumber(portfolio.budget, null));
   const effectiveLimit = cashLimit && cashLimit > 0 ? cashLimit : Infinity;
-  const maxBudget = Math.min(baseBudget + cashBuffer, effectiveLimit);
-  const currentTotal = currentPortfolioValue + accountCash;
+  const maxBudget = Math.min(baseBudget + strategyCash, effectiveLimit);
+  const currentTotal = currentPortfolioValue + strategyCash;
   const budget = Math.min(
     maxBudget > 0 ? maxBudget : currentTotal,
     currentTotal,
@@ -628,44 +800,51 @@ const rebalancePortfolio = async (portfolio) => {
   let sellProceeds = 0;
   for (const sell of sells) {
     try {
-      await placeOrder(tradingKeys, {
+      const response = await placeOrder(tradingKeys, {
         symbol: sell.symbol,
         qty: sell.qty,
         side: 'sell',
         type: 'market',
         time_in_force: 'gtc',
       });
+      const orderId = response?.data?.client_order_id || response?.data?.id || null;
       sellProceeds += sell.qty * sell.price;
       executedSells.push({
         symbol: sell.symbol,
         qty: sell.qty,
         price: sell.price,
+        orderId,
       });
     } catch (error) {
       console.error(`[Rebalance] Sell order failed for ${sell.symbol}:`, error.message);
     }
   }
 
-  let availableCash = Math.min(budget, accountCash + sellProceeds);
+  strategyCash += sellProceeds;
+  const actualCashAvailable = Math.max(0, accountCash) + sellProceeds;
+  let availableCash = Math.min(budget, strategyCash, actualCashAvailable);
   let buySpend = 0;
 
   for (const buy of buys) {
     const estimatedCost = buy.qty * buy.price;
     if (estimatedCost <= availableCash) {
       try {
-        await placeOrder(tradingKeys, {
+        const response = await placeOrder(tradingKeys, {
           symbol: buy.symbol,
           qty: buy.qty,
           side: 'buy',
           type: 'market',
           time_in_force: 'gtc',
         });
+        const orderId = response?.data?.client_order_id || response?.data?.id || null;
         availableCash -= estimatedCost;
+        strategyCash = Math.max(0, strategyCash - estimatedCost);
         buySpend += estimatedCost;
         executedBuys.push({
           symbol: buy.symbol,
           qty: buy.qty,
           price: buy.price,
+          orderId,
         });
       } catch (error) {
         console.error(`[Rebalance] Buy order failed for ${buy.symbol}:`, error.message);
@@ -674,7 +853,7 @@ const rebalancePortfolio = async (portfolio) => {
       const affordableQty = Math.floor(availableCash / buy.price);
       if (affordableQty > 0) {
         try {
-          await placeOrder(tradingKeys, {
+          const response = await placeOrder(tradingKeys, {
             symbol: buy.symbol,
             qty: affordableQty,
             side: 'buy',
@@ -683,11 +862,14 @@ const rebalancePortfolio = async (portfolio) => {
           });
           const cost = affordableQty * buy.price;
           availableCash -= cost;
+          strategyCash = Math.max(0, strategyCash - cost);
           buySpend += cost;
+          const orderId = response?.data?.client_order_id || response?.data?.id || null;
           executedBuys.push({
             symbol: buy.symbol,
             qty: affordableQty,
             price: buy.price,
+            orderId,
           });
         } catch (error) {
           console.error(`[Rebalance] Partial buy order failed for ${buy.symbol}:`, error.message);
@@ -695,6 +877,26 @@ const rebalancePortfolio = async (portfolio) => {
       }
     }
   }
+
+  executedSells.forEach((sell) => {
+    updateHoldingsForTrade(holdingsState, {
+      symbol: sell.symbol,
+      qtyChange: -Math.abs(sell.qty),
+      price: sell.price,
+    });
+  });
+
+  executedBuys.forEach((buy) => {
+    updateHoldingsForTrade(holdingsState, {
+      symbol: buy.symbol,
+      qtyChange: Math.abs(buy.qty),
+      price: buy.price,
+      orderId: buy.orderId,
+      overwriteOrderId: true,
+    });
+  });
+
+  portfolio.stocks = serializeHoldingsState(holdingsState, priceCache);
 
   const decisionTrace = adjustments.map((adjustment) => {
     const qtyDiff = adjustment.desiredQty - adjustment.currentQty;
@@ -738,7 +940,7 @@ const rebalancePortfolio = async (portfolio) => {
   };
   const holdDecisions = decisionTrace.filter((entry) => entry.action === 'hold');
 
-  portfolio.cashBuffer = Math.max(0, availableCash);
+  portfolio.cashBuffer = Math.max(0, strategyCash);
   if (cashLimit && cashLimit > 0) {
     const maxAllowedBuffer = Math.max(0, cashLimit - (portfolio.initialInvestment || 0));
     portfolio.cashBuffer = Math.min(portfolio.cashBuffer, maxAllowedBuffer);

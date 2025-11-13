@@ -2416,26 +2416,74 @@ exports.resendCollaborativeOrders = async (req, res) => {
       });
     }
 
-    const previousRebalanceAt = portfolio.lastRebalancedAt
-      ? new Date(portfolio.lastRebalancedAt).getTime()
-      : null;
+    const strategy = await Strategy.findOne({ strategy_id: strategyId, userId: userKey });
 
-    await rebalancePortfolio(portfolio);
+    const alpacaConfig = await getAlpacaConfig(userId);
+    if (!alpacaConfig?.hasValidKeys) {
+      throw new Error('Alpaca credentials are invalid for this account.');
+    }
 
-    const refreshedPortfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: userKey });
-    const latestRebalanceAt = refreshedPortfolio?.lastRebalancedAt
-      ? new Date(refreshedPortfolio.lastRebalancedAt).getTime()
-      : null;
+    const alpacaApi = new Alpaca(alpacaConfig);
+    const clock = await alpacaApi.getClock().catch((error) => {
+      console.error('[ResendOrders] Failed to retrieve market clock:', error.message);
+      return null;
+    });
 
-    const message =
-      latestRebalanceAt && (!previousRebalanceAt || latestRebalanceAt > previousRebalanceAt)
-        ? 'Manual rebalance executed. Check strategy logs for order details.'
-        : 'Market was closed or no changes were required. Rebalance has been rescheduled.';
+    const marketOpen = clock?.is_open === true;
+    if (!marketOpen) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Market is closed. Please try again when markets are open.',
+      });
+    }
+
+    const buyPromises = (portfolio.stocks || [])
+      .filter((stock) => stock?.symbol && Number(stock.quantity) > 0)
+      .map((stock) =>
+        alpacaApi
+          .createOrder({
+            symbol: stock.symbol,
+            qty: Number(stock.quantity),
+            side: 'buy',
+            type: 'market',
+            time_in_force: 'gtc',
+          })
+          .then((response) => ({
+            symbol: stock.symbol,
+            qty: Number(stock.quantity),
+            orderID: response?.client_order_id || null,
+          }))
+          .catch((error) => {
+            console.error(`[ResendOrders] Failed to place buy order for ${stock.symbol}:`, error.message);
+            return null;
+          })
+      );
+
+    let buyOrders = await Promise.all(buyPromises);
+    buyOrders = buyOrders.filter(Boolean);
+
+    if (!buyOrders.length) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'No orders could be placed. Please verify strategy holdings.',
+      });
+    }
+
+    await recordStrategyLog({
+      strategyId,
+      userId: userKey,
+      strategyName: strategy?.name || portfolio.name,
+      message: 'Manual resend triggered',
+      details: {
+        type: 'manual_resend',
+        buyOrders,
+      },
+    });
 
     return res.status(200).json({
       status: 'success',
-      message,
-      nextRebalanceAt: refreshedPortfolio?.nextRebalanceAt || null,
+      message: 'Orders resent successfully. Check strategy logs for details.',
+      buyOrders,
     });
   } catch (error) {
     console.error('[ResendOrders] Failed to resend orders:', error);
