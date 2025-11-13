@@ -133,7 +133,10 @@ const deleteStrategy = async (strategyId) => {
     }
   };
 
-  const handleResendOrders = async (portfolio) => {
+  const handleResendOrders = async (portfolio, event) => {
+    if (event?.stopPropagation) {
+      event.stopPropagation();
+    }
     if (!portfolio?.strategy_id || !userData?.user?.id || !userData?.token) {
       return;
     }
@@ -305,7 +308,7 @@ const deleteStrategy = async (strategyId) => {
                   size="small"
                   variant="outlined"
                   sx={{ ml: 1 }}
-                  onClick={() => handleResendOrders(portfolio)}
+                  onClick={(event) => handleResendOrders(portfolio, event)}
                   disabled={!!resendStatus[portfolio.strategy_id]?.loading}
                 >
                   {resendStatus[portfolio.strategy_id]?.loading ? 'Resending…' : 'Resend Orders'}
