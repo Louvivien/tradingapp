@@ -33,6 +33,8 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
   const [recurrenceError, setRecurrenceError] = useState(null);
   const [updatingRecurrence, setUpdatingRecurrence] = useState({});
   const [resendStatus, setResendStatus] = useState({});
+  const [resendOpen, setResendOpen] = useState(false);
+  const [strategyToResend, setStrategyToResend] = useState(null);
 
 
 
@@ -133,18 +135,8 @@ const deleteStrategy = async (strategyId) => {
     }
   };
 
-  const handleResendOrders = async (portfolio, event) => {
-    if (event?.stopPropagation) {
-      event.stopPropagation();
-    }
+  const handleResendOrders = async (portfolio) => {
     if (!portfolio?.strategy_id || !userData?.user?.id || !userData?.token) {
-      return;
-    }
-
-    const confirmed = window.confirm(
-      `Resend the latest allocation orders for "${portfolio.name}"?\nThis will place trades using your current Alpaca account.`
-    );
-    if (!confirmed) {
       return;
     }
 
@@ -178,6 +170,19 @@ const deleteStrategy = async (strategyId) => {
         },
       }));
     }
+  };
+
+  const openResendModal = (portfolio, event) => {
+    if (event?.stopPropagation) {
+      event.stopPropagation();
+    }
+    setStrategyToResend(portfolio);
+    setResendOpen(true);
+  };
+
+  const closeResendModal = () => {
+    setResendOpen(false);
+    setStrategyToResend(null);
   };
 
 
@@ -308,7 +313,7 @@ const deleteStrategy = async (strategyId) => {
                   size="small"
                   variant="outlined"
                   sx={{ ml: 1 }}
-                  onClick={(event) => handleResendOrders(portfolio, event)}
+                  onClick={(event) => openResendModal(portfolio, event)}
                   disabled={!!resendStatus[portfolio.strategy_id]?.loading}
                 >
                   {resendStatus[portfolio.strategy_id]?.loading ? 'Resending…' : 'Resend Orders'}
@@ -404,6 +409,36 @@ const deleteStrategy = async (strategyId) => {
                         window.location.reload();
                       }}>
                         Proceed
+                      </Button>
+                    </div>
+                  </Modal>
+
+                  <Modal
+                    open={resendOpen}
+                    onClose={closeResendModal}
+                    aria-labelledby="resend-orders-modal-title"
+                    aria-describedby="resend-orders-modal-description"
+                  >
+                    <div style={{ padding: '20px', backgroundColor: 'white', margin: 'auto', marginTop: '20%', width: '50%' }}>
+                      <h2 id="resend-orders-modal-title">Resend Orders</h2>
+                      <p id="resend-orders-modal-description">
+                        Resend the latest allocation orders for "{strategyToResend?.name}"? This will place trades using your current Alpaca account.
+                      </p>
+                      <Button variant="contained" color="primary" onClick={closeResendModal} style={{ marginRight: '20px' }}>
+                        Cancel
+                      </Button>
+                      <Button
+                        variant="contained"
+                        color="secondary"
+                        disabled={strategyToResend && !!resendStatus[strategyToResend.strategy_id]?.loading}
+                        onClick={async () => {
+                          if (strategyToResend) {
+                            await handleResendOrders(strategyToResend);
+                          }
+                          closeResendModal();
+                        }}
+                      >
+                        Confirm
                       </Button>
                     </div>
                   </Modal>
