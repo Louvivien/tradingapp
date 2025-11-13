@@ -14,12 +14,14 @@ const {
   getStrategyLogs,
   updateStrategyRecurrence,
   streamStrategyProgress,
+  resendCollaborativeOrders,
 } = require("../controllers/strategiesController");
 
 
 router.route("/collaborative/").post(auth, createCollaborative);
 router.route("/portfolios/:userId").get(auth, getPortfolios);
 router.route("/delete/:userId/:strategyId").delete(auth, deleteCollaborative);
+router.route("/resend/:userId/:strategyId").post(auth, resendCollaborativeOrders);
 router.route("/news/:userId").post(auth, getNewsHeadlines);
 router.route("/score/:userId").get(auth, getScoreHeadlines);
 router.route("/aifund/").post(auth, createCollaborative);

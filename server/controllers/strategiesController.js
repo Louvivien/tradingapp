@@ -19,6 +19,7 @@ const Axios = require("axios");
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('../services/strategyLogger');
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
+const { rebalancePortfolio } = require('../services/rebalanceService');
 const {
   addSubscriber,
   removeSubscriber,
@@ -2399,7 +2400,57 @@ const getPricesData = async (stocks, marketOpen, userId) => {
         adjClose: currentPrice,
         name: assetName, 
 
-      };
+};
+
+exports.resendCollaborativeOrders = async (req, res) => {
+  try {
+    const { userId, strategyId } = req.params;
+    const userKey = String(userId || '');
+
+    if (!userKey || req.user !== userKey) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const portfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: userKey });
+    if (!portfolio) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Portfolio not found for this strategy.',
+      });
+    }
+
+    const previousRebalanceAt = portfolio.lastRebalancedAt
+      ? new Date(portfolio.lastRebalancedAt).getTime()
+      : null;
+
+    await rebalancePortfolio(portfolio);
+
+    const refreshedPortfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: userKey });
+    const latestRebalanceAt = refreshedPortfolio?.lastRebalancedAt
+      ? new Date(refreshedPortfolio.lastRebalancedAt).getTime()
+      : null;
+
+    const message =
+      latestRebalanceAt && (!previousRebalanceAt || latestRebalanceAt > previousRebalanceAt)
+        ? 'Manual rebalance executed. Check strategy logs for order details.'
+        : 'Market was closed or no changes were required. Rebalance has been rescheduled.';
+
+    return res.status(200).json({
+      status: 'success',
+      message,
+      nextRebalanceAt: refreshedPortfolio?.nextRebalanceAt || null,
+    });
+  } catch (error) {
+    console.error('[ResendOrders] Failed to resend orders:', error);
+    return res.status(500).json({
+      status: 'fail',
+      message: error.message || 'Unable to resend orders at this time.',
+    });
+  }
+};
     });
 
     return Promise.all(promises);

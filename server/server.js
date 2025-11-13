@@ -53,8 +53,6 @@ if (fs.existsSync(envPath)) {
 const requiredEnvVars = [
   'ALPACA_API_KEY_ID',
   'ALPACA_API_SECRET_KEY',
-  'ALPACA_LIVE_API_KEY_ID',
-  'ALPACA_LIVE_API_SECRET_KEY',
   'MONGO_URI',
   'MONGO_PASSWORD',
   'CryptoJS_secret_key'
@@ -78,8 +76,12 @@ if (missingVars.length > 0) {
 console.log('[Config] API Key Configuration:');
 console.log('[Config] - Paper Trading API Key ID:', process.env.ALPACA_API_KEY_ID ? 'Set' : 'Missing');
 console.log('[Config] - Paper Trading Secret Key:', process.env.ALPACA_API_SECRET_KEY ? 'Set' : 'Missing');
-console.log('[Config] - Live Trading API Key ID:', process.env.ALPACA_LIVE_API_KEY_ID ? 'Set' : 'Missing');
-console.log('[Config] - Live Trading Secret Key:', process.env.ALPACA_LIVE_API_SECRET_KEY ? 'Set' : 'Missing');
+if (process.env.ALPACA_LIVE_API_KEY_ID && process.env.ALPACA_LIVE_API_SECRET_KEY) {
+  console.log('[Config] - Live Trading API Key ID: Set');
+  console.log('[Config] - Live Trading Secret Key: Set');
+} else {
+  console.warn('[Config] Live trading keys not set; running in paper-only mode.');
+}
 
 // Middleware
 const bodyParserLimit = process.env.REQUEST_BODY_LIMIT || '5mb';

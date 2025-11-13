@@ -32,6 +32,7 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
   const theme = useTheme();
   const [recurrenceError, setRecurrenceError] = useState(null);
   const [updatingRecurrence, setUpdatingRecurrence] = useState({});
+  const [resendStatus, setResendStatus] = useState({});
 
 
 
@@ -81,7 +82,7 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
   };
 
 
-  const deleteStrategy = async (strategyId) => {
+const deleteStrategy = async (strategyId) => {
     try {
       const url = config.base_url + `/api/strategies/delete/${userData.user.id}/${strategyId}`;
       const headers = {
@@ -128,6 +129,50 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
       setUpdatingRecurrence((prev) => ({
         ...prev,
         [portfolio.strategy_id]: false,
+      }));
+    }
+  };
+
+  const handleResendOrders = async (portfolio) => {
+    if (!portfolio?.strategy_id || !userData?.user?.id || !userData?.token) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Resend the latest allocation orders for "${portfolio.name}"?\nThis will place trades using your current Alpaca account.`
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    const strategyId = portfolio.strategy_id;
+    setResendStatus((prev) => ({
+      ...prev,
+      [strategyId]: { loading: true, message: null, error: false },
+    }));
+
+    try {
+      const url = `${config.base_url}/api/strategies/resend/${userData.user.id}/${strategyId}`;
+      const headers = {
+        "x-auth-token": userData.token,
+      };
+      const response = await Axios.post(url, {}, { headers });
+      const message = response?.data?.message || "Manual rebalance triggered.";
+      setResendStatus((prev) => ({
+        ...prev,
+        [strategyId]: { loading: false, message, error: false },
+      }));
+      if (typeof refreshPortfolios === "function") {
+        await refreshPortfolios();
+      }
+    } catch (error) {
+      setResendStatus((prev) => ({
+        ...prev,
+        [strategyId]: {
+          loading: false,
+          message: error.response?.data?.message || error.message || "Failed to resend orders.",
+          error: true,
+        },
       }));
     }
   };
@@ -256,6 +301,15 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
                 >
                   View Logs
                 </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  sx={{ ml: 1 }}
+                  onClick={() => handleResendOrders(portfolio)}
+                  disabled={!!resendStatus[portfolio.strategy_id]?.loading}
+                >
+                  {resendStatus[portfolio.strategy_id]?.loading ? 'Resending…' : 'Resend Orders'}
+                </Button>
 
 
 
@@ -310,6 +364,20 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
               {portfolio.cashBuffer > 0 && (
                 <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
                   Cash buffer available: ${roundNumber(portfolio.cashBuffer).toLocaleString()}
+                </Typography>
+              )}
+              {resendStatus[portfolio.strategy_id]?.message && (
+                <Typography
+                  variant="body2"
+                  sx={{
+                    ml: 6,
+                    mt: 0.5,
+                    color: resendStatus[portfolio.strategy_id]?.error
+                      ? theme.palette.error.main
+                      : theme.palette.success.main,
+                  }}
+                >
+                  {resendStatus[portfolio.strategy_id].message}
                 </Typography>
               )}
 
