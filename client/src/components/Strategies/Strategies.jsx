@@ -98,9 +98,11 @@ const Strategies = () => {
         const aiFundStrategy = strategies.find((strategy) => strategy.isAIFund);
         setAiFundStrategyEnabled(Boolean(aiFundStrategy));
       } else if (response.data?.message) {
+        /* eslint-disable-next-line no-console */
         console.warn(response.data.message);
       }
     } catch (err) {
+      /* eslint-disable-next-line no-console */
       console.error("Failed to fetch strategies:", err);
     }
   }, [authToken, userId]);
@@ -129,6 +131,7 @@ const Strategies = () => {
         );
       }
     } catch (err) {
+      /* eslint-disable-next-line no-console */
       console.error("Failed to fetch strategy templates:", err);
     }
   }, [authToken, userId]);

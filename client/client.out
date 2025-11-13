@@ -66,3 +66,6 @@ src/components/Strategies/Strategies.jsx
   Line 132:7:  Unexpected console statement  no-console
 
 webpack compiled with 1 warning
+Compiling...
+Compiled successfully!
+webpack compiled successfully
