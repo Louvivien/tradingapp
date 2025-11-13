@@ -775,7 +775,7 @@ const rebalancePortfolio = async (portfolio) => {
   } catch (error) {
     if (
       error?.message?.includes('No matching document found') ||
-      error?.code === 66 // immutable field or similar concurrency error
+      error?.code === 66
     ) {
       console.warn(
         `[Rebalance] Portfolio ${portfolio._id} could not be saved (possibly deleted). Skipping.`
@@ -826,30 +826,41 @@ const rebalancePortfolio = async (portfolio) => {
   });
 };
 
-const runDueRebalances = async () => {
-  const now = new Date();
-  const duePortfolios = await Portfolio.find({
-    recurrence: { $exists: true },
-    $or: [
-      { nextRebalanceAt: null },
-      { nextRebalanceAt: { $lte: now } },
-    ],
-  });
+let rebalanceInProgress = false;
 
-  for (const portfolio of duePortfolios) {
-    try {
-      await rebalancePortfolio(portfolio);
-    } catch (error) {
-      console.error(`[Rebalance] Failed for portfolio ${portfolio._id}:`, error.message);
-      await recordStrategyLog({
-        strategyId: portfolio.strategy_id,
-        userId: portfolio.userId,
-        strategyName: portfolio.name,
-        level: 'error',
-        message: 'Portfolio rebalance failed',
-        details: { error: error.message },
-      });
+const runDueRebalances = async () => {
+  if (rebalanceInProgress) {
+    console.log('[Rebalance] Skipping run; previous cycle still in progress.');
+    return;
+  }
+  rebalanceInProgress = true;
+  try {
+    const now = new Date();
+    const duePortfolios = await Portfolio.find({
+      recurrence: { $exists: true },
+      $or: [
+        { nextRebalanceAt: null },
+        { nextRebalanceAt: { $lte: now } },
+      ],
+    });
+
+    for (const portfolio of duePortfolios) {
+      try {
+        await rebalancePortfolio(portfolio);
+      } catch (error) {
+        console.error(`[Rebalance] Failed for portfolio ${portfolio._id}:`, error.message);
+        await recordStrategyLog({
+          strategyId: portfolio.strategy_id,
+          userId: portfolio.userId,
+          strategyName: portfolio.name,
+          level: 'error',
+          message: 'Portfolio rebalance failed',
+          details: { error: error.message },
+        });
+      }
     }
+  } finally {
+    rebalanceInProgress = false;
   }
 };
 
