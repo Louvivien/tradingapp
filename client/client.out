@@ -47,3 +47,22 @@ src/components/Strategies/Strategies.jsx
   Line 132:7:  Unexpected console statement  no-console
 
 webpack compiled with 1 warning
+Compiling...
+Compiled with warnings.
+
+[eslint] 
+src/components/Strategies/Strategies.jsx
+  Line 101:9:  Unexpected console statement  no-console
+  Line 104:7:  Unexpected console statement  no-console
+  Line 132:7:  Unexpected console statement  no-console
+
+Search for the keywords to learn more about each warning.
+To ignore, add // eslint-disable-next-line to the line before.
+
+WARNING in [eslint] 
+src/components/Strategies/Strategies.jsx
+  Line 101:9:  Unexpected console statement  no-console
+  Line 104:7:  Unexpected console statement  no-console
+  Line 132:7:  Unexpected console statement  no-console
+
+webpack compiled with 1 warning
