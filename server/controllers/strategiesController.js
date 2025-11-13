@@ -2361,8 +2361,6 @@ const getPricesData = async (stocks, marketOpen, userId) => {
     const alpacaConfig = await getAlpacaConfig(userId);
 
     const promises = stocks.map(async (stock) => {
-      // console.log('Stock ticker:', stock.symbol);
-
       let url;
       if (marketOpen) {
         url = `https://data.alpaca.markets/v2/stocks/${stock.symbol}/trades/latest`;
@@ -2377,29 +2375,25 @@ const getPricesData = async (stocks, marketOpen, userId) => {
         },
       });
 
-      // console.log("response.data: ",response.data);
-      // console.log("response.data.quote.ap: ",response.data.quote.ap);
-      // console.log("response.data.trade.p: ",response.data.trade.p);
-
-
-
-      const currentPrice = marketOpen ? response.data.trade.p : response.data.bars.c 
-
+      const currentPrice = marketOpen ? response.data.trade.p : response.data.bars.c;
       const date = marketOpen ? response.data.trade.t : response.data.bars.t;
 
-
       const alpacaApi = new Alpaca(alpacaConfig);
-
       const asset = await alpacaApi.getAsset(stock.symbol);
       const assetName = asset.name;
-      
 
       return {
         ticker: stock.symbol,
-        date: date,
+        date,
         adjClose: currentPrice,
-        name: assetName, 
+        name: assetName,
+      };
+    });
 
+    return Promise.all(promises);
+  } catch (error) {
+    return [];
+  }
 };
 
 exports.resendCollaborativeOrders = async (req, res) => {
@@ -2451,15 +2445,6 @@ exports.resendCollaborativeOrders = async (req, res) => {
     });
   }
 };
-    });
-
-    return Promise.all(promises);
-  } catch (error) {
-    return [];
-  }
-};
-
-
 exports.getStrategies = async (req, res) => {
   try {
     const userId = String(req.params.userId || '');
