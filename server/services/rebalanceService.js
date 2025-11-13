@@ -770,7 +770,28 @@ const rebalancePortfolio = async (portfolio) => {
     tooling: baseThoughtProcess.tooling,
   });
 
-  await portfolio.save();
+  try {
+    await portfolio.save();
+  } catch (error) {
+    if (
+      error?.message?.includes('No matching document found') ||
+      error?.code === 66 // immutable field or similar concurrency error
+    ) {
+      console.warn(
+        `[Rebalance] Portfolio ${portfolio._id} could not be saved (possibly deleted). Skipping.`
+      );
+      await recordStrategyLog({
+        strategyId: portfolio.strategy_id,
+        userId: portfolio.userId,
+        strategyName: portfolio.name,
+        message: 'Skipped rebalance because portfolio record no longer exists.',
+        details: { error: error.message },
+        level: 'warn',
+      });
+      return;
+    }
+    throw error;
+  }
 
   await recordStrategyLog({
     strategyId: portfolio.strategy_id,
