@@ -406,11 +406,18 @@ const evaluateExpression = (node, ctx) => {
       return computeStdDevReturn(series.closes, window);
     }
     case 'max-drawdown': {
-      const symbol = ctx.metricSymbol || null;
+      const optionsNode = node[1];
+      let symbol = ctx.metricSymbol || null;
+      let options = optionsNode && typeof optionsNode === 'object'
+        ? optionsNode
+        : {};
+      if (typeof node[1] === 'string') {
+        symbol = node[1].toUpperCase();
+        options = node[2] && typeof node[2] === 'object' ? node[2] : {};
+      }
       if (!symbol) {
         throw new Error('Metric symbol context missing for max-drawdown');
       }
-      const options = node[1] || {};
       const window = Number(getKeyword(options, ':window') || getKeyword(options, 'window') || 30);
       const series = ctx.priceData.get(symbol);
       if (!series) {
