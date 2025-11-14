@@ -15,6 +15,7 @@ const {
   updateStrategyRecurrence,
   streamStrategyProgress,
   resendCollaborativeOrders,
+  updateNextRebalanceDate,
 } = require("../controllers/strategiesController");
 
 
@@ -31,6 +32,7 @@ router.route("/all/:userId").get(auth, getStrategies);
 router.route("/templates/:userId").get(auth, getStrategyTemplates);
 router.route("/logs/:userId/:strategyId").get(auth, getStrategyLogs);
 router.route("/recurrence/:userId/:strategyId").patch(auth, updateStrategyRecurrence);
+router.route("/rebalance-date/:userId/:strategyId").patch(auth, updateNextRebalanceDate);
 router.route("/progress/:jobId").get(streamStrategyProgress);
 
 

@@ -1,5 +1,5 @@
 import React, { useContext, useState } from "react";
-import { Link, Collapse, IconButton, Modal, Button, Typography, useTheme, LinearProgress, Box, TextField, MenuItem, CircularProgress } from "@mui/material";
+import { Link, Collapse, IconButton, Modal, Button, Typography, useTheme, LinearProgress, Box, TextField, MenuItem, CircularProgress, Tooltip } from "@mui/material";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -13,6 +13,7 @@ import Axios from "axios";
 import config from "../../config/Config";
 import UserContext from "../../context/UserContext";
 import HighlightOffIcon from '@mui/icons-material/HighlightOff';
+import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import { useNavigate } from "react-router-dom";
 import { logError } from "../../utils/logger";
 
@@ -35,6 +36,7 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
   const [resendStatus, setResendStatus] = useState({});
   const [resendOpen, setResendOpen] = useState(false);
   const [strategyToResend, setStrategyToResend] = useState(null);
+  const [scheduleEditor, setScheduleEditor] = useState(() => createScheduleEditorState());
 
 
 
@@ -65,7 +67,7 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
     setOpenStrategies(!openStrategies);
   };
 
-  const handlePortfolioClick = (name) => {
+const handlePortfolioClick = (name) => {
     setOpenPortfolio(prevState => ({ ...prevState, [name]: !prevState[name] }));
   };
 
@@ -79,8 +81,88 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
 
 
 
-  const closeDeleteModal = () => {
+const closeDeleteModal = () => {
     setDeleteOpen(false);
+  };
+
+  const openScheduleEditor = (portfolio) => {
+    if (!portfolio) {
+      return;
+    }
+    setScheduleEditor(createScheduleEditorState({
+      open: true,
+      portfolio,
+      value: formatDateTimeLocalInput(portfolio.nextRebalanceAt),
+    }));
+  };
+
+  const closeScheduleEditor = () => {
+    setScheduleEditor(createScheduleEditorState());
+  };
+
+  const handleScheduleEditorChange = (event) => {
+    const value = event?.target?.value || '';
+    setScheduleEditor((prev) => ({
+      ...prev,
+      value,
+      error: null,
+    }));
+  };
+
+  const handleScheduleEditorSave = async () => {
+    if (!scheduleEditor.portfolio) {
+      return;
+    }
+    if (!scheduleEditor.value) {
+      setScheduleEditor((prev) => ({
+        ...prev,
+        error: 'Please choose a future date and time.',
+      }));
+      return;
+    }
+    const parsedDate = new Date(scheduleEditor.value);
+    if (Number.isNaN(parsedDate.getTime())) {
+      setScheduleEditor((prev) => ({
+        ...prev,
+        error: 'Invalid date. Please pick another value.',
+      }));
+      return;
+    }
+    if (parsedDate.getTime() <= Date.now()) {
+      setScheduleEditor((prev) => ({
+        ...prev,
+        error: 'Please select a time in the future.',
+      }));
+      return;
+    }
+
+    setScheduleEditor((prev) => ({
+      ...prev,
+      saving: true,
+      error: null,
+    }));
+
+    try {
+      const url = `${config.base_url}/api/strategies/rebalance-date/${userData.user.id}/${scheduleEditor.portfolio.strategy_id}`;
+      const headers = {
+        "x-auth-token": userData.token,
+      };
+      await Axios.patch(url, {
+        nextRebalanceAt: parsedDate.toISOString(),
+      }, { headers });
+
+      if (typeof refreshPortfolios === 'function') {
+        await refreshPortfolios();
+      }
+      closeScheduleEditor();
+    } catch (error) {
+      const message = error?.response?.data?.message || 'Failed to update next reallocation.';
+      setScheduleEditor((prev) => ({
+        ...prev,
+        saving: false,
+        error: message,
+      }));
+    }
   };
 
 
@@ -324,7 +406,22 @@ const deleteStrategy = async (strategyId) => {
 
               </div>
               <Typography variant="body2" color="textSecondary" sx={{ ml: 6, mt: 0.5 }}>
-                Status: {formatStatus(portfolio.status)} · Frequency: {formatRecurrenceLabel(portfolio.recurrence)} · Next reallocation: {formatDateTime(portfolio.nextRebalanceAt)} · Rebalances: {rebalanceCount}
+                Status: {formatStatus(portfolio.status)} · Frequency: {formatRecurrenceLabel(portfolio.recurrence)} · Next reallocation:{' '}
+                <Box component="span" sx={{ display: 'inline-flex', alignItems: 'center' }}>
+                  {formatDateTime(portfolio.nextRebalanceAt)}
+                  <Tooltip title="Edit next reallocation" arrow>
+                    <IconButton
+                      size="small"
+                      color="inherit"
+                      aria-label="Edit next reallocation"
+                      sx={{ ml: 0.5, p: 0.25 }}
+                      onClick={() => openScheduleEditor(portfolio)}
+                    >
+                      <EditCalendarIcon fontSize="inherit" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                {' '}· Rebalances: {rebalanceCount}
               </Typography>
               <Box sx={{ display: "flex", alignItems: "center", ml: 6, mt: 1, gap: 1 }}>
                 <TextField
@@ -570,6 +667,61 @@ const deleteStrategy = async (strategyId) => {
         })}
       </Collapse>
 
+      <Modal
+        open={scheduleEditor.open}
+        onClose={scheduleEditor.saving ? undefined : closeScheduleEditor}
+        aria-labelledby="edit-rebalance-modal-title"
+        aria-describedby="edit-rebalance-modal-description"
+      >
+        <Box
+          sx={{
+            p: 3,
+            backgroundColor: 'background.paper',
+            width: '90%',
+            maxWidth: 420,
+            mx: 'auto',
+            mt: '15%',
+            borderRadius: 2,
+            boxShadow: 24,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          <Typography id="edit-rebalance-modal-title" variant="h6">
+            Edit next reallocation
+          </Typography>
+          <Typography id="edit-rebalance-modal-description" variant="body2" color="textSecondary">
+            Strategy: {scheduleEditor.portfolio?.name || '—'}
+          </Typography>
+          <TextField
+            label="Next reallocation"
+            type="datetime-local"
+            value={scheduleEditor.value}
+            onChange={handleScheduleEditorChange}
+            InputLabelProps={{ shrink: true }}
+            disabled={scheduleEditor.saving}
+          />
+          {scheduleEditor.error && (
+            <Typography variant="body2" color="error">
+              {scheduleEditor.error}
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+            <Button onClick={closeScheduleEditor} disabled={scheduleEditor.saving}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              onClick={handleScheduleEditorSave}
+              disabled={scheduleEditor.saving}
+            >
+              {scheduleEditor.saving ? 'Saving…' : 'Save'}
+            </Button>
+          </Box>
+        </Box>
+      </Modal>
+
       {saleOpen && stock && (
         <SaleModal setSaleOpen={setSaleOpen} stock={stock} />
       )}
@@ -611,4 +763,25 @@ const formatStatus = (value) => {
     return "Scheduled";
   }
   return value.charAt(0).toUpperCase() + value.slice(1);
+};
+
+const createScheduleEditorState = (overrides = {}) => ({
+  open: false,
+  portfolio: null,
+  value: '',
+  saving: false,
+  error: null,
+  ...overrides,
+});
+
+const formatDateTimeLocalInput = (value) => {
+  if (!value) {
+    return '';
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return '';
+  }
+  const offset = parsed.getTimezoneOffset() * 60000;
+  return new Date(parsed.getTime() - offset).toISOString().slice(0, 16);
 };

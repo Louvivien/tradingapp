@@ -68,6 +68,10 @@ const formatRecurrenceLabel = (value) => {
   return RECURRENCE_LABELS[normalized] || normalized;
 };
 
+const MARKET_OPEN_TIME = '09:30';
+const MARKET_CLOSE_TIME = '16:00';
+const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
+
 const sanitizeSymbol = (value) => {
   if (!value) {
     return null;
@@ -177,6 +181,138 @@ const serializeHoldingsState = (holdings, priceCache = {}) => {
       };
     })
     .filter((entry) => entry.quantity > 0);
+};
+
+const getNthWeekdayOfMonth = (year, monthIndex, weekday, occurrence) => {
+  const firstOfMonth = new Date(Date.UTC(year, monthIndex, 1));
+  const firstWeekday = firstOfMonth.getUTCDay();
+  const offset = (7 + weekday - firstWeekday) % 7;
+  const day = 1 + offset + (occurrence - 1) * 7;
+  return day;
+};
+
+const isUsMarketDST = (year, monthIndex, day) => {
+  const secondSundayMarch = getNthWeekdayOfMonth(year, 2, 0, 2);
+  const firstSundayNovember = getNthWeekdayOfMonth(year, 10, 0, 1);
+
+  if (monthIndex < 2 || monthIndex > 10) {
+    return false;
+  }
+  if (monthIndex > 2 && monthIndex < 10) {
+    return true;
+  }
+  if (monthIndex === 2) {
+    return day >= secondSundayMarch;
+  }
+  if (monthIndex === 10) {
+    return day < firstSundayNovember;
+  }
+  return false;
+};
+
+const convertEasternToUTC = (dateStr, timeStr = MARKET_OPEN_TIME) => {
+  if (!dateStr) {
+    return null;
+  }
+  const [year, month, day] = dateStr.split('-').map((value) => Number(value));
+  if (!year || !month || !day) {
+    return null;
+  }
+  const [hour = 0, minute = 0] = timeStr.split(':').map((value) => Number(value));
+  const isDST = isUsMarketDST(year, month - 1, day);
+  const offsetHours = isDST ? 4 : 5;
+  return new Date(Date.UTC(year, month - 1, day, hour + offsetHours, minute, 0));
+};
+
+const formatDateOnly = (date) => {
+  const safeDate = date instanceof Date ? date : new Date(date);
+  if (Number.isNaN(safeDate?.getTime())) {
+    return null;
+  }
+  return safeDate.toISOString().slice(0, 10);
+};
+
+const fetchNextMarketSessionAfter = async (tradingKeys, earliestDate) => {
+  if (!tradingKeys?.client || !earliestDate) {
+    return null;
+  }
+  const headers = {
+    'APCA-API-KEY-ID': tradingKeys.keyId,
+    'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+  };
+  const start = new Date(earliestDate.getTime() - MILLIS_PER_DAY);
+  start.setUTCHours(0, 0, 0, 0);
+  const end = new Date(earliestDate.getTime() + 30 * MILLIS_PER_DAY);
+  end.setUTCHours(23, 59, 59, 999);
+
+  const params = {
+    start: formatDateOnly(start),
+    end: formatDateOnly(end),
+  };
+
+  try {
+    const { data } = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/calendar`, {
+      headers,
+      params,
+    });
+    const sessions = Array.isArray(data) ? data : [];
+    const threshold = earliestDate.getTime();
+    let activeSession = null;
+    let nextSession = null;
+
+    for (const session of sessions) {
+      const openTime = convertEasternToUTC(session.date, session.open || MARKET_OPEN_TIME);
+      if (!openTime) {
+        continue;
+      }
+      const closeTime = convertEasternToUTC(session.date, session.close || MARKET_CLOSE_TIME) || null;
+      const openMs = openTime.getTime();
+      const closeMs = closeTime ? closeTime.getTime() : null;
+
+      if (!activeSession && openMs <= threshold && (closeMs === null || threshold < closeMs)) {
+        activeSession = { open: openTime, close: closeTime };
+      }
+
+      if (!nextSession && openMs >= threshold) {
+        nextSession = { open: openTime, close: closeTime };
+      }
+
+      if (activeSession && nextSession) {
+        break;
+      }
+    }
+
+    return {
+      activeSession,
+      nextSession: nextSession || null,
+    };
+  } catch (error) {
+    console.warn('[Rebalance] Failed to fetch calendar for scheduling:', error.message);
+  }
+  return null;
+};
+
+const alignToNextMarketOpen = async (tradingKeys, desiredDate) => {
+  if (!desiredDate) {
+    return desiredDate;
+  }
+  const session = await fetchNextMarketSessionAfter(tradingKeys, desiredDate);
+  if (!session) {
+    return desiredDate;
+  }
+
+  const { activeSession, nextSession } = session;
+  if (activeSession) {
+    if (nextSession?.open) {
+      return nextSession.open;
+    }
+    if (activeSession.close && activeSession.close > desiredDate) {
+      return new Date(activeSession.close.getTime() + MILLIS_PER_DAY);
+    }
+    return new Date(desiredDate.getTime() + MILLIS_PER_DAY);
+  }
+
+  return nextSession?.open || desiredDate;
 };
 
 const buildRebalanceHumanSummary = ({
@@ -555,12 +691,14 @@ const rebalancePortfolio = async (portfolio) => {
     const fallbackNext = computeNextRebalanceAt(recurrence, now);
     const nextOpen = clockData.next_open ? new Date(clockData.next_open) : null;
     const nextOpenValid = nextOpen && !Number.isNaN(nextOpen.getTime());
-    let scheduledAt = nextOpenValid ? nextOpen : fallbackNext;
 
-    if (scheduledAt <= now) {
+    let scheduledAt = nextOpenValid ? nextOpen : await alignToNextMarketOpen(tradingKeys, fallbackNext);
+
+    if (!scheduledAt || scheduledAt <= now) {
       const bufferDate = new Date(now.getTime() + 60000);
       const bufferedNext = computeNextRebalanceAt(recurrence, bufferDate);
-      scheduledAt = fallbackNext > now ? fallbackNext : bufferedNext;
+      const alignedBuffered = await alignToNextMarketOpen(tradingKeys, bufferedNext);
+      scheduledAt = alignedBuffered > now ? alignedBuffered : bufferedNext;
     }
 
     portfolio.nextRebalanceAt = scheduledAt;
@@ -951,7 +1089,9 @@ const rebalancePortfolio = async (portfolio) => {
   }
   portfolio.rebalanceCount = (toNumber(portfolio.rebalanceCount, 0) || 0) + 1;
   portfolio.lastRebalancedAt = now;
-  portfolio.nextRebalanceAt = computeNextRebalanceAt(recurrence, now);
+  const provisionalNext = computeNextRebalanceAt(recurrence, now);
+  const alignedNext = await alignToNextMarketOpen(tradingKeys, provisionalNext);
+  portfolio.nextRebalanceAt = alignedNext || provisionalNext;
   portfolio.recurrence = recurrence;
 
   const humanSummary = buildRebalanceHumanSummary({

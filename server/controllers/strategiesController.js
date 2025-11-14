@@ -1824,6 +1824,75 @@ exports.updateStrategyRecurrence = async (req, res) => {
   }
 };
 
+exports.updateNextRebalanceDate = async (req, res) => {
+  try {
+    const { userId, strategyId } = req.params;
+    const { nextRebalanceAt } = req.body || {};
+
+    if (!nextRebalanceAt) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'nextRebalanceAt is required.',
+      });
+    }
+
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const parsedDate = new Date(nextRebalanceAt);
+    if (!parsedDate || Number.isNaN(parsedDate.getTime())) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Invalid nextRebalanceAt value.',
+      });
+    }
+
+    if (parsedDate.getTime() <= Date.now()) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Next reallocation must be scheduled in the future.',
+      });
+    }
+
+    const portfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: String(userId) });
+    if (!portfolio) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Portfolio not found for this strategy.',
+      });
+    }
+
+    portfolio.nextRebalanceAt = parsedDate;
+    await portfolio.save();
+
+    await recordStrategyLog({
+      strategyId,
+      userId: String(userId),
+      strategyName: portfolio.name,
+      message: 'Next reallocation updated manually',
+      details: {
+        nextRebalanceAt: parsedDate,
+        requestedBy: userId,
+      },
+    });
+
+    return res.status(200).json({
+      status: 'success',
+      nextRebalanceAt: parsedDate,
+    });
+  } catch (error) {
+    console.error('Error updating next reallocation:', error.message);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Failed to update next reallocation date.',
+    });
+  }
+};
+
 
 
 exports.getPortfolios = async (req, res) => {
