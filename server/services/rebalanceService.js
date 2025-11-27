@@ -908,6 +908,7 @@ const rebalancePortfolio = async (portfolio) => {
     positionMap,
     priceCache,
     dataKeys,
+    trackedHoldings,
   });
 
   const sells = [];
