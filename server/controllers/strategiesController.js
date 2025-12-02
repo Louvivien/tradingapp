@@ -2031,9 +2031,7 @@ exports.getPortfolios = async (req, res) => {
 
         const quantity = alpacaPosition
           ? toNumber(alpacaPosition.qty, 0)
-          : hasPendingOrder
-            ? 0
-            : storedQuantity;
+          : storedQuantity;
 
         const avgCost = alpacaPosition
           ? toNumber(alpacaPosition.avg_entry_price, null)
@@ -2041,13 +2039,13 @@ exports.getPortfolios = async (req, res) => {
             ? null
             : toNumber(stock.avgCost, null);
 
-        const currentPrice = symbol && priceCache[symbol] !== undefined
-          ? priceCache[symbol]
-          : alpacaPosition
-          ? toNumber(alpacaPosition.current_price, toNumber(alpacaPosition.avg_entry_price, null))
-          : hasPendingOrder
-            ? null
-            : toNumber(stock.currentPrice, null);
+        const currentPrice = hasPendingOrder
+          ? null
+          : symbol && priceCache[symbol] !== undefined
+            ? priceCache[symbol]
+            : alpacaPosition
+              ? toNumber(alpacaPosition.current_price, toNumber(alpacaPosition.avg_entry_price, null))
+              : toNumber(stock.currentPrice, null);
 
         return {
           symbol,
