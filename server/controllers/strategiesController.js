@@ -2024,24 +2024,30 @@ exports.getPortfolios = async (req, res) => {
       const stocks = (portfolio.stocks || []).map((stock) => {
         const symbol = sanitizeSymbol(stock.symbol);
         const alpacaPosition = symbol ? positionMap[symbol] : null;
-
-        const quantity = stock.quantity !== undefined && stock.quantity !== null
+        const storedQuantity = stock.quantity !== undefined && stock.quantity !== null
           ? toNumber(stock.quantity, 0)
-          : alpacaPosition
-          ? toNumber(alpacaPosition.qty, 0)
           : 0;
+        const hasPendingOrder = !alpacaPosition && storedQuantity > 0 && stock.orderID;
 
-        const avgCost = stock.avgCost !== undefined && stock.avgCost !== null
-          ? toNumber(stock.avgCost, null)
-          : alpacaPosition
+        const quantity = alpacaPosition
+          ? toNumber(alpacaPosition.qty, 0)
+          : hasPendingOrder
+            ? 0
+            : storedQuantity;
+
+        const avgCost = alpacaPosition
           ? toNumber(alpacaPosition.avg_entry_price, null)
-          : null;
+          : hasPendingOrder
+            ? null
+            : toNumber(stock.avgCost, null);
 
         const currentPrice = symbol && priceCache[symbol] !== undefined
           ? priceCache[symbol]
           : alpacaPosition
           ? toNumber(alpacaPosition.current_price, toNumber(alpacaPosition.avg_entry_price, null))
-          : null;
+          : hasPendingOrder
+            ? null
+            : toNumber(stock.currentPrice, null);
 
         return {
           symbol,
@@ -2049,6 +2055,8 @@ exports.getPortfolios = async (req, res) => {
           quantity,
           currentPrice,
           orderID: stock.orderID || null,
+          pendingQuantity: hasPendingOrder ? storedQuantity : 0,
+          pending: Boolean(hasPendingOrder),
           currentTotal: currentPrice !== null ? quantity * currentPrice : null,
         };
       });
