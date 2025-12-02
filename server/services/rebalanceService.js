@@ -71,6 +71,15 @@ const formatRecurrenceLabel = (value) => {
 const MARKET_OPEN_TIME = '09:30';
 const MARKET_CLOSE_TIME = '16:00';
 const MILLIS_PER_DAY = 24 * 60 * 60 * 1000;
+const ORDER_FILL_POLL_ATTEMPTS = 6;
+const ORDER_FILL_POLL_DELAY_MS = 750;
+const ORDER_PENDING_STATUSES = new Set([
+  'new',
+  'accepted',
+  'pending_new',
+  'accepted_for_bidding',
+  'partially_filled',
+]);
 
 const sanitizeSymbol = (value) => {
   if (!value) {
@@ -539,6 +548,42 @@ const fetchLatestPrices = async (symbols, dataKeys) => {
   return priceCache;
 };
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const fetchOrderFillPrice = async (tradingKeys, orderId) => {
+  if (!orderId || !tradingKeys?.client || !tradingKeys?.apiUrl) {
+    return null;
+  }
+
+  const headers = {
+    'APCA-API-KEY-ID': tradingKeys.keyId,
+    'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+  };
+
+  for (let attempt = 0; attempt < ORDER_FILL_POLL_ATTEMPTS; attempt += 1) {
+    if (attempt > 0) {
+      await delay(ORDER_FILL_POLL_DELAY_MS);
+    }
+    try {
+      const { data } = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/orders/${orderId}`, {
+        headers,
+      });
+      const fillPrice = toNumber(data?.filled_avg_price, null);
+      if (Number.isFinite(fillPrice) && fillPrice > 0) {
+        return fillPrice;
+      }
+      const status = String(data?.status || '').toLowerCase();
+      if (!ORDER_PENDING_STATUSES.has(status)) {
+        break;
+      }
+    } catch (error) {
+      console.warn(`[Rebalance] Failed to poll order ${orderId} for fill price:`, error.message);
+      break;
+    }
+  }
+  return null;
+};
+
 const fetchMarketClock = async (tradingKeys) => {
   if (!tradingKeys?.client || !tradingKeys?.apiUrl) {
     return null;
@@ -976,13 +1021,16 @@ const rebalancePortfolio = async (portfolio) => {
           time_in_force: 'gtc',
         });
         const orderId = response?.data?.client_order_id || response?.data?.id || null;
-        availableCash -= estimatedCost;
-        strategyCash = Math.max(0, strategyCash - estimatedCost);
-        buySpend += estimatedCost;
+        const filledPrice = await fetchOrderFillPrice(tradingKeys, orderId);
+        const executionPrice = Number.isFinite(filledPrice) && filledPrice > 0 ? filledPrice : buy.price;
+        const actualCost = executionPrice * buy.qty;
+        availableCash -= actualCost;
+        strategyCash = Math.max(0, strategyCash - actualCost);
+        buySpend += actualCost;
         executedBuys.push({
           symbol: buy.symbol,
           qty: buy.qty,
-          price: buy.price,
+          price: executionPrice,
           orderId,
         });
       } catch (error) {
@@ -998,21 +1046,23 @@ const rebalancePortfolio = async (portfolio) => {
             side: 'buy',
             type: 'market',
             time_in_force: 'gtc',
-          });
-          const cost = affordableQty * buy.price;
-          availableCash -= cost;
-          strategyCash = Math.max(0, strategyCash - cost);
-          buySpend += cost;
-          const orderId = response?.data?.client_order_id || response?.data?.id || null;
-          executedBuys.push({
-            symbol: buy.symbol,
-            qty: affordableQty,
-            price: buy.price,
-            orderId,
-          });
-        } catch (error) {
-          console.error(`[Rebalance] Partial buy order failed for ${buy.symbol}:`, error.message);
-        }
+        });
+        const orderId = response?.data?.client_order_id || response?.data?.id || null;
+        const filledPrice = await fetchOrderFillPrice(tradingKeys, orderId);
+        const executionPrice = Number.isFinite(filledPrice) && filledPrice > 0 ? filledPrice : buy.price;
+        const actualCost = executionPrice * affordableQty;
+        availableCash -= actualCost;
+        strategyCash = Math.max(0, strategyCash - actualCost);
+        buySpend += actualCost;
+        executedBuys.push({
+          symbol: buy.symbol,
+          qty: affordableQty,
+          price: executionPrice,
+          orderId,
+        });
+      } catch (error) {
+        console.error(`[Rebalance] Partial buy order failed for ${buy.symbol}:`, error.message);
+      }
       }
     }
   }
