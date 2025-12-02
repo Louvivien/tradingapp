@@ -296,10 +296,12 @@ const deleteStrategy = async (strategyId) => {
           let totalCurrentTotal = 0;
           let totalDifference = 0;
           let allStocksHaveAvgCost = true;
+          let hasPending = false;
 
           portfolio.stocks.forEach((stock) => {
-            if (stock.avgCost === null || stock.currentPrice === null) {
+            if (stock.avgCost == null || stock.currentPrice == null) {
               allStocksHaveAvgCost = false;
+              hasPending = true;
             } else {
               totalQuantity += Number(stock.quantity);
               totalPurchaseTotal += Number(stock.quantity) * Number(stock.avgCost);
@@ -312,25 +314,33 @@ const deleteStrategy = async (strategyId) => {
           const totalUnrealizedPL = allStocksHaveAvgCost ? totalCurrentTotal - totalPurchaseTotal : null;
           const purchaseSummary = allStocksHaveAvgCost && totalPurchaseTotal > 0
             ? `$${roundNumber(totalPurchaseTotal).toLocaleString()}`
-            : '—';
+            : hasPending
+              ? 'pending fills'
+              : '—';
           const currentSummary = allStocksHaveAvgCost && totalCurrentTotal > 0
             ? `$${roundNumber(totalCurrentTotal).toLocaleString()}`
-            : '—';
+            : hasPending
+              ? 'pending fills'
+              : '—';
           const totalDiffPct = allStocksHaveAvgCost && totalPurchaseTotal > 0
             ? ((totalCurrentTotal - totalPurchaseTotal) / totalPurchaseTotal) * 100
             : null;
           const cashLimitValue = Number(portfolio.cashLimit ?? portfolio.budget ?? null);
           const limitBaseline = Number.isFinite(cashLimitValue) && cashLimitValue > 0 ? cashLimitValue : null;
 
-          const currentValue = Number.isFinite(Number(portfolio.currentValue))
-            ? Number(portfolio.currentValue)
-            : (allStocksHaveAvgCost ? totalCurrentTotal : null);
+          const currentValue = hasPending
+            ? null
+            : Number.isFinite(Number(portfolio.currentValue))
+              ? Number(portfolio.currentValue)
+              : (allStocksHaveAvgCost ? totalCurrentTotal : null);
           const initialInvestmentValue = Number.isFinite(Number(portfolio.initialInvestment))
             ? Number(portfolio.initialInvestment)
             : 0;
-          const computedPnlValue = portfolio.pnlValue !== undefined && portfolio.pnlValue !== null && Number.isFinite(Number(portfolio.pnlValue))
-            ? Number(portfolio.pnlValue)
-            : (currentValue !== null ? currentValue - initialInvestmentValue : null);
+          const computedPnlValue = hasPending
+            ? null
+            : portfolio.pnlValue !== undefined && portfolio.pnlValue !== null && Number.isFinite(Number(portfolio.pnlValue))
+              ? Number(portfolio.pnlValue)
+              : (currentValue !== null ? currentValue - initialInvestmentValue : null);
           const pnlPercent = portfolio.pnlPercent !== undefined && portfolio.pnlPercent !== null && Number.isFinite(Number(portfolio.pnlPercent))
             ? Number(portfolio.pnlPercent)
             : (computedPnlValue !== null && initialInvestmentValue > 0 ? (computedPnlValue / initialInvestmentValue) * 100 : null);
@@ -441,12 +451,18 @@ const deleteStrategy = async (strategyId) => {
                 </TextField>
                 {updatingRecurrence[portfolio.strategy_id] && <CircularProgress size={18} />}
               </Box>
-              <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
-                Initial investment: {formatCurrencyValue(initialInvestmentValue)} · Current value: {currentValue !== null ? formatCurrencyValue(currentValue) : '—'}
-                {pnlDisplay && (
-                  <> · P/L: <span className={pnlValue >= 0 ? styles.positive : styles.negative}>{pnlDisplay}</span></>
-                )}
-              </Typography>
+              {hasPending ? (
+                <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
+                  Orders pending fill — portfolio value and P/L will update once trades execute.
+                </Typography>
+              ) : (
+                <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
+                  Initial investment: {formatCurrencyValue(initialInvestmentValue)} · Current value: {currentValue !== null ? formatCurrencyValue(currentValue) : '—'}
+                  {pnlDisplay && (
+                    <> · P/L: <span className={pnlValue >= 0 ? styles.positive : styles.negative}>{pnlDisplay}</span></>
+                  )}
+                </Typography>
+              )}
               {limitBaseline !== null && (
                 <React.Fragment>
                   <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
@@ -565,7 +581,7 @@ const deleteStrategy = async (strategyId) => {
                       const unrealizedPL = purchaseTotal !== null && marketValue !== null ? marketValue - purchaseTotal : null;
                       const unrealizedPLPct = unrealizedPL !== null && purchaseTotal ? (unrealizedPL / purchaseTotal) * 100 : null;
 
-                      if (stock.avgCost === null || stock.currentPrice === null) {
+                      if (stock.avgCost == null || stock.currentPrice == null) {
                         return (
                           <TableRow key={stock.symbol}>
                             <TableCell>

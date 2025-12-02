@@ -2027,25 +2027,27 @@ exports.getPortfolios = async (req, res) => {
         const storedQuantity = stock.quantity !== undefined && stock.quantity !== null
           ? toNumber(stock.quantity, 0)
           : 0;
-        const hasPendingOrder = !alpacaPosition && storedQuantity > 0 && stock.orderID;
+        const storedAvgCost = stock.avgCost === null || stock.avgCost === undefined
+          ? null
+          : toNumber(stock.avgCost, null);
+        const hasPendingOrder = storedQuantity > 0 && storedAvgCost === null;
 
-        const quantity = alpacaPosition
-          ? toNumber(alpacaPosition.qty, 0)
-          : storedQuantity;
+        const quantity = storedQuantity;
 
-        const avgCost = alpacaPosition
-          ? toNumber(alpacaPosition.avg_entry_price, null)
-          : hasPendingOrder
-            ? null
-            : toNumber(stock.avgCost, null);
+        const avgCost = hasPendingOrder
+          ? null
+          : storedAvgCost !== null
+            ? storedAvgCost
+            : toNumber(alpacaPosition?.avg_entry_price, null);
 
         const currentPrice = hasPendingOrder
           ? null
           : symbol && priceCache[symbol] !== undefined
             ? priceCache[symbol]
-            : alpacaPosition
-              ? toNumber(alpacaPosition.current_price, toNumber(alpacaPosition.avg_entry_price, null))
-              : toNumber(stock.currentPrice, null);
+            : toNumber(
+                stock.currentPrice,
+                toNumber(alpacaPosition?.current_price, toNumber(alpacaPosition?.avg_entry_price, null))
+              );
 
         return {
           symbol,
@@ -2059,7 +2061,12 @@ exports.getPortfolios = async (req, res) => {
         };
       });
 
-      const totalCurrentValue = stocks.reduce((sum, stock) => sum + toNumber(stock.currentTotal, 0), 0);
+      const totalCurrentValue = stocks.reduce((sum, stock) => {
+        if (stock.pending || stock.currentTotal === null) {
+          return sum;
+        }
+        return sum + toNumber(stock.currentTotal, 0);
+      }, 0);
       const initialInvestment = toNumber(portfolio.initialInvestment, 0);
       const pnlValue = totalCurrentValue - initialInvestment;
       const pnlPercent = initialInvestment > 0 ? (pnlValue / initialInvestment) * 100 : null;
