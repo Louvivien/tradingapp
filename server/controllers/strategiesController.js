@@ -2292,6 +2292,11 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
 
     console.log('Market is open.');
     const numberOfOrders = Array.isArray(orders) ? orders.length : 0;
+    const expectedOrderMap = new Map(
+      (Array.isArray(orders) ? orders : [])
+        .filter((entry) => entry?.orderID)
+        .map((entry) => [String(entry.orderID), toNumber(entry.qty, 0)])
+    );
 
     const getOrders = async () => {
       const ordersResponse = await axios({
@@ -2302,17 +2307,37 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
           'APCA-API-SECRET-KEY': alpacaConfig.secretKey,
         },
         params: {
-          limit: numberOfOrders,
+          limit: Math.max(numberOfOrders, expectedOrderMap.size || 1) * 2,
           status: 'all',
           nested: true,
         },
       });
 
-      const filledOrders = ordersResponse.data.filter((order) => order.filled_qty !== '0');
-      if (!filledOrders || filledOrders.length !== numberOfOrders) {
+      const filtered = expectedOrderMap.size
+        ? ordersResponse.data.filter((order) => expectedOrderMap.has(order.client_order_id))
+        : ordersResponse.data.slice(0, numberOfOrders);
+
+      if (!filtered.length || filtered.length < (expectedOrderMap.size || numberOfOrders)) {
+        throw new Error('Not all submitted orders were returned yet.');
+      }
+
+      const outstanding = filtered.filter((order) => {
+        const desiredQty = expectedOrderMap.size
+          ? expectedOrderMap.get(order.client_order_id)
+          : toNumber(order.qty, 0);
+        const filledQty = toNumber(order.filled_qty, 0);
+        const status = String(order.status || '').toLowerCase();
+        const fullyFilled = Number.isFinite(desiredQty) && desiredQty > 0
+          ? filledQty >= desiredQty
+          : status === 'filled';
+        return !(status === 'filled' && fullyFilled);
+      });
+
+      if (outstanding.length) {
         throw new Error('Not all orders are closed or filled yet.');
       }
-      return filledOrders;
+
+      return filtered;
     };
 
     let ordersResponse;

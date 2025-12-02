@@ -1120,6 +1120,12 @@ const rebalancePortfolio = async (portfolio) => {
   portfolio.pnlValue = normalizedPnlValue !== null ? normalizedPnlValue : 0;
   portfolio.pnlPercent = normalizedPnlPercent !== null ? normalizedPnlPercent : 0;
   portfolio.lastPerformanceComputedAt = now;
+  if (Number.isFinite(totalCostBasis) && totalCostBasis > 0) {
+    const existingInitial = Math.max(0, toNumber(portfolio.initialInvestment, 0));
+    if (totalCostBasis > existingInitial) {
+      portfolio.initialInvestment = roundToTwo(totalCostBasis);
+    }
+  }
 
   const decisionTrace = adjustments.map((adjustment) => {
     const qtyDiff = adjustment.desiredQty - adjustment.currentQty;
