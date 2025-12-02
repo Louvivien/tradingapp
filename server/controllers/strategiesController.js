@@ -2030,11 +2030,9 @@ exports.getPortfolios = async (req, res) => {
         const storedAvgCost = stock.avgCost === null || stock.avgCost === undefined
           ? null
           : toNumber(stock.avgCost, null);
-        const hasPendingOrder = !alpacaPosition && storedQuantity > 0 && storedAvgCost === null;
+        const hasPendingOrder = storedQuantity > 0 && storedAvgCost === null;
 
-        const quantity = alpacaPosition
-          ? toNumber(alpacaPosition.qty, storedQuantity)
-          : storedQuantity;
+        const quantity = storedQuantity;
 
         const avgCost = hasPendingOrder
           ? null
