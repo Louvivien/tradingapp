@@ -92,14 +92,9 @@ exports.loginUser = async (req, res) => {
 
     // If user does not have ALPACA_API_KEY_ID and ALPACA_API_SECRET_KEY, use the ones from environment variables and update the user
     if (!ALPACA_API_KEY_ID || !ALPACA_API_SECRET_KEY) {
-      console.log('[Auth] User missing Alpaca keys, populating from environment');
+      console.log('[Auth] User missing Alpaca keys, using environment fallback (not persisted)');
       ALPACA_API_KEY_ID = process.env.ALPACA_API_KEY_ID;
       ALPACA_API_SECRET_KEY = process.env.ALPACA_API_SECRET_KEY;
-
-      await User.findByIdAndUpdate(user._id, {
-        ALPACA_API_KEY_ID,
-        ALPACA_API_SECRET_KEY,
-      });
     }
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
