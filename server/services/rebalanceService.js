@@ -334,13 +334,17 @@ const alignToNextMarketOpen = async (tradingKeys, desiredDate) => {
 
   const { activeSession, nextSession } = session;
   if (activeSession) {
-    if (nextSession?.open) {
-      return nextSession.open;
+    const closeTime = activeSession.close;
+    if (closeTime && desiredDate > closeTime) {
+      if (nextSession?.open) {
+        return nextSession.open;
+      }
+      return new Date(closeTime.getTime() + MILLIS_PER_DAY);
     }
-    if (activeSession.close && activeSession.close > desiredDate) {
-      return new Date(activeSession.close.getTime() + MILLIS_PER_DAY);
-    }
-    return new Date(desiredDate.getTime() + MILLIS_PER_DAY);
+    // If the desired timestamp falls during an active session, keep it so we
+    // don't falsely skip a day just because the request happened after the
+    // opening bell.
+    return desiredDate;
   }
 
   return nextSession?.open || desiredDate;
