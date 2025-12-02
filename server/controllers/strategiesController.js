@@ -2062,6 +2062,7 @@ exports.getPortfolios = async (req, res) => {
           currentTotal: currentPrice !== null ? quantity * currentPrice : null,
         };
       });
+      const hasPendingHoldings = stocks.some((stock) => stock.pending);
 
       const totalCurrentValue = stocks.reduce((sum, stock) => {
         if (stock.pending || stock.currentTotal === null) {
@@ -2070,8 +2071,18 @@ exports.getPortfolios = async (req, res) => {
         return sum + toNumber(stock.currentTotal, 0);
       }, 0);
       const initialInvestment = toNumber(portfolio.initialInvestment, 0);
-      const pnlValue = totalCurrentValue - initialInvestment;
-      const pnlPercent = initialInvestment > 0 ? (pnlValue / initialInvestment) * 100 : null;
+      const storedPnlValue = portfolio.pnlValue !== undefined && portfolio.pnlValue !== null
+        ? toNumber(portfolio.pnlValue, null)
+        : null;
+      const storedPnlPercent = portfolio.pnlPercent !== undefined && portfolio.pnlPercent !== null
+        ? toNumber(portfolio.pnlPercent, null)
+        : null;
+      const pnlValue = storedPnlValue !== null
+        ? storedPnlValue
+        : totalCurrentValue - initialInvestment;
+      const pnlPercent = storedPnlPercent !== null
+        ? storedPnlPercent
+        : (initialInvestment > 0 ? (pnlValue / initialInvestment) * 100 : null);
 
       return {
         name: portfolio.name,
@@ -2081,7 +2092,7 @@ exports.getPortfolios = async (req, res) => {
         nextRebalanceAt: portfolio.nextRebalanceAt,
         cashBuffer: toNumber(portfolio.cashBuffer, 0),
         initialInvestment,
-        currentValue: totalCurrentValue,
+        currentValue: hasPendingHoldings ? null : totalCurrentValue,
         pnlValue,
         pnlPercent,
         targetPositions: normalizedTargets,
@@ -2196,6 +2207,9 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
         budget: toNumber(limitValue, null),
         cashLimit: toNumber(limitValue, null),
         rebalanceCount: 0,
+        pnlValue: 0,
+        pnlPercent: 0,
+        lastPerformanceComputedAt: null,
         stocks: Array.isArray(orders)
           ? orders.map((order) => ({
               symbol: sanitizeSymbol(order.symbol),
@@ -2345,6 +2359,9 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
       budget: toNumber(limitValue, null),
       cashLimit: toNumber(limitValue, null),
       rebalanceCount: 0,
+      pnlValue: 0,
+      pnlPercent: 0,
+      lastPerformanceComputedAt: now,
       stocks,
     });
 

@@ -192,6 +192,28 @@ const serializeHoldingsState = (holdings, priceCache = {}) => {
     .filter((entry) => entry.quantity > 0);
 };
 
+const computePortfolioPerformanceTotals = (stocks = []) => {
+  return stocks.reduce(
+    (acc, stock) => {
+      const qty = Math.max(0, toNumber(stock.quantity, 0));
+      if (!qty) {
+        return acc;
+      }
+      const avgCost = toNumber(stock.avgCost, null);
+      const marketPrice = toNumber(stock.currentPrice, null);
+      const costBasis = Number.isFinite(avgCost) ? avgCost * qty : 0;
+      const marketValue = Number.isFinite(marketPrice)
+        ? marketPrice * qty
+        : costBasis;
+      return {
+        totalCostBasis: acc.totalCostBasis + costBasis,
+        totalMarketValue: acc.totalMarketValue + marketValue,
+      };
+    },
+    { totalCostBasis: 0, totalMarketValue: 0 }
+  );
+};
+
 const getNthWeekdayOfMonth = (year, monthIndex, weekday, occurrence) => {
   const firstOfMonth = new Date(Date.UTC(year, monthIndex, 1));
   const firstWeekday = firstOfMonth.getUTCDay();
@@ -1086,6 +1108,14 @@ const rebalancePortfolio = async (portfolio) => {
   });
 
   portfolio.stocks = serializeHoldingsState(holdingsState, priceCache);
+  const { totalCostBasis, totalMarketValue } = computePortfolioPerformanceTotals(portfolio.stocks);
+  const rawPnlValue = totalMarketValue - totalCostBasis;
+  const rawPnlPercent = totalCostBasis > 0 ? (rawPnlValue / totalCostBasis) * 100 : 0;
+  const normalizedPnlValue = roundToTwo(rawPnlValue);
+  const normalizedPnlPercent = roundToTwo(rawPnlPercent);
+  portfolio.pnlValue = normalizedPnlValue !== null ? normalizedPnlValue : 0;
+  portfolio.pnlPercent = normalizedPnlPercent !== null ? normalizedPnlPercent : 0;
+  portfolio.lastPerformanceComputedAt = now;
 
   const decisionTrace = adjustments.map((adjustment) => {
     const qtyDiff = adjustment.desiredQty - adjustment.currentQty;

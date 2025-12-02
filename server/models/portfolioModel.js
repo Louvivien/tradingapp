@@ -105,6 +105,18 @@ const portfolioSchema = new Schema({
     type: Number,
     default: 0,
   },
+  pnlValue: {
+    type: Number,
+    default: 0,
+  },
+  pnlPercent: {
+    type: Number,
+    default: 0,
+  },
+  lastPerformanceComputedAt: {
+    type: Date,
+    default: null,
+  },
 });
 
 const Portfolio = mongoose.model("Portfolio", portfolioSchema);
