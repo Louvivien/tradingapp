@@ -721,6 +721,24 @@ const placeOrder = async (tradingKeys, order) => {
   );
 };
 
+const fetchLatestTradePrice = async (dataKeys, symbol) => {
+  if (!dataKeys?.client || !symbol) {
+    return null;
+  }
+  try {
+    const { data } = await dataKeys.client.get(`${dataKeys.apiUrl}/v2/stocks/${symbol}/trades/latest`, {
+      headers: {
+        'APCA-API-KEY-ID': dataKeys.keyId,
+        'APCA-API-SECRET-KEY': dataKeys.secretKey,
+      },
+    });
+    return toNumber(data?.trade?.p, null);
+  } catch (error) {
+    console.warn(`[Rebalance] Failed to fetch latest trade for ${symbol}: ${error.message}`);
+  }
+  return null;
+};
+
 const rebalancePortfolio = async (portfolio) => {
   if (!portfolio?.userId || !portfolio?.strategy_id) {
     return;
@@ -1110,6 +1128,25 @@ const rebalancePortfolio = async (portfolio) => {
       overwriteOrderId: true,
     });
   });
+
+  if (dataKeys?.keyId && dataKeys?.secretKey) {
+    const symbolsNeedingPrice = [];
+    holdingsState.forEach((entry, symbol) => {
+      if (priceCache[symbol] == null && symbol) {
+        symbolsNeedingPrice.push(symbol);
+      }
+    });
+    if (symbolsNeedingPrice.length) {
+      await Promise.all(
+        symbolsNeedingPrice.map(async (symbol) => {
+          const latestPrice = await fetchLatestTradePrice(dataKeys, symbol);
+          if (Number.isFinite(latestPrice)) {
+            priceCache[symbol] = latestPrice;
+          }
+        })
+      );
+    }
+  }
 
   portfolio.stocks = serializeHoldingsState(holdingsState, priceCache);
   const { totalCostBasis, totalMarketValue } = computePortfolioPerformanceTotals(portfolio.stocks);
