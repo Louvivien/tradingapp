@@ -1206,11 +1206,7 @@ const rebalancePortfolio = async (portfolio) => {
   };
   const holdDecisions = decisionTrace.filter((entry) => entry.action === 'hold');
 
-  portfolio.cashBuffer = Math.max(0, strategyCash);
-  if (cashLimit && cashLimit > 0) {
-    const maxAllowedBuffer = Math.max(0, cashLimit - (portfolio.initialInvestment || 0));
-    portfolio.cashBuffer = Math.min(portfolio.cashBuffer, maxAllowedBuffer);
-  }
+  portfolio.cashBuffer = roundToTwo(Math.max(0, strategyCash));
   thoughtProcess.cashSummary.cashBuffer = roundToTwo(portfolio.cashBuffer);
   if (!portfolio.initialInvestment) {
     portfolio.initialInvestment = Math.max(0, buySpend);
