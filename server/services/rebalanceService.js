@@ -840,6 +840,7 @@ const rebalancePortfolio = async (portfolio) => {
   const positionMap = {};
   const priceCache = {};
   const holdingsState = buildHoldingsState(portfolio.stocks);
+  const holdingsSnapshot = new Map();
   const trackedHoldings = {};
 
   positions.forEach((position) => {
@@ -856,6 +857,7 @@ const rebalancePortfolio = async (portfolio) => {
 
   holdingsState.forEach((entry, symbol) => {
     trackedHoldings[symbol] = entry;
+    holdingsSnapshot.set(symbol, { ...entry });
     if (priceCache[symbol] == null) {
       const fallbackPrice = toNumber(entry.currentPrice, toNumber(entry.avgCost, null));
       if (Number.isFinite(fallbackPrice) && fallbackPrice > 0) {
@@ -1048,6 +1050,22 @@ const rebalancePortfolio = async (portfolio) => {
     }
   }
 
+  let realizedPnlDelta = 0;
+  executedSells.forEach((sell) => {
+    const snapshot = holdingsSnapshot.get(sell.symbol);
+    if (!snapshot) {
+      return;
+    }
+    const avgCost = toNumber(snapshot.avgCost, null);
+    const availableQty = Math.max(0, toNumber(snapshot.quantity, 0));
+    const qtySold = Math.min(Math.abs(sell.qty), availableQty);
+    if (!qtySold || !Number.isFinite(avgCost)) {
+      return;
+    }
+    realizedPnlDelta += (sell.price - avgCost) * qtySold;
+    snapshot.quantity = Math.max(0, availableQty - qtySold);
+  });
+
   strategyCash += sellProceeds;
   const actualCashAvailable = Math.max(0, accountCash) + sellProceeds;
   let availableCash = Math.min(budget, strategyCash, actualCashAvailable);
@@ -1152,9 +1170,17 @@ const rebalancePortfolio = async (portfolio) => {
   const { totalCostBasis, totalMarketValue } = computePortfolioPerformanceTotals(portfolio.stocks);
   const rawPnlValue = totalMarketValue - totalCostBasis;
   const rawPnlPercent = totalCostBasis > 0 ? (rawPnlValue / totalCostBasis) * 100 : 0;
-  const normalizedPnlValue = roundToTwo(rawPnlValue);
-  const normalizedPnlPercent = roundToTwo(rawPnlPercent);
-  portfolio.pnlValue = normalizedPnlValue !== null ? normalizedPnlValue : 0;
+  const unrealizedPnlValue = roundToTwo(rawPnlValue);
+  const unrealizedPnlPercent = roundToTwo(rawPnlPercent);
+  const previousRealized = toNumber(portfolio.realizedPnlValue, 0);
+  const updatedRealized = roundToTwo((previousRealized || 0) + realizedPnlDelta);
+  portfolio.realizedPnlValue = updatedRealized !== null ? updatedRealized : previousRealized;
+  const totalPnlValue = roundToTwo((unrealizedPnlValue || 0) + (portfolio.realizedPnlValue || 0));
+  const totalPnlPercent = portfolio.initialInvestment > 0
+    ? (totalPnlValue / portfolio.initialInvestment) * 100
+    : 0;
+  const normalizedPnlPercent = roundToTwo(totalPnlPercent);
+  portfolio.pnlValue = totalPnlValue !== null ? totalPnlValue : 0;
   portfolio.pnlPercent = normalizedPnlPercent !== null ? normalizedPnlPercent : 0;
   portfolio.lastPerformanceComputedAt = now;
   if (Number.isFinite(totalCostBasis) && totalCostBasis > 0) {
@@ -1206,7 +1232,9 @@ const rebalancePortfolio = async (portfolio) => {
   };
   const holdDecisions = decisionTrace.filter((entry) => entry.action === 'hold');
 
-  portfolio.cashBuffer = roundToTwo(Math.max(0, strategyCash));
+  const updatedRetainedCash = roundToTwo(Math.max(0, toNumber(portfolio.retainedCash, 0) + realizedPnlDelta));
+  portfolio.retainedCash = updatedRetainedCash !== null ? updatedRetainedCash : 0;
+  portfolio.cashBuffer = portfolio.retainedCash;
   thoughtProcess.cashSummary.cashBuffer = roundToTwo(portfolio.cashBuffer);
   if (!portfolio.initialInvestment) {
     portfolio.initialInvestment = Math.max(0, buySpend);

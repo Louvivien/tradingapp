@@ -2198,7 +2198,8 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
         strategy_id,
         recurrence: normalizedRecurrence,
         initialInvestment: initialInvestmentEstimate,
-        cashBuffer: Math.max(0, toNumber(limitValue, 0) - (initialInvestmentEstimate || 0)),
+        cashBuffer: 0,
+        retainedCash: 0,
         lastRebalancedAt: null,
         nextRebalanceAt: computeNextRebalanceAt(normalizedRecurrence, now),
         targetPositions: targets,
@@ -2367,7 +2368,8 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
     });
 
     const determinedInitialInvestment = totalInvested || initialInvestmentEstimate || 0;
-    const cashBuffer = Math.max(0, toNumber(limitValue, 0) - determinedInitialInvestment);
+    const cashBuffer = 0;
+    const retainedCash = 0;
 
     const portfolio = new Portfolio({
       userId: String(UserID),
@@ -2376,6 +2378,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
       recurrence: normalizedRecurrence,
       initialInvestment: determinedInitialInvestment,
       cashBuffer,
+      retainedCash,
       lastRebalancedAt: now,
       nextRebalanceAt: computeNextRebalanceAt(normalizedRecurrence, now),
       targetPositions: targets,

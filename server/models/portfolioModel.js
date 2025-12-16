@@ -37,6 +37,10 @@ const portfolioSchema = new Schema({
     type: Number,
     default: 0,
   },
+  retainedCash: {
+    type: Number,
+    default: 0,
+  },
   lastRebalancedAt: {
     type: Date,
     default: null,
@@ -110,6 +114,10 @@ const portfolioSchema = new Schema({
     default: 0,
   },
   pnlPercent: {
+    type: Number,
+    default: 0,
+  },
+  realizedPnlValue: {
     type: Number,
     default: 0,
   },
