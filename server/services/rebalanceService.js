@@ -901,17 +901,31 @@ const rebalancePortfolio = async (portfolio) => {
     portfolio.initialInvestment = estimatedInvestment || toNumber(portfolio.budget, 0) || currentPortfolioValue;
   }
 
-  const baseBudget = portfolio.initialInvestment || 0;
-  const cashBuffer = toNumber(portfolio.cashBuffer, 0);
+  const retainedProfits = (() => {
+    const retained = toNumber(portfolio.retainedCash, null);
+    if (retained !== null) {
+      return retained;
+    }
+    return toNumber(portfolio.cashBuffer, 0);
+  })();
+  const cashBuffer = retainedProfits;
   let strategyCash = Math.max(0, cashBuffer);
   const cashLimit = toNumber(portfolio.cashLimit, toNumber(portfolio.budget, null));
-  const effectiveLimit = cashLimit && cashLimit > 0 ? cashLimit : Infinity;
-  const maxBudget = Math.min(baseBudget + strategyCash, effectiveLimit);
+  const baseLimit = cashLimit && cashLimit > 0
+    ? cashLimit
+    : (portfolio.initialInvestment || 0);
+  const lossAdjustment = Math.min(0, retainedProfits);
+  const deployableLimit = baseLimit > 0
+    ? Math.max(0, baseLimit + lossAdjustment)
+    : Infinity;
   const currentTotal = currentPortfolioValue + strategyCash;
-  const budget = Math.min(
-    maxBudget > 0 ? maxBudget : currentTotal,
-    currentTotal,
-    effectiveLimit,
+  const effectiveCap = deployableLimit === Infinity ? currentTotal : deployableLimit;
+  const budget = Math.max(
+    0,
+    Math.min(
+      effectiveCap,
+      currentTotal,
+    ),
   );
 
   let composerEvaluation = null;
