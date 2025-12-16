@@ -78,6 +78,13 @@ const formatRecurrenceLabel = (value) => {
   return RECURRENCE_LABELS[normalized] || normalized;
 };
 
+const roundToTwo = (value) => {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+};
+
 const mapDecisionRationales = (decisions = []) => {
   const rationaleMap = new Map();
   decisions.forEach((decision) => {
@@ -2069,18 +2076,34 @@ exports.getPortfolios = async (req, res) => {
         return sum + toNumber(stock.currentTotal, 0);
       }, 0);
       const initialInvestment = toNumber(portfolio.initialInvestment, 0);
+      const retainedCash = (() => {
+        const retained = toNumber(portfolio.retainedCash, null);
+        if (retained !== null) {
+          return retained;
+        }
+        return toNumber(portfolio.cashBuffer, 0);
+      })();
+      const equityBase = hasPendingHoldings ? null : (totalCurrentValue + retainedCash);
+      const computedPnlValue = equityBase !== null ? roundToTwo(equityBase - initialInvestment) : null;
+      const computedPnlPercent = equityBase !== null && initialInvestment > 0
+        ? roundToTwo((computedPnlValue / initialInvestment) * 100)
+        : null;
       const storedPnlValue = portfolio.pnlValue !== undefined && portfolio.pnlValue !== null
         ? toNumber(portfolio.pnlValue, null)
         : null;
       const storedPnlPercent = portfolio.pnlPercent !== undefined && portfolio.pnlPercent !== null
         ? toNumber(portfolio.pnlPercent, null)
         : null;
-      const pnlValue = storedPnlValue !== null
-        ? storedPnlValue
-        : totalCurrentValue - initialInvestment;
-      const pnlPercent = storedPnlPercent !== null
-        ? storedPnlPercent
-        : (initialInvestment > 0 ? (pnlValue / initialInvestment) * 100 : null);
+      const pnlValue = computedPnlValue !== null
+        ? computedPnlValue
+        : storedPnlValue !== null
+          ? storedPnlValue
+          : totalCurrentValue - initialInvestment;
+      const pnlPercent = computedPnlPercent !== null
+        ? computedPnlPercent
+        : storedPnlPercent !== null
+          ? storedPnlPercent
+          : (initialInvestment > 0 ? (pnlValue / initialInvestment) * 100 : null);
 
       return {
         name: portfolio.name,
@@ -2088,7 +2111,7 @@ exports.getPortfolios = async (req, res) => {
         recurrence: portfolio.recurrence || 'daily',
         lastRebalancedAt: portfolio.lastRebalancedAt,
         nextRebalanceAt: portfolio.nextRebalanceAt,
-        cashBuffer: toNumber(portfolio.cashBuffer, 0),
+        cashBuffer: retainedCash,
         initialInvestment,
         currentValue: hasPendingHoldings ? null : totalCurrentValue,
         pnlValue,
