@@ -16,6 +16,7 @@ import HighlightOffIcon from '@mui/icons-material/HighlightOff';
 import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import { useNavigate } from "react-router-dom";
 import { logError } from "../../utils/logger";
+import StrategyEquityChart from "./StrategyEquityChart";
 
 
 
@@ -487,6 +488,14 @@ const deleteStrategy = async (strategyId) => {
                   Cash buffer available: ${roundNumber(portfolio.cashBuffer).toLocaleString()}
                 </Typography>
               )}
+              <Box sx={{ ml: 6, mt: 2, mr: 2 }}>
+                <StrategyEquityChart
+                  userId={userData?.user?.id}
+                  token={userData?.token}
+                  strategyId={portfolio.strategy_id}
+                  strategyName={portfolio.name}
+                />
+              </Box>
               {resendStatus[portfolio.strategy_id]?.message && (
                 <Typography
                   variant="body2"

@@ -1,5 +1,6 @@
 const Portfolio = require('../models/portfolioModel');
 const Strategy = require('../models/strategyModel');
+const StrategyEquitySnapshot = require('../models/strategyEquitySnapshotModel');
 const { getAlpacaConfig } = require('../config/alpacaConfig');
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('./strategyLogger');
@@ -1299,6 +1300,35 @@ const rebalancePortfolio = async (portfolio) => {
       return;
     }
     throw error;
+  }
+
+  const holdingsMarketValue = Number.isFinite(totalMarketValue) ? roundToTwo(Math.max(0, totalMarketValue)) : null;
+  const retainedCashValue = roundToTwo(Math.max(0, toNumber(portfolio.retainedCash, 0)));
+  const totalEquityValue = (() => {
+    if (holdingsMarketValue === null || retainedCashValue === null) {
+      return null;
+    }
+    return roundToTwo(holdingsMarketValue + retainedCashValue);
+  })();
+
+  const snapshotUserId = portfolio.userId ? String(portfolio.userId) : null;
+
+  if (totalEquityValue !== null && snapshotUserId) {
+    try {
+      await StrategyEquitySnapshot.create({
+        strategy_id: portfolio.strategy_id,
+        userId: snapshotUserId,
+        portfolioId: portfolio._id,
+        strategyName: portfolio.name,
+        equityValue: totalEquityValue,
+        holdingsMarketValue: holdingsMarketValue,
+        retainedCash: retainedCashValue,
+        cashLimit: toNumber(portfolio.cashLimit, null),
+        pnlValue: toNumber(portfolio.pnlValue, null),
+      });
+    } catch (snapshotError) {
+      console.error('[Rebalance] Failed to record equity snapshot:', snapshotError.message);
+    }
   }
 
   await recordStrategyLog({

@@ -3,6 +3,7 @@ const Strategy = require("../models/strategyModel");
 const Portfolio = require("../models/portfolioModel");
 const StrategyLog = require("../models/strategyLogModel");
 const StrategyTemplate = require('../models/strategyTemplateModel');
+const StrategyEquitySnapshot = require('../models/strategyEquitySnapshotModel');
 const News = require("../models/newsModel");
 const { getAlpacaConfig } = require("../config/alpacaConfig");
 const Alpaca = require('@alpacahq/alpaca-trade-api');
@@ -1746,6 +1747,61 @@ exports.getStrategyLogs = async (req, res) => {
     return res.status(500).json({
       status: 'fail',
       message: 'Failed to load strategy logs',
+    });
+  }
+};
+
+exports.getStrategyEquityHistory = async (req, res) => {
+  try {
+    const { userId, strategyId } = req.params;
+    if (!userId || !strategyId) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Missing userId or strategyId',
+      });
+    }
+
+    const limitParam = Number(req.query?.limit);
+    const limit = Number.isFinite(limitParam)
+      ? Math.min(1000, Math.max(1, Math.floor(limitParam)))
+      : 180;
+
+    const startDate = req.query?.startDate ? new Date(req.query.startDate) : null;
+    const filter = {
+      userId: String(userId),
+      strategy_id: String(strategyId),
+    };
+    if (startDate && !Number.isNaN(startDate.getTime())) {
+      filter.createdAt = { $gte: startDate };
+    }
+
+    const snapshots = await StrategyEquitySnapshot.find(filter)
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const data = snapshots
+      .map((snapshot) => ({
+        strategyId: snapshot.strategy_id,
+        timestamp: snapshot.createdAt,
+        equityValue: roundToTwo(snapshot.equityValue),
+        holdingsMarketValue: roundToTwo(snapshot.holdingsMarketValue),
+        retainedCash: roundToTwo(snapshot.retainedCash),
+        pnlValue: roundToTwo(snapshot.pnlValue),
+        cashLimit: roundToTwo(snapshot.cashLimit),
+      }))
+      .reverse();
+
+    return res.status(200).json({
+      status: 'success',
+      results: data.length,
+      data,
+    });
+  } catch (error) {
+    console.error('[Strategies] Failed to fetch equity history:', error.message);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Unable to fetch strategy equity history.',
     });
   }
 };
