@@ -37,6 +37,24 @@ const flattenChildren = (node, startIndex = 1) => {
   return node.slice(startIndex);
 };
 
+const getNodeType = (node) => {
+  if (!isArray(node) || !node.length) {
+    return null;
+  }
+  return String(node[0]);
+};
+
+const isAssetNode = (node) => getNodeType(node) === 'asset';
+
+const getNodeType = (node) => {
+  if (!isArray(node) || !node.length) {
+    return null;
+  }
+  return String(node[0]);
+};
+
+const isAssetNode = (node) => getNodeType(node) === 'asset';
+
 const sumWeights = (positions = []) =>
   positions.reduce((sum, pos) => sum + (Number(pos.weight) || 0), 0);
 
@@ -464,13 +482,33 @@ const applySelector = (selectorNode, scoredAssets) => {
   return scoredAssets;
 };
 
-const evaluateFilterNode = (node, parentWeight, ctx) => {
+function evaluateFilterNode(node, parentWeight, ctx) {
   const metricNode = node[1];
   const selectorNode = node[2];
   const assets = node[3] || [];
   const metricSummary = describeMetricNode(metricNode);
   const selectionSummary = describeSelectionNode(selectorNode);
-  const scored = assets
+  const assetNodes = assets.filter(isAssetNode);
+  const nonAssetNodes = assets.filter((assetNode) => !isAssetNode(assetNode));
+
+  // Fallback: some Composer scripts incorrectly pass higher-level groups into a filter.
+  // When that happens there are no tradable tickers to score, so instead of failing we
+  // short-circuit the filter and evaluate those children directly with equal weights.
+  if (!assetNodes.length && nonAssetNodes.length) {
+    if (ctx?.reasoning) {
+      ctx.reasoning.push(
+        `Filter evaluation: ${metricSummary}. Provided children are not direct assets, so applying a fallback equal-weight allocation across ${nonAssetNodes.length} nested nodes instead of scoring.`
+      );
+    }
+    const fallbackWeight = parentWeight / nonAssetNodes.length;
+    const fallbackPositions = nonAssetNodes.flatMap((child) =>
+      evaluateNode(child, fallbackWeight, ctx)
+    );
+    return mergePositions(fallbackPositions);
+  }
+
+  const evaluationAssets = assetNodes.length ? assetNodes : assets;
+  const scored = evaluationAssets
     .map((assetNode) => {
       const symbol = extractSymbolFromAssetNode(assetNode);
       if (!symbol) {
@@ -490,7 +528,7 @@ const evaluateFilterNode = (node, parentWeight, ctx) => {
         `Filter evaluation: ${metricSummary}. No instruments produced a valid score; aborting branch.`
       );
     }
-    const missingSymbols = assets
+    const missingSymbols = evaluationAssets
       .map((assetNode) => extractSymbolFromAssetNode(assetNode))
       .filter(Boolean)
       .map((symbol) => {
@@ -527,9 +565,9 @@ const evaluateFilterNode = (node, parentWeight, ctx) => {
     weight: weightEach,
     rationale: `Selected by filter (${Number.isFinite(entry.value) ? entry.value.toFixed(4) : 'n/a'})`,
   }));
-};
+}
 
-const evaluateNode = (node, parentWeight, ctx) => {
+function evaluateNode(node, parentWeight, ctx) {
   if (!node) {
     return [];
   }
@@ -638,7 +676,7 @@ const evaluateNode = (node, parentWeight, ctx) => {
       return mergePositions(positions);
     }
   }
-};
+}
 
 const normalizePositions = (positions = []) => {
   const merged = mergePositions(positions);
