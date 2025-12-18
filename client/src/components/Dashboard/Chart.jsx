@@ -1,16 +1,40 @@
-import React, { useState, useContext, useEffect } from "react";
+import React, { useState, useContext, useEffect, useCallback } from "react";
 import UserContext from "../../context/UserContext";
 import Title from "../Template/Title.jsx";
 import LineChart from "../Template/LineChartPort";
 import axios from "axios";
 import config from "../../config/Config";
 import { logError, logWarn } from "../../utils/logger";
+import { Box, Button, CircularProgress, Typography } from "@mui/material";
 
 const Chart = () => {
   const [chartData, setChartData] = useState(null);
   const [error, setError] = useState(null);
+  const [backfillStatus, setBackfillStatus] = useState(null);
+  const [backfillLoading, setBackfillLoading] = useState(false);
+  const [backfillError, setBackfillError] = useState(null);
   const { userData } = useContext(UserContext);
+  const userId = userData?.user?.id;
+  const token = userData?.token;
 
+  const fetchBackfillStatus = useCallback(async () => {
+    if (!token || !userId) {
+      setBackfillStatus(null);
+      return;
+    }
+    try {
+      const headers = { "x-auth-token": token };
+      const response = await axios.get(
+        `${config.base_url}/api/strategies/equity/backfill-status/${userId}`,
+        { headers }
+      );
+      if (response.data?.status === "success") {
+        setBackfillStatus(response.data.data);
+      }
+    } catch (statusError) {
+      logWarn("Unable to fetch equity backfill status:", statusError);
+    }
+  }, [token, userId]);
 
   useEffect(() => {
     const fetchPortfolioHistory = async () => {
@@ -55,8 +79,39 @@ const Chart = () => {
     };
 
     fetchPortfolioHistory();
-  }, [userData?.token, userData?.user?.id]);
+    fetchBackfillStatus();
+  }, [userData?.token, userData?.user?.id, fetchBackfillStatus]);
 
+  const handleBackfillClick = async () => {
+    if (!token || !userId) return;
+    setBackfillLoading(true);
+    setBackfillError(null);
+    try {
+      const headers = { "x-auth-token": token };
+      const response = await axios.post(
+        `${config.base_url}/api/strategies/equity/backfill/${userId}`,
+        {},
+        { headers }
+      );
+      if (response.data?.status === "success") {
+        setBackfillStatus((prev) => ({
+          ...(prev || {}),
+          status: response.data.result?.status || "completed",
+          completedAt: new Date().toISOString(),
+          metadata: response.data.result || null,
+        }));
+      }
+    } catch (backfillErr) {
+      const message = backfillErr?.response?.data?.message || backfillErr.message;
+      setBackfillError(message);
+      logError("Failed to run equity backfill:", backfillErr);
+    } finally {
+      setBackfillLoading(false);
+      fetchBackfillStatus();
+    }
+  };
+
+  const isBackfillCompleted = backfillStatus?.status === "completed";
 
   if (error) {
     return (
@@ -76,6 +131,30 @@ const Chart = () => {
   return (
     <React.Fragment>
       <Title>Portfolio Performance Chart</Title>
+      {token && userId && (
+        <Box sx={{ display: "flex", alignItems: "center", mb: 1, gap: 2 }}>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handleBackfillClick}
+            disabled={backfillLoading || isBackfillCompleted}
+          >
+            {backfillLoading ? <CircularProgress size={18} /> : 'Backfill equity history'}
+          </Button>
+          <Typography variant="body2" color="textSecondary">
+            {isBackfillCompleted
+              ? "Backfill already completed."
+              : backfillStatus?.status === "running"
+                ? "Backfill is currently running…"
+                : "Populate history from logs if missing."}
+          </Typography>
+        </Box>
+      )}
+      {backfillError && (
+        <Typography variant="body2" sx={{ color: "#b00020", mb: 1 }}>
+          {backfillError}
+        </Typography>
+      )}
       <div style={{ minHeight: "240px" }}>
         <LineChart pastDataPeriod={chartData} duration={"12 months"} />
       </div>

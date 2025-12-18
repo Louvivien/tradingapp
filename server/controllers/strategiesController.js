@@ -4,6 +4,7 @@ const Portfolio = require("../models/portfolioModel");
 const StrategyLog = require("../models/strategyLogModel");
 const StrategyTemplate = require('../models/strategyTemplateModel');
 const StrategyEquitySnapshot = require('../models/strategyEquitySnapshotModel');
+const MaintenanceTask = require('../models/maintenanceTaskModel');
 const News = require("../models/newsModel");
 const { getAlpacaConfig } = require("../config/alpacaConfig");
 const Alpaca = require('@alpacahq/alpaca-trade-api');
@@ -21,6 +22,7 @@ const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurr
 const { recordStrategyLog } = require('../services/strategyLogger');
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
 const { rebalancePortfolio } = require('../services/rebalanceService');
+const { runEquityBackfill, TASK_NAME: EQUITY_BACKFILL_TASK } = require('../services/equityBackfillService');
 const {
   addSubscriber,
   removeSubscriber,
@@ -1802,6 +1804,60 @@ exports.getStrategyEquityHistory = async (req, res) => {
     return res.status(500).json({
       status: 'error',
       message: 'Unable to fetch strategy equity history.',
+    });
+  }
+};
+
+exports.getEquityBackfillStatus = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: 'Credentials could not be validated.',
+      });
+    }
+    const task = await MaintenanceTask.findOne({ taskName: EQUITY_BACKFILL_TASK }).lean();
+    return res.status(200).json({
+      status: 'success',
+      data: {
+        taskName: EQUITY_BACKFILL_TASK,
+        status: task?.status || 'pending',
+        startedAt: task?.startedAt,
+        completedAt: task?.completedAt,
+        metadata: task?.metadata || null,
+        lastError: task?.lastError || null,
+      },
+    });
+  } catch (error) {
+    console.error('[Strategies] Failed to fetch backfill status:', error.message);
+    return res.status(500).json({
+      status: 'error',
+      message: 'Unable to fetch backfill status.',
+    });
+  }
+};
+
+exports.triggerEquityBackfill = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: 'Credentials could not be validated.',
+      });
+    }
+
+    const result = await runEquityBackfill({ initiatedBy: userId });
+    return res.status(200).json({
+      status: 'success',
+      result,
+    });
+  } catch (error) {
+    console.error('[Strategies] Equity backfill failed:', error.message);
+    return res.status(500).json({
+      status: 'error',
+      message: error?.message || 'Equity backfill failed.',
     });
   }
 };
