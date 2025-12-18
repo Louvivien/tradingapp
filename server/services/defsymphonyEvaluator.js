@@ -46,15 +46,6 @@ const getNodeType = (node) => {
 
 const isAssetNode = (node) => getNodeType(node) === 'asset';
 
-const getNodeType = (node) => {
-  if (!isArray(node) || !node.length) {
-    return null;
-  }
-  return String(node[0]);
-};
-
-const isAssetNode = (node) => getNodeType(node) === 'asset';
-
 const sumWeights = (positions = []) =>
   positions.reduce((sum, pos) => sum + (Number(pos.weight) || 0), 0);
 
