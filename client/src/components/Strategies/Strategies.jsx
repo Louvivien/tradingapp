@@ -74,7 +74,12 @@ const Strategies = () => {
   const [loadedStrategyContent, setLoadedStrategyContent] = useState("");
   const [currentJobId, setCurrentJobId] = useState(null);
   const [progressEvents, setProgressEvents] = useState([]);
+  const [localEvalLoading, setLocalEvalLoading] = useState(false);
+  const [localEvalResult, setLocalEvalResult] = useState(null);
+  const [evaluationJobs, setEvaluationJobs] = useState([]);
+  const [evaluationError, setEvaluationError] = useState(null);
   const progressSourceRef = useRef(null);
+  const evaluationPollRef = useRef(null);
 
   const fetchStrategies = useCallback(async () => {
     if (!authToken || !userId) {
@@ -193,6 +198,10 @@ const Strategies = () => {
       if (progressSourceRef.current) {
         progressSourceRef.current.close();
       }
+      if (evaluationPollRef.current) {
+        clearInterval(evaluationPollRef.current);
+        evaluationPollRef.current = null;
+      }
     };
   }, []);
 
@@ -200,6 +209,89 @@ const Strategies = () => {
     if (progressSourceRef.current) {
       progressSourceRef.current.close();
       progressSourceRef.current = null;
+    }
+  };
+
+  const fetchEvaluationJobs = useCallback(async () => {
+    try {
+      const headers = {};
+      if (authToken) {
+        headers["x-auth-token"] = authToken;
+      }
+      const { data } = await Axios.get(`${config.base_url}/api/data/composer/evaluations`, {
+        headers,
+      });
+      if (data?.status === "success" && Array.isArray(data.data)) {
+        setEvaluationJobs(data.data);
+      }
+    } catch (err) {
+      /* eslint-disable-next-line no-console */
+      console.error("Failed to fetch evaluation queue:", err);
+      setEvaluationError(err.message || "Unable to fetch evaluation queue.");
+    }
+  }, [authToken]);
+
+  useEffect(() => {
+    fetchEvaluationJobs();
+  }, [fetchEvaluationJobs]);
+
+  useEffect(() => {
+    if (localEvalLoading) {
+      if (!evaluationPollRef.current) {
+        evaluationPollRef.current = setInterval(() => {
+          fetchEvaluationJobs();
+        }, 5000);
+      }
+      return () => {};
+    }
+    if (evaluationPollRef.current) {
+      clearInterval(evaluationPollRef.current);
+      evaluationPollRef.current = null;
+    }
+    return () => {};
+  }, [localEvalLoading, fetchEvaluationJobs]);
+
+  const handleLocalEvaluation = async () => {
+    if (!collaborative || !collaborative.trim()) {
+      setError("Please provide a strategy before running a local simulation.");
+      return;
+    }
+    if (!collaborativeCashLimit || Number(collaborativeCashLimit) <= 0) {
+      setError("Please provide a positive cash limit before running a local simulation.");
+      return;
+    }
+    setEvaluationError(null);
+    setLocalEvalResult(null);
+    setLocalEvalLoading(true);
+    const clientRequestId =
+      (window.crypto && typeof window.crypto.randomUUID === "function"
+        ? window.crypto.randomUUID()
+        : `local-${Date.now()}-${Math.random().toString(16).slice(2)}`);
+    const payload = {
+      strategyText: collaborative,
+      budget: Number(collaborativeCashLimit),
+      clientRequestId,
+    };
+    const headers = {};
+    if (authToken) {
+      headers["x-auth-token"] = authToken;
+    }
+    try {
+      const response = await Axios.post(
+        `${config.base_url}/api/data/composer/evaluate-local`,
+        payload,
+        { headers }
+      );
+      if (response.status === 200 && response.data?.status === "success") {
+        setLocalEvalResult(response.data.data);
+        fetchEvaluationJobs();
+      } else {
+        setEvaluationError(response.data?.message || "Local evaluation failed.");
+      }
+    } catch (err) {
+      setEvaluationError(err.response?.data?.message || err.message || "Local evaluation failed.");
+    } finally {
+      setLocalEvalLoading(false);
     }
   };
 
@@ -722,6 +814,69 @@ return (
             </TextField>
             <br />
             <br />
+            <Box display="flex" alignItems="center" gap={2} flexWrap="wrap" mb={2}>
+              <Button
+                variant="outlined"
+                color="secondary"
+                onClick={handleLocalEvaluation}
+                disabled={localEvalLoading || !collaborative || !collaborative.trim()}
+              >
+                {localEvalLoading ? "Running local simulation…" : "Simulate locally"}
+              </Button>
+              {evaluationError && (
+                <Typography variant="body2" color="error">
+                  {evaluationError}
+                </Typography>
+              )}
+            </Box>
+
+            {localEvalResult && (
+              <Box mb={2} p={2} sx={{ border: '1px solid #e0e0e0', borderRadius: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Local simulation summary
+                </Typography>
+                {localEvalResult.summary && (
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-line' }} gutterBottom>
+                    {localEvalResult.summary}
+                  </Typography>
+                )}
+                {Array.isArray(localEvalResult.positions) && localEvalResult.positions.length > 0 && (
+                  <Box mt={1}>
+                    <Typography variant="body2" fontWeight={600}>
+                      Positions ({localEvalResult.positions.length})
+                    </Typography>
+                    {localEvalResult.positions.map((pos, index) => (
+                      <Typography key={`local-pos-${index}`} variant="body2">
+                        {pos.symbol}: {((pos.weight || 0) * 100).toFixed(2)}% target · Qty {pos.quantity ?? 'n/a'}
+                      </Typography>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            )}
+
+            <Box mb={3} p={2} sx={{ border: '1px dashed #bdbdbd', borderRadius: 1 }}>
+              <Typography variant="subtitle2">Active local simulations</Typography>
+              {evaluationJobs.length === 0 && (
+                <Typography variant="body2" color="textSecondary">
+                  No local evaluations in progress.
+                </Typography>
+              )}
+              {evaluationJobs.length > 0 &&
+                evaluationJobs.map((job) => {
+                  const isOwner = userId && job.requester && String(job.requester) === String(userId);
+                  return (
+                    <Typography
+                      key={job.id}
+                      variant="body2"
+                      color={isOwner ? 'primary' : 'textSecondary'}
+                    >
+                      {job.status || 'pending'} · {job.strategyName || 'Strategy'} ({job.mode || 'direct'}) ·
+                      submitted {formatDateTime(job.submittedAt)}
+                    </Typography>
+                  );
+                })}
+            </Box>
 
             <Button
               variant="contained"

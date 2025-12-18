@@ -4,6 +4,11 @@ const { computeWorkflowIndicators } = require('../services/indicatorService');
 const { runComposerStrategy } = require("../utils/openaiComposerStrategy");
 const { getCachedPrices } = require('../services/priceCacheService');
 const { evaluateDefsymphonyStrategy } = require('../services/defsymphonyEvaluator');
+const {
+  runTrackedEvaluation,
+  listActiveEvaluations,
+  summarizeStrategy,
+} = require('../services/evaluationTrackingService');
 
 exports.getStockMetaData = async (req, res) => {
   try {
@@ -278,7 +283,7 @@ exports.evaluateComposerStrategy = async (req, res) => {
 
 exports.evaluateComposerStrategyLocal = async (req, res) => {
   try {
-    const { strategyText, budget } = req.body || {};
+    const { strategyText, budget, clientRequestId } = req.body || {};
     if (!strategyText || typeof strategyText !== 'string' || !strategyText.trim()) {
       return res.status(400).json({
         status: 'fail',
@@ -287,20 +292,65 @@ exports.evaluateComposerStrategyLocal = async (req, res) => {
     }
 
     const parsedBudget = Number.isFinite(Number(budget)) && Number(budget) > 0 ? Number(budget) : 1000;
-    const result = await evaluateDefsymphonyStrategy({
-      strategyText,
-      budget: parsedBudget,
+    const summary = summarizeStrategy(strategyText);
+    const mode = summary.hasGroup ? 'historical-simulation' : 'direct';
+    const requester = (req.user && (req.user.id || req.user._id)) || req.ip || 'anonymous';
+
+    const { id: jobId, job, result } = await runTrackedEvaluation({
+      metadata: {
+        requester,
+        mode,
+        strategyName: summary.name,
+        hasGroup: summary.hasGroup,
+        budget: parsedBudget,
+        clientRequestId: clientRequestId || null,
+      },
+      handler: () =>
+        evaluateDefsymphonyStrategy({
+          strategyText,
+          budget: parsedBudget,
+        }),
     });
 
     return res.status(200).json({
       status: 'success',
       data: result,
+      job: {
+        id: jobId,
+        status: job?.status || 'completed',
+        mode,
+        hasGroup: summary.hasGroup,
+        submittedAt: job?.submittedAt?.toISOString?.() || job?.submittedAt || null,
+        clientRequestId: clientRequestId || null,
+      },
     });
   } catch (error) {
     console.error('[ComposerLocal]', error);
     return res.status(500).json({
       status: 'fail',
       message: error.message || 'Local Composer evaluation failed.',
+    });
+  }
+};
+
+exports.listComposerEvaluations = (req, res) => {
+  try {
+    const evaluations = listActiveEvaluations().map((entry) => ({
+      ...entry,
+      submittedAt: entry.submittedAt?.toISOString?.() || entry.submittedAt || null,
+      startedAt: entry.startedAt?.toISOString?.() || entry.startedAt || null,
+      completedAt: entry.completedAt?.toISOString?.() || entry.completedAt || null,
+      lastUpdatedAt: entry.lastUpdatedAt?.toISOString?.() || entry.lastUpdatedAt || null,
+    }));
+    return res.status(200).json({
+      status: 'success',
+      data: evaluations,
+    });
+  } catch (error) {
+    console.error('[ComposerEvaluations]', error);
+    return res.status(500).json({
+      status: 'fail',
+      message: error.message || 'Unable to list evaluations.',
     });
   }
 };

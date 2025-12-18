@@ -8,7 +8,242 @@ const {
 } = require('../utils/composerDslParser');
 const { getCachedPrices } = require('./priceCacheService');
 
-const LOOKBACK_DAYS = 1200;
+const LOOKBACK_DAYS = 250;
+
+const METRIC_DEFAULT_WINDOWS = {
+  rsi: 14,
+  'moving-average-price': 20,
+  'exponential-moving-average-price': 20,
+  'moving-average-return': 20,
+  'cumulative-return': 20,
+  'stdev-return': 20,
+  'stdev-return%': 20,
+  'max-drawdown': 30,
+};
+
+const getSeriesValuesForContext = (series, ctx) => {
+  if (!series || !Array.isArray(series.closes)) {
+    return [];
+  }
+  if (ctx?.priceIndex == null) {
+    return series.closes;
+  }
+  const offset = Number(series.offset) || 0;
+  const relativeIndex = ctx.priceIndex - offset;
+  if (relativeIndex < 0) {
+    return [];
+  }
+  const limit = Math.min(Math.max(relativeIndex + 1, 0), series.closes.length);
+  return series.closes.slice(0, limit);
+};
+
+const getLatestValueForContext = (series, ctx) => {
+  if (!series || !Array.isArray(series.closes) || !series.closes.length) {
+    return null;
+  }
+  if (ctx?.priceIndex == null) {
+    return series.closes[series.closes.length - 1];
+  }
+  const offset = Number(series.offset) || 0;
+  const relativeIndex = ctx.priceIndex - offset;
+  if (relativeIndex < 0) {
+    return null;
+  }
+  const idx = Math.min(relativeIndex, series.closes.length - 1);
+  return series.closes[idx];
+};
+
+const collectAstStats = (node, stats = { hasGroup: false, maxWindow: 0 }) => {
+  if (!node) {
+    return stats;
+  }
+  if (Array.isArray(node)) {
+    const head = node[0];
+    if (head === 'group') {
+      stats.hasGroup = true;
+    }
+    if (
+      head === 'rsi' ||
+      head === 'moving-average-price' ||
+      head === 'exponential-moving-average-price' ||
+      head === 'moving-average-return' ||
+      head === 'cumulative-return' ||
+      head === 'stdev-return' ||
+      head === 'stdev-return%' ||
+      head === 'max-drawdown'
+    ) {
+      const options = (node[2] && typeof node[2] === 'object' ? node[2] : node[1]) || {};
+      const configured = Number(getKeyword(options, ':window') || getKeyword(options, 'window'));
+      const defaultWindow = METRIC_DEFAULT_WINDOWS[head] || 0;
+      const window = Number.isFinite(configured) ? configured : defaultWindow;
+      if (Number.isFinite(window) && window > stats.maxWindow) {
+        stats.maxWindow = window;
+      }
+    }
+    node.slice(1).forEach((child) => collectAstStats(child, stats));
+    return stats;
+  }
+  if (typeof node === 'object') {
+    Object.values(node).forEach((value) => collectAstStats(value, stats));
+  }
+  return stats;
+};
+
+const alignPriceHistory = (priceData, lookbackDays = LOOKBACK_DAYS) => {
+  let minLength = Infinity;
+  priceData.forEach((series) => {
+    if (Array.isArray(series?.closes) && series.closes.length) {
+      minLength = Math.min(minLength, series.closes.length);
+    }
+  });
+  if (!Number.isFinite(minLength) || minLength === 0) {
+    return 0;
+  }
+  const target = Math.min(minLength, lookbackDays);
+  priceData.forEach((series) => {
+    if (!Array.isArray(series?.closes)) {
+      return;
+    }
+    if (series.closes.length > target) {
+      series.closes = series.closes.slice(-target);
+    }
+    if (Array.isArray(series.bars) && series.bars.length > target) {
+      series.bars = series.bars.slice(-target);
+    }
+    series.latest = series.closes[series.closes.length - 1];
+  });
+  return target;
+};
+
+const gatherGroupNodes = (node, acc = []) => {
+  if (!node) {
+    return acc;
+  }
+  if (Array.isArray(node)) {
+    const head = node[0];
+    if (typeof head === 'string') {
+      if (head === 'group') {
+        acc.push(node);
+      }
+      node.slice(1).forEach((child) => gatherGroupNodes(child, acc));
+      return acc;
+    }
+    node.forEach((child) => gatherGroupNodes(child, acc));
+    return acc;
+  }
+  if (typeof node === 'object') {
+    Object.values(node).forEach((child) => gatherGroupNodes(child, acc));
+  }
+  return acc;
+};
+
+const safeNormalizePositions = (positions = []) => {
+  try {
+    return normalizePositions(positions);
+  } catch (error) {
+    return [];
+  }
+};
+
+const assignNodeIds = (node, map = new WeakMap()) => {
+  let counter = 1;
+  const traverse = (current) => {
+    if (!current) {
+      return;
+    }
+    if (Array.isArray(current)) {
+      if (!map.has(current)) {
+        map.set(current, counter);
+        counter += 1;
+      }
+      current.forEach((child) => traverse(child));
+    } else if (typeof current === 'object') {
+      Object.values(current).forEach((child) => traverse(child));
+    }
+  };
+  traverse(node);
+  return map;
+};
+
+const computePortfolioReturn = (positions = [], priceData, priceIndex) => {
+  if (!positions.length || priceIndex <= 0) {
+    return 0;
+  }
+  let total = 0;
+  positions.forEach((pos) => {
+    const symbol = pos.symbol?.toUpperCase?.();
+    if (!symbol) {
+      return;
+    }
+    const series = priceData.get(symbol);
+    if (!series || !Array.isArray(series.closes)) {
+      return;
+    }
+    if (priceIndex >= series.closes.length) {
+      return;
+    }
+    const prev = series.closes[priceIndex - 1];
+    const curr = series.closes[priceIndex];
+    if (!Number.isFinite(prev) || !Number.isFinite(curr) || !prev) {
+      return;
+    }
+    total += pos.weight * ((curr - prev) / prev);
+  });
+  return total;
+};
+
+const simulateNodeSeries = (node, ctx, options) => {
+  const { startIndex, priceLength } = options;
+  if (!node || startIndex >= priceLength) {
+    return { closes: [], offset: startIndex };
+  }
+  const values = [];
+  let nav = 1;
+  const simCtx = {
+    ...ctx,
+    reasoning: null,
+    previewStack: null,
+  };
+  const previousIndex = ctx.priceIndex;
+  for (let idx = startIndex; idx < priceLength; idx += 1) {
+    simCtx.priceIndex = idx;
+    ctx.priceIndex = idx;
+    const rawPositions = evaluateNode(node, 1, simCtx);
+    const normalized = safeNormalizePositions(rawPositions);
+    const periodReturn = computePortfolioReturn(normalized, ctx.priceData, idx);
+    nav *= 1 + periodReturn;
+    values.push(nav);
+  }
+  ctx.priceIndex = previousIndex;
+  return { closes: values, offset: startIndex };
+};
+
+const buildGroupSeriesCache = (ast, ctx, stats, priceLength) => {
+  const maxWindow = Math.max(stats.maxWindow || 1, 1);
+  if (!Number.isFinite(priceLength) || priceLength <= maxWindow) {
+    throw new Error(
+      `Not enough synchronized history (${priceLength} bars) to satisfy maximum window ${maxWindow}.`
+    );
+  }
+  const startIndex = maxWindow;
+  const nodeSeries = ctx.nodeSeries || new Map();
+  const groupNodes = gatherGroupNodes(ast);
+  groupNodes.forEach((groupNode) => {
+    const nodeId = ctx.nodeIdMap?.get(groupNode);
+    if (!nodeId) {
+      return;
+    }
+    const record = simulateNodeSeries(groupNode, { ...ctx, nodeSeries }, {
+      startIndex,
+      priceLength,
+    });
+    nodeSeries.set(nodeId, record);
+  });
+  ctx.nodeSeries = nodeSeries;
+  ctx.groupSeriesMeta = { startIndex, priceLength };
+  ctx.enableGroupMetrics = true;
+  return nodeSeries;
+};
 
 const toISODate = (value) => {
   const date = value instanceof Date ? value : new Date(value);
@@ -227,6 +462,34 @@ const noteMissingPriceData = (ctx, symbol, reason = 'missing price data') => {
   }
 };
 
+const resolveMetricSeries = (symbolInput, ctx) => {
+  if (ctx?.metricSeries) {
+    return ctx.metricSeries;
+  }
+  const fallbackSymbol = ctx?.metricSymbol;
+  const symbol = symbolInput || fallbackSymbol;
+  if (!symbol || !ctx?.priceData) {
+    return null;
+  }
+  const upper = symbol.toUpperCase();
+  if (!ctx.priceData.has(upper)) {
+    noteMissingPriceData(ctx, upper);
+    return null;
+  }
+  return ctx.priceData.get(upper);
+};
+
+const getSeriesForMetric = (symbol, ctx, missingMessage) => {
+  if (ctx?.metricSeries) {
+    return ctx.metricSeries;
+  }
+  const finalSymbol = symbol || ctx?.metricSymbol;
+  if (!finalSymbol) {
+    throw new Error(missingMessage);
+  }
+  return resolveMetricSeries(finalSymbol, ctx);
+};
+
 const evaluateCondition = (node, ctx) => {
   if (!isArray(node)) {
     return Boolean(node);
@@ -286,16 +549,15 @@ const evaluateExpression = (node, ctx) => {
       } else if (isObj(symbolNode)) {
         options = symbolNode;
       }
-      if (!symbol) {
-        throw new Error('Metric symbol context missing for RSI');
-      }
-      const window = Number(getKeyword(options, ':window') || getKeyword(options, 'window') || 14);
-      const series = ctx.priceData.get(symbol);
+      const window =
+        Number(getKeyword(options, ':window') || getKeyword(options, 'window')) ||
+        METRIC_DEFAULT_WINDOWS.rsi;
+      const series = getSeriesForMetric(symbol, ctx, 'Metric symbol context missing for RSI');
       if (!series) {
-        noteMissingPriceData(ctx, symbol);
         return null;
       }
-      return computeRSI(series.closes, window);
+      const closes = getSeriesValuesForContext(series, ctx);
+      return computeRSI(closes, window);
     }
     case 'moving-average-price': {
       const symbolNode = node[1];
@@ -306,16 +568,19 @@ const evaluateExpression = (node, ctx) => {
       } else if (isObj(symbolNode)) {
         options = symbolNode;
       }
-      if (!symbol) {
-        throw new Error('Metric symbol context missing for moving-average-price');
-      }
-      const window = Number(getKeyword(options, ':window') || getKeyword(options, 'window') || 20);
-      const series = ctx.priceData.get(symbol);
+      const window =
+        Number(getKeyword(options, ':window') || getKeyword(options, 'window')) ||
+        METRIC_DEFAULT_WINDOWS['moving-average-price'];
+      const series = getSeriesForMetric(
+        symbol,
+        ctx,
+        'Metric symbol context missing for moving-average-price'
+      );
       if (!series) {
-        noteMissingPriceData(ctx, symbol);
         return null;
       }
-      return computeSMA(series.closes, window);
+      const closes = getSeriesValuesForContext(series, ctx);
+      return computeSMA(closes, window);
     }
     case 'exponential-moving-average-price': {
       const symbolNode = node[1];
@@ -326,16 +591,19 @@ const evaluateExpression = (node, ctx) => {
       } else if (isObj(symbolNode)) {
         options = symbolNode;
       }
-      if (!symbol) {
-        throw new Error('Metric symbol context missing for exponential-moving-average-price');
-      }
-      const window = Number(getKeyword(options, ':window') || getKeyword(options, 'window') || 20);
-      const series = ctx.priceData.get(symbol);
+      const window =
+        Number(getKeyword(options, ':window') || getKeyword(options, 'window')) ||
+        METRIC_DEFAULT_WINDOWS['exponential-moving-average-price'];
+      const series = getSeriesForMetric(
+        symbol,
+        ctx,
+        'Metric symbol context missing for exponential-moving-average-price'
+      );
       if (!series) {
-        noteMissingPriceData(ctx, symbol);
         return null;
       }
-      return computeEMA(series.closes, window);
+      const closes = getSeriesValuesForContext(series, ctx);
+      return computeEMA(closes, window);
     }
     case 'current-price': {
       const symbolNode = node[1];
@@ -343,15 +611,11 @@ const evaluateExpression = (node, ctx) => {
       if (typeof symbolNode === 'string') {
         symbol = symbolNode.toUpperCase();
       }
-      if (!symbol) {
-        throw new Error('Metric symbol context missing for current-price');
-      }
-      const series = ctx.priceData.get(symbol);
+      const series = getSeriesForMetric(symbol, ctx, 'Metric symbol context missing for current-price');
       if (!series) {
-        noteMissingPriceData(ctx, symbol);
         return null;
       }
-      return series.closes[series.closes.length - 1];
+      return getLatestValueForContext(series, ctx);
     }
     case 'moving-average-return': {
       const symbolNode = node[1];
@@ -362,16 +626,19 @@ const evaluateExpression = (node, ctx) => {
       } else if (isObj(symbolNode)) {
         options = symbolNode;
       }
-      if (!symbol) {
-        throw new Error('Metric symbol context missing for moving-average-return');
-      }
-      const window = Number(getKeyword(options, ':window') || getKeyword(options, 'window') || 20);
-      const series = ctx.priceData.get(symbol);
+      const window =
+        Number(getKeyword(options, ':window') || getKeyword(options, 'window')) ||
+        METRIC_DEFAULT_WINDOWS['moving-average-return'];
+      const series = getSeriesForMetric(
+        symbol,
+        ctx,
+        'Metric symbol context missing for moving-average-return'
+      );
       if (!series) {
-        noteMissingPriceData(ctx, symbol);
         return null;
       }
-      return computeMovingAverageReturn(series.closes, window);
+      const closes = getSeriesValuesForContext(series, ctx);
+      return computeMovingAverageReturn(closes, window);
     }
     case 'cumulative-return': {
       const symbolNode = node[1];
@@ -382,16 +649,19 @@ const evaluateExpression = (node, ctx) => {
       } else if (isObj(symbolNode)) {
         options = symbolNode;
       }
-      if (!symbol) {
-        throw new Error('Metric symbol context missing for cumulative-return');
-      }
-      const window = Number(getKeyword(options, ':window') || getKeyword(options, 'window') || 20);
-      const series = ctx.priceData.get(symbol);
+      const window =
+        Number(getKeyword(options, ':window') || getKeyword(options, 'window')) ||
+        METRIC_DEFAULT_WINDOWS['cumulative-return'];
+      const series = getSeriesForMetric(
+        symbol,
+        ctx,
+        'Metric symbol context missing for cumulative-return'
+      );
       if (!series) {
-        noteMissingPriceData(ctx, symbol);
         return null;
       }
-      return computeCumulativeReturn(series.closes, window);
+      const closes = getSeriesValuesForContext(series, ctx);
+      return computeCumulativeReturn(closes, window);
     }
     case 'stdev-return':
     case 'stdev-return%': {
@@ -403,45 +673,52 @@ const evaluateExpression = (node, ctx) => {
       } else if (isObj(symbolNode)) {
         options = symbolNode;
       }
-      if (!symbol) {
-        throw new Error('Metric symbol context missing for stdev-return');
-      }
-      const window = Number(getKeyword(options, ':window') || getKeyword(options, 'window') || 20);
-      const series = ctx.priceData.get(symbol);
+      const window =
+        Number(getKeyword(options, ':window') || getKeyword(options, 'window')) ||
+        METRIC_DEFAULT_WINDOWS['stdev-return'];
+      const series = getSeriesForMetric(
+        symbol,
+        ctx,
+        'Metric symbol context missing for stdev-return'
+      );
       if (!series) {
-        noteMissingPriceData(ctx, symbol);
         return null;
       }
-      return computeStdDevReturn(series.closes, window);
+      const closes = getSeriesValuesForContext(series, ctx);
+      return computeStdDevReturn(closes, window);
     }
     case 'max-drawdown': {
       const optionsNode = node[1];
       let symbol = ctx.metricSymbol || null;
-      let options = optionsNode && typeof optionsNode === 'object'
-        ? optionsNode
-        : {};
+      let options =
+        (optionsNode && typeof optionsNode === 'object' && !Array.isArray(optionsNode)
+          ? optionsNode
+          : {}) || {};
       if (typeof node[1] === 'string') {
         symbol = node[1].toUpperCase();
         options = node[2] && typeof node[2] === 'object' ? node[2] : {};
       }
-      if (!symbol) {
-        throw new Error('Metric symbol context missing for max-drawdown');
-      }
-      const window = Number(getKeyword(options, ':window') || getKeyword(options, 'window') || 30);
-      const series = ctx.priceData.get(symbol);
+      const window =
+        Number(getKeyword(options, ':window') || getKeyword(options, 'window')) ||
+        METRIC_DEFAULT_WINDOWS['max-drawdown'];
+      const series = getSeriesForMetric(
+        symbol,
+        ctx,
+        'Metric symbol context missing for max-drawdown'
+      );
       if (!series) {
-        noteMissingPriceData(ctx, symbol);
         return null;
       }
-      return computeMaxDrawdown(series.closes, window);
+      const closes = getSeriesValuesForContext(series, ctx);
+      return computeMaxDrawdown(closes, window);
     }
     default:
       throw new Error(`Unsupported expression type ${type}`);
   }
 };
 
-const evaluateMetricForSymbol = (metricNode, symbol, ctx) => {
-  if (!metricNode) {
+const evaluateMetricForCandidate = (metricNode, candidate, ctx) => {
+  if (!metricNode || !candidate) {
     return 0;
   }
   if (typeof metricNode === 'number') {
@@ -450,7 +727,18 @@ const evaluateMetricForSymbol = (metricNode, symbol, ctx) => {
   if (!isArray(metricNode)) {
     return Number(metricNode) || 0;
   }
-  const metricCtx = { ...ctx, metricSymbol: symbol };
+  const metricCtx = { ...ctx };
+  if (candidate.type === 'node') {
+    const series = ctx?.nodeSeries?.get(candidate.nodeId);
+    if (!series) {
+      return null;
+    }
+    metricCtx.metricSeries = series;
+    metricCtx.metricSymbol = candidate.label || `node-${candidate.nodeId}`;
+  } else if (candidate.type === 'asset') {
+    metricCtx.metricSymbol = candidate.symbol;
+    metricCtx.metricSeries = null;
+  }
   const value = evaluateExpression(metricNode, metricCtx);
   return Number.isFinite(value) ? value : null;
 };
@@ -473,43 +761,88 @@ const applySelector = (selectorNode, scoredAssets) => {
   return scoredAssets;
 };
 
+const cloneMissingSymbols = (map) => {
+  if (!map) {
+    return new Map();
+  }
+  return new Map(map);
+};
+
+const previewNodePositions = (node, ctx) => {
+  if (!node) {
+    return [];
+  }
+  const previewStack = (ctx && ctx.previewStack) || new Set();
+  if (previewStack.has(node)) {
+    return [];
+  }
+  const nextStack = new Set(previewStack);
+  nextStack.add(node);
+  const previewCtx = {
+    ...ctx,
+    reasoning: null,
+    previewStack: nextStack,
+    missingSymbols: cloneMissingSymbols(ctx?.missingSymbols),
+  };
+  try {
+    return evaluateNode(node, 1, previewCtx);
+  } catch (error) {
+    return [];
+  } finally {
+    nextStack.delete(node);
+  }
+};
+
+const selectRepresentativeSymbol = (positions = []) => {
+  if (!positions.length) {
+    return null;
+  }
+  const sorted = [...positions].sort((a, b) => (b.weight || 0) - (a.weight || 0));
+  return sorted[0]?.symbol || null;
+};
+
 function evaluateFilterNode(node, parentWeight, ctx) {
   const metricNode = node[1];
   const selectorNode = node[2];
   const assets = node[3] || [];
   const metricSummary = describeMetricNode(metricNode);
   const selectionSummary = describeSelectionNode(selectorNode);
-  const assetNodes = assets.filter(isAssetNode);
-  const nonAssetNodes = assets.filter((assetNode) => !isAssetNode(assetNode));
-
-  // Fallback: some Composer scripts incorrectly pass higher-level groups into a filter.
-  // When that happens there are no tradable tickers to score, so instead of failing we
-  // short-circuit the filter and evaluate those children directly with equal weights.
-  if (!assetNodes.length && nonAssetNodes.length) {
-    if (ctx?.reasoning) {
-      ctx.reasoning.push(
-        `Filter evaluation: ${metricSummary}. Provided children are not direct assets, so applying a fallback equal-weight allocation across ${nonAssetNodes.length} nested nodes instead of scoring.`
-      );
-    }
-    const fallbackWeight = parentWeight / nonAssetNodes.length;
-    const fallbackPositions = nonAssetNodes.flatMap((child) =>
-      evaluateNode(child, fallbackWeight, ctx)
-    );
-    return mergePositions(fallbackPositions);
-  }
-
-  const evaluationAssets = assetNodes.length ? assetNodes : assets;
-  const scored = evaluationAssets
-    .map((assetNode) => {
-      const symbol = extractSymbolFromAssetNode(assetNode);
-      if (!symbol) {
+  const describeCandidate = (entry) => entry?.symbol || entry?.label || (entry?.nodeId ? `node-${entry.nodeId}` : 'candidate');
+  const candidates = assets
+    .map((child) => {
+      if (isAssetNode(child)) {
+        const symbol = extractSymbolFromAssetNode(child);
+        return symbol ? { type: 'asset', symbol, node: child } : null;
+      }
+      const childType = getNodeType(child);
+      if (ctx.enableGroupMetrics && childType === 'group') {
+        const nodeId = ctx.nodeIdMap?.get(child);
+        if (!nodeId) {
+          return null;
+        }
+        const nodeSeries = ctx.nodeSeries?.get(nodeId);
+        if (!nodeSeries) {
+          return null;
+        }
+        const label = typeof child[1] === 'string' ? String(child[1]) : `group-${nodeId}`;
+        return { type: 'node', node: child, nodeId, label };
+      }
+      const previewPositions = previewNodePositions(child, ctx);
+      const representative = selectRepresentativeSymbol(previewPositions);
+      if (!representative) {
         return null;
       }
-      const value = evaluateMetricForSymbol(metricNode, symbol, ctx);
+      return { type: 'asset', symbol: representative, node: child };
+    })
+    .filter(Boolean);
+
+  const scored = candidates
+    .map((entry) => {
+      const value = evaluateMetricForCandidate(metricNode, entry, ctx);
       if (!Number.isFinite(value)) {
         return null;
       }
-      return { symbol, value };
+      return { ...entry, value };
     })
     .filter(Boolean);
   const selected = applySelector(selectorNode, scored);
@@ -519,8 +852,8 @@ function evaluateFilterNode(node, parentWeight, ctx) {
         `Filter evaluation: ${metricSummary}. No instruments produced a valid score; aborting branch.`
       );
     }
-    const missingSymbols = evaluationAssets
-      .map((assetNode) => extractSymbolFromAssetNode(assetNode))
+    const missingSymbols = candidates
+      .map((entry) => entry.symbol)
       .filter(Boolean)
       .map((symbol) => {
         const reason = ctx?.missingSymbols?.get(symbol);
@@ -542,20 +875,26 @@ function evaluateFilterNode(node, parentWeight, ctx) {
       }
       return value.toFixed(4);
     };
-    const scoreboard = scored.map(({ symbol, value }) => `${symbol}: ${formatValue(value)}`);
+    const scoreboard = scored.map((entry) => `${describeCandidate(entry)}: ${formatValue(entry.value)}`);
     const preview = scoreboard.slice(0, 10).join(', ');
     const extra = scoreboard.length > 10 ? `, … (+${scoreboard.length - 10} more)` : '';
-    const winners = selected.map(({ symbol }) => symbol).join(', ') || 'none';
+    const winners = selected.map((entry) => describeCandidate(entry)).join(', ') || 'none';
     ctx.reasoning.push(
       `Filter evaluation: ${metricSummary} -> ${preview}${extra}. Applied ${selectionSummary}, selecting ${winners}.`
     );
   }
   const weightEach = parentWeight / selected.length;
-  return selected.map((entry) => ({
-    symbol: entry.symbol,
-    weight: weightEach,
-    rationale: `Selected by filter (${Number.isFinite(entry.value) ? entry.value.toFixed(4) : 'n/a'})`,
-  }));
+  const positions = selected.flatMap((entry) => {
+    if (entry.type === 'asset') {
+      return [{
+        symbol: entry.symbol,
+        weight: weightEach,
+        rationale: `Selected by filter (${Number.isFinite(entry.value) ? entry.value.toFixed(4) : 'n/a'})`,
+      }];
+    }
+    return evaluateNode(entry.node, weightEach, ctx);
+  });
+  return mergePositions(positions);
 }
 
 function evaluateNode(node, parentWeight, ctx) {
@@ -720,18 +1059,26 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
   if (!ast) {
     throw new Error('Failed to parse defsymphony script.');
   }
+  const astStats = collectAstStats(ast);
   const tickers = Array.from(collectTickersFromAst(ast)).sort();
   if (!tickers.length) {
     throw new Error('No tickers found in defsymphony script.');
   }
   const blueprint = buildEvaluationBlueprint(ast) || [];
+  const nodeIdMap = assignNodeIds(ast);
 
   const { map: priceData, missing: missingFromCache } = await loadPriceData(tickers);
+  const usableHistory = alignPriceHistory(priceData, LOOKBACK_DAYS);
+  if (!usableHistory) {
+    throw new Error('Unable to align price history for the requested lookback window.');
+  }
   const context = {
     priceData,
     missingSymbols: new Map(),
+    nodeIdMap,
+    enableGroupMetrics: false,
     reasoning: [
-      `Step 1: Loaded ${priceData.size} of ${tickers.length} tickers from local Alpaca cache (lookback ${LOOKBACK_DAYS} days).`,
+      `Step 1: Loaded ${priceData.size} of ${tickers.length} tickers from local Alpaca cache (lookback ${LOOKBACK_DAYS} days, usable ${usableHistory}).`,
     ],
   };
   if (missingFromCache.length) {
@@ -743,6 +1090,16 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
     missingFromCache.forEach((entry) => {
       context.missingSymbols.set(entry.symbol, entry.reason);
     });
+  }
+
+  if (astStats.hasGroup) {
+    const series = buildGroupSeriesCache(ast, context, astStats, usableHistory);
+    if (!series) {
+      throw new Error('Unable to simulate group equity series for the provided strategy.');
+    }
+    context.reasoning.push(
+      `Step 1b: Simulated ${series.size} group nodes across ${usableHistory} synchronized trading days to evaluate group-level filters.`
+    );
   }
 
   let rawPositions = evaluateNode(ast, 1, context);
@@ -848,6 +1205,9 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
         tickers,
         blueprint,
         lookbackDays: LOOKBACK_DAYS,
+        historyLength: usableHistory,
+        groupSimulation: Boolean(context.enableGroupMetrics),
+        groupSeriesMeta: context.groupSeriesMeta || null,
         missingData: context.missingSymbols
           ? Array.from(context.missingSymbols.entries()).map(([symbol, reason]) => ({ symbol, reason }))
           : [],
