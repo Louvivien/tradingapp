@@ -218,14 +218,18 @@ const simulateNodeSeries = (node, ctx, options) => {
   return { closes: values, offset: startIndex };
 };
 
-const buildGroupSeriesCache = (ast, ctx, stats, priceLength) => {
-  const maxWindow = Math.max(stats.maxWindow || 1, 1);
-  if (!Number.isFinite(priceLength) || priceLength <= maxWindow) {
-    throw new Error(
-      `Not enough synchronized history (${priceLength} bars) to satisfy maximum window ${maxWindow}.`
-    );
+const computeGroupSeriesMeta = (stats, priceLength) => {
+  const usableHistory = Number.isFinite(priceLength) ? priceLength : 0;
+  if (usableHistory < 2) {
+    throw new Error('Not enough synchronized history to evaluate group metrics.');
   }
-  const startIndex = maxWindow;
+  const requestedWindow = Math.max(stats.maxWindow || 1, 1);
+  const startIndex = Math.min(requestedWindow, usableHistory - 1);
+  return { startIndex: Math.max(startIndex, 1), priceLength: usableHistory };
+};
+
+const buildGroupSeriesCache = (ast, ctx, stats, priceLength) => {
+  const meta = computeGroupSeriesMeta(stats, priceLength);
   const nodeSeries = ctx.nodeSeries || new Map();
   const groupNodes = gatherGroupNodes(ast);
   groupNodes.forEach((groupNode) => {
@@ -233,16 +237,36 @@ const buildGroupSeriesCache = (ast, ctx, stats, priceLength) => {
     if (!nodeId) {
       return;
     }
-    const record = simulateNodeSeries(groupNode, { ...ctx, nodeSeries }, {
-      startIndex,
-      priceLength,
-    });
+    const record = simulateNodeSeries(groupNode, { ...ctx, nodeSeries }, meta);
     nodeSeries.set(nodeId, record);
   });
   ctx.nodeSeries = nodeSeries;
-  ctx.groupSeriesMeta = { startIndex, priceLength };
+  ctx.groupSeriesMeta = meta;
   ctx.enableGroupMetrics = true;
   return nodeSeries;
+};
+
+const ensureGroupSeriesForNode = (node, ctx) => {
+  if (!node || !ctx?.groupSeriesMeta || !ctx?.nodeIdMap) {
+    return null;
+  }
+  const nodeId = ctx.nodeIdMap.get(node);
+  if (!nodeId) {
+    return null;
+  }
+  if (!ctx.nodeSeries) {
+    ctx.nodeSeries = new Map();
+  }
+  if (ctx.nodeSeries.has(nodeId)) {
+    return ctx.nodeSeries.get(nodeId);
+  }
+  const record = simulateNodeSeries(node, { ...ctx, nodeSeries: ctx.nodeSeries }, ctx.groupSeriesMeta);
+  ctx.nodeSeries.set(nodeId, record);
+  if (ctx?.reasoning) {
+    const label = typeof node[1] === 'string' ? node[1] : `group-${nodeId}`;
+    ctx.reasoning.push(`Simulated NAV series on-demand for group "${label}".`);
+  }
+  return record;
 };
 
 const toISODate = (value) => {
@@ -815,12 +839,13 @@ function evaluateFilterNode(node, parentWeight, ctx) {
         return symbol ? { type: 'asset', symbol, node: child } : null;
       }
       const childType = getNodeType(child);
-      if (ctx.enableGroupMetrics && childType === 'group') {
+      if (childType === 'group' && (ctx.enableGroupMetrics || ctx.groupSeriesMeta)) {
         const nodeId = ctx.nodeIdMap?.get(child);
         if (!nodeId) {
           return null;
         }
-        const nodeSeries = ctx.nodeSeries?.get(nodeId);
+        const nodeSeries =
+          ctx.nodeSeries?.get(nodeId) || ensureGroupSeriesForNode(child, ctx);
         if (!nodeSeries) {
           return null;
         }
