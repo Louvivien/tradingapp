@@ -56,7 +56,28 @@ const getLatestValueForContext = (series, ctx) => {
   return series.closes[idx];
 };
 
-const collectAstStats = (node, stats = { hasGroup: false, maxWindow: 0 }) => {
+const inferMetricWindow = (expr) => {
+  if (!Array.isArray(expr)) {
+    return null;
+  }
+  const head = expr[0];
+  if (typeof head !== 'string') {
+    return null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(METRIC_DEFAULT_WINDOWS, head)) {
+    return null;
+  }
+  const options = (expr[2] && typeof expr[2] === 'object' ? expr[2] : expr[1]) || {};
+  const configured = Number(getKeyword(options, ':window') || getKeyword(options, 'window'));
+  const defaultWindow = METRIC_DEFAULT_WINDOWS[head] || 0;
+  const window = Number.isFinite(configured) ? configured : defaultWindow;
+  return Number.isFinite(window) ? window : null;
+};
+
+const collectAstStats = (
+  node,
+  stats = { hasGroup: false, hasGroupFilter: false, groupFilterMaxWindow: 0, maxWindow: 0 }
+) => {
   if (!node) {
     return stats;
   }
@@ -65,6 +86,18 @@ const collectAstStats = (node, stats = { hasGroup: false, maxWindow: 0 }) => {
     if (typeof head === 'string') {
       if (head === 'group') {
         stats.hasGroup = true;
+      }
+      if (head === 'filter') {
+        const assets = node[3] || [];
+        const hasGroupCandidate =
+          Array.isArray(assets) && assets.some((child) => Array.isArray(child) && child[0] === 'group');
+        if (hasGroupCandidate) {
+          stats.hasGroupFilter = true;
+          const metricWindow = inferMetricWindow(node[1]);
+          if (Number.isFinite(metricWindow) && metricWindow > stats.groupFilterMaxWindow) {
+            stats.groupFilterMaxWindow = metricWindow;
+          }
+        }
       }
       if (
         head === 'rsi' ||
@@ -215,7 +248,12 @@ const simulateNodeSeries = (node, ctx, options) => {
   for (let idx = startIndex; idx < priceLength; idx += 1) {
     simCtx.priceIndex = idx;
     ctx.priceIndex = idx;
-    const rawPositions = evaluateNode(node, 1, simCtx);
+    let rawPositions = [];
+    try {
+      rawPositions = evaluateNode(node, 1, simCtx);
+    } catch (error) {
+      rawPositions = [];
+    }
     const normalized = safeNormalizePositions(rawPositions);
     const periodReturn = computePortfolioReturn(normalized, ctx.priceData, idx);
     nav *= 1 + periodReturn;
@@ -230,9 +268,11 @@ const computeGroupSeriesMeta = (stats, priceLength) => {
   if (usableHistory < 2) {
     throw new Error('Not enough synchronized history to evaluate group metrics.');
   }
-  const requestedWindow = Math.max(stats.maxWindow || 1, 1);
-  const startIndex = Math.min(requestedWindow, usableHistory - 1);
-  return { startIndex: Math.max(startIndex, 1), priceLength: usableHistory };
+  const requiredWindow = Math.max(stats?.groupFilterMaxWindow || 1, 1);
+  const padding = 5;
+  const requiredNavPoints = Math.max(requiredWindow + 1 + padding, 2);
+  const startIndex = Math.max(1, usableHistory - requiredNavPoints);
+  return { startIndex: Math.min(startIndex, usableHistory - 1), priceLength: usableHistory };
 };
 
 const buildGroupSeriesCache = (ast, ctx, stats, priceLength) => {
@@ -1129,7 +1169,7 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
     });
   }
 
-  if (astStats.hasGroup) {
+  if (astStats.hasGroupFilter) {
     const meta = buildGroupSeriesCache(ast, context, astStats, usableHistory);
     if (!meta) {
       throw new Error('Unable to simulate group equity series for the provided strategy.');
