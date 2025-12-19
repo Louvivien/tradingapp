@@ -75,6 +75,50 @@ describe('evaluateDefsymphonyStrategy', () => {
     expect(result.reasoning.some((line) => line.includes('Step 1b'))).toBe(true);
   });
 
+  it('detects groups nested inside single-element vectors and evaluates group filters correctly', async () => {
+    installPriceMapMock({
+      AAA: buildPriceResponse(100, 1),
+      AAB: buildPriceResponse(90, 1),
+      BBB: buildPriceResponse(50, -0.2),
+      BBC: buildPriceResponse(45, -0.2),
+    });
+
+    const strategy = `
+      (defsymphony "Single Wrapper Group" {}
+        (weight-equal
+          [
+            (group "Outer"
+              [
+                (filter
+                  (cumulative-return {:window 2})
+                  (select-top 1)
+                  [
+                    (group "Growth"
+                      [
+                        (weight-equal
+                          [
+                            (asset "AAA")
+                            (asset "AAB")
+                          ])
+                      ])
+                    (group "Value"
+                      [
+                        (weight-equal
+                          [
+                            (asset "BBB")
+                            (asset "BBC")
+                          ])
+                      ])
+                  ])
+              ])
+          ]))
+    `;
+
+    const result = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
+    expect(result.positions.map((pos) => pos.symbol).sort()).toEqual(['AAA', 'AAB']);
+    expect(result.reasoning.some((line) => line.includes('Step 1b'))).toBe(true);
+  });
+
   it('evaluates ticker-only strategies without requiring group simulations', async () => {
     installPriceMapMock({
       SPY: buildPriceResponse(400, 0.5),

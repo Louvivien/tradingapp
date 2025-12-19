@@ -62,28 +62,32 @@ const collectAstStats = (node, stats = { hasGroup: false, maxWindow: 0 }) => {
   }
   if (Array.isArray(node)) {
     const head = node[0];
-    if (head === 'group') {
-      stats.hasGroup = true;
-    }
-    if (
-      head === 'rsi' ||
-      head === 'moving-average-price' ||
-      head === 'exponential-moving-average-price' ||
-      head === 'moving-average-return' ||
-      head === 'cumulative-return' ||
-      head === 'stdev-return' ||
-      head === 'stdev-return%' ||
-      head === 'max-drawdown'
-    ) {
-      const options = (node[2] && typeof node[2] === 'object' ? node[2] : node[1]) || {};
-      const configured = Number(getKeyword(options, ':window') || getKeyword(options, 'window'));
-      const defaultWindow = METRIC_DEFAULT_WINDOWS[head] || 0;
-      const window = Number.isFinite(configured) ? configured : defaultWindow;
-      if (Number.isFinite(window) && window > stats.maxWindow) {
-        stats.maxWindow = window;
+    if (typeof head === 'string') {
+      if (head === 'group') {
+        stats.hasGroup = true;
       }
+      if (
+        head === 'rsi' ||
+        head === 'moving-average-price' ||
+        head === 'exponential-moving-average-price' ||
+        head === 'moving-average-return' ||
+        head === 'cumulative-return' ||
+        head === 'stdev-return' ||
+        head === 'stdev-return%' ||
+        head === 'max-drawdown'
+      ) {
+        const options = (node[2] && typeof node[2] === 'object' ? node[2] : node[1]) || {};
+        const configured = Number(getKeyword(options, ':window') || getKeyword(options, 'window'));
+        const defaultWindow = METRIC_DEFAULT_WINDOWS[head] || 0;
+        const window = Number.isFinite(configured) ? configured : defaultWindow;
+        if (Number.isFinite(window) && window > stats.maxWindow) {
+          stats.maxWindow = window;
+        }
+      }
+      node.slice(1).forEach((child) => collectAstStats(child, stats));
+      return stats;
     }
-    node.slice(1).forEach((child) => collectAstStats(child, stats));
+    node.forEach((child) => collectAstStats(child, stats));
     return stats;
   }
   if (typeof node === 'object') {
@@ -237,16 +241,7 @@ const buildGroupSeriesCache = (ast, ctx, stats, priceLength) => {
   ctx.nodeSeries = nodeSeries;
   ctx.groupSeriesMeta = meta;
   ctx.enableGroupMetrics = true;
-  const groupNodes = gatherGroupNodes(ast);
-  groupNodes.forEach((groupNode) => {
-    const nodeId = ctx.nodeIdMap?.get(groupNode);
-    if (!nodeId) {
-      return;
-    }
-    const record = simulateNodeSeries(groupNode, { ...ctx, nodeSeries }, meta);
-    nodeSeries.set(nodeId, record);
-  });
-  return nodeSeries;
+  return meta;
 };
 
 const ensureGroupSeriesForNode = (node, ctx) => {
@@ -265,10 +260,6 @@ const ensureGroupSeriesForNode = (node, ctx) => {
   }
   const record = simulateNodeSeries(node, { ...ctx, nodeSeries: ctx.nodeSeries }, ctx.groupSeriesMeta);
   ctx.nodeSeries.set(nodeId, record);
-  if (ctx?.reasoning) {
-    const label = typeof node[1] === 'string' ? node[1] : `group-${nodeId}`;
-    ctx.reasoning.push(`Simulated NAV series on-demand for group "${label}".`);
-  }
   return record;
 };
 
@@ -1139,12 +1130,12 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
   }
 
   if (astStats.hasGroup) {
-    const series = buildGroupSeriesCache(ast, context, astStats, usableHistory);
-    if (!series) {
+    const meta = buildGroupSeriesCache(ast, context, astStats, usableHistory);
+    if (!meta) {
       throw new Error('Unable to simulate group equity series for the provided strategy.');
     }
     context.reasoning.push(
-      `Step 1b: Simulated ${series.size} group nodes across ${usableHistory} synchronized trading days to evaluate group-level filters.`
+      `Step 1b: Enabled group-metric evaluation (group NAV series simulated on-demand for filter candidates).`
     );
   }
 
