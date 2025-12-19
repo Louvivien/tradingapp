@@ -231,6 +231,9 @@ const computeGroupSeriesMeta = (stats, priceLength) => {
 const buildGroupSeriesCache = (ast, ctx, stats, priceLength) => {
   const meta = computeGroupSeriesMeta(stats, priceLength);
   const nodeSeries = ctx.nodeSeries || new Map();
+  ctx.nodeSeries = nodeSeries;
+  ctx.groupSeriesMeta = meta;
+  ctx.enableGroupMetrics = true;
   const groupNodes = gatherGroupNodes(ast);
   groupNodes.forEach((groupNode) => {
     const nodeId = ctx.nodeIdMap?.get(groupNode);
@@ -240,9 +243,6 @@ const buildGroupSeriesCache = (ast, ctx, stats, priceLength) => {
     const record = simulateNodeSeries(groupNode, { ...ctx, nodeSeries }, meta);
     nodeSeries.set(nodeId, record);
   });
-  ctx.nodeSeries = nodeSeries;
-  ctx.groupSeriesMeta = meta;
-  ctx.enableGroupMetrics = true;
   return nodeSeries;
 };
 
