@@ -128,6 +128,10 @@ You can implement a collaborative strategy that you found online in Strategies, 
 
 You can switch from paper trading to live trading in Config/Alpaca.js changing the apiurl
 
+## How collaborative strategy evaluation works
+
+See `tradingapp/docs/collaborative-strategies.md`.
+
 
 
 ## To do
@@ -164,4 +168,3 @@ Discord: [Discord](https://discord.gg/Neu7KBrhV3)
 [nodejs-shield]: https://img.shields.io/badge/node.js-6DA55F?style=for-the-badge&logo=node.js&logoColor=white
 [nodejs-url]: https://nodejs.org/
 [react-shield]: https://img.shields.io/badge/React
-
