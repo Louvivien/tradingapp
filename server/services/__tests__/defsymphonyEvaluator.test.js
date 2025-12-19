@@ -96,4 +96,38 @@ describe('evaluateDefsymphonyStrategy', () => {
     expect(positionTickers).toEqual(['QQQ', 'SPY']);
     expect(result.reasoning.some((line) => line.includes('Step 1b'))).toBe(false);
   });
+
+  it('supports max-drawdown filters over nested groups', async () => {
+    installPriceMapMock({
+      AAA: buildPriceResponse(100, 1, 80),
+      BBB: buildPriceResponse(100, -1, 80),
+    });
+
+    const strategy = `
+      (defsymphony "Group Drawdown" {}
+        (filter
+          (max-drawdown {:window 4})
+          (select-bottom 1)
+          [
+            (group "LowDD"
+              [
+                (group "Inner"
+                  [
+                    (asset "AAA")
+                  ])
+              ])
+            (group "HighDD"
+              [
+                (group "Inner"
+                  [
+                    (asset "BBB")
+                  ])
+              ])
+          ]))
+    `;
+
+    const result = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
+    expect(result.positions.map((pos) => pos.symbol)).toEqual(['AAA']);
+    expect(result.reasoning.some((line) => line.includes('Step 1b'))).toBe(true);
+  });
 });

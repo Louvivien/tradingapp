@@ -8,7 +8,10 @@ const {
 } = require('../utils/composerDslParser');
 const { getCachedPrices } = require('./priceCacheService');
 
-const LOOKBACK_DAYS = 250;
+const DEFAULT_LOOKBACK_BARS = 250;
+const MAX_CALENDAR_LOOKBACK_DAYS = 750;
+const TRADING_DAYS_PER_YEAR = 252;
+const CALENDAR_DAYS_PER_YEAR = 365;
 
 const METRIC_DEFAULT_WINDOWS = {
   rsi: 14,
@@ -89,7 +92,7 @@ const collectAstStats = (node, stats = { hasGroup: false, maxWindow: 0 }) => {
   return stats;
 };
 
-const alignPriceHistory = (priceData, lookbackDays = LOOKBACK_DAYS) => {
+const alignPriceHistory = (priceData, lookbackBars = DEFAULT_LOOKBACK_BARS) => {
   let minLength = Infinity;
   priceData.forEach((series) => {
     if (Array.isArray(series?.closes) && series.closes.length) {
@@ -99,7 +102,7 @@ const alignPriceHistory = (priceData, lookbackDays = LOOKBACK_DAYS) => {
   if (!Number.isFinite(minLength) || minLength === 0) {
     return 0;
   }
-  const target = Math.min(minLength, lookbackDays);
+  const target = Math.min(minLength, lookbackBars);
   priceData.forEach((series) => {
     if (!Array.isArray(series?.closes)) {
       return;
@@ -753,7 +756,10 @@ const evaluateMetricForCandidate = (metricNode, candidate, ctx) => {
   }
   const metricCtx = { ...ctx };
   if (candidate.type === 'node') {
-    const series = ctx?.nodeSeries?.get(candidate.nodeId);
+    let series = ctx?.nodeSeries?.get(candidate.nodeId);
+    if (!series) {
+      series = ensureGroupSeriesForNode(candidate.node, ctx);
+    }
     if (!series) {
       return null;
     }
@@ -884,10 +890,12 @@ function evaluateFilterNode(node, parentWeight, ctx) {
         const reason = ctx?.missingSymbols?.get(symbol);
         return reason ? `${symbol} (${reason})` : symbol;
       });
+    const missingCandidates =
+      missingSymbols.length > 0
+        ? missingSymbols.join(', ')
+        : candidates.map((entry) => describeCandidate(entry)).join(', ') || 'none';
     throw new Error(
-      `Unable to evaluate ${metricSummary} because price/indicator data was missing for: ${missingSymbols.join(
-        ', '
-      )}.`
+      `Unable to evaluate ${metricSummary} because price/indicator data was missing for: ${missingCandidates}.`
     );
   }
   if (ctx?.reasoning) {
@@ -1045,8 +1053,12 @@ const normalizePositions = (positions = []) => {
   }));
 };
 
-const loadPriceData = async (symbols = []) => {
-  const start = new Date(now().getTime() - LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+const loadPriceData = async (symbols = [], calendarLookbackDays = DEFAULT_LOOKBACK_BARS) => {
+  const boundedLookback = Math.min(
+    Math.max(1, Number(calendarLookbackDays) || DEFAULT_LOOKBACK_BARS),
+    MAX_CALENDAR_LOOKBACK_DAYS
+  );
+  const start = new Date(now().getTime() - boundedLookback * 24 * 60 * 60 * 1000);
   const end = now();
   const map = new Map();
   const missing = [];
@@ -1092,8 +1104,17 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
   const blueprint = buildEvaluationBlueprint(ast) || [];
   const nodeIdMap = assignNodeIds(ast);
 
-  const { map: priceData, missing: missingFromCache } = await loadPriceData(tickers);
-  const usableHistory = alignPriceHistory(priceData, LOOKBACK_DAYS);
+  const requiredBars = Math.max(
+    DEFAULT_LOOKBACK_BARS,
+    Math.max(0, Number(astStats.maxWindow) || 0) + 5
+  );
+  const calendarLookbackDays = Math.min(
+    MAX_CALENDAR_LOOKBACK_DAYS,
+    Math.ceil((requiredBars * CALENDAR_DAYS_PER_YEAR) / TRADING_DAYS_PER_YEAR) + 7
+  );
+
+  const { map: priceData, missing: missingFromCache } = await loadPriceData(tickers, calendarLookbackDays);
+  const usableHistory = alignPriceHistory(priceData, requiredBars);
   if (!usableHistory) {
     throw new Error('Unable to align price history for the requested lookback window.');
   }
@@ -1103,7 +1124,7 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
     nodeIdMap,
     enableGroupMetrics: false,
     reasoning: [
-      `Step 1: Loaded ${priceData.size} of ${tickers.length} tickers from local Alpaca cache (lookback ${LOOKBACK_DAYS} days, usable ${usableHistory}).`,
+      `Step 1: Loaded ${priceData.size} of ${tickers.length} tickers from local Alpaca cache (calendar lookback ${calendarLookbackDays} days, usable ${usableHistory} bars).`,
     ],
   };
   if (missingFromCache.length) {
@@ -1229,7 +1250,7 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
         used: true,
         tickers,
         blueprint,
-        lookbackDays: LOOKBACK_DAYS,
+        lookbackDays: calendarLookbackDays,
         historyLength: usableHistory,
         groupSimulation: Boolean(context.enableGroupMetrics),
         groupSeriesMeta: context.groupSeriesMeta || null,
