@@ -8,12 +8,12 @@ const CACHE_TTL_HOURS = 24;
 const normalizeAdjustment = (value) => {
   const normalized = String(value ?? '').trim().toLowerCase();
   if (!normalized) {
-    return 'raw';
+    return 'split';
   }
   if (['raw', 'split', 'dividend', 'all'].includes(normalized)) {
     return normalized;
   }
-  return 'raw';
+  return 'split';
 };
 
 const toISO = (value) => {
@@ -116,7 +116,7 @@ const parseYahooResponse = (data, adjustment) => {
   const quote = result.indicators?.quote?.[0] || {};
   const adjcloseSeries = result.indicators?.adjclose?.[0]?.adjclose || [];
   const timestamps = result.timestamp || [];
-  const useAdjClose = ['dividend', 'all'].includes(normalizeAdjustment(adjustment));
+  const useAdjClose = normalizeAdjustment(adjustment) !== 'raw';
   const bars = timestamps
     .map((ts, idx) => {
       const open = quote.open?.[idx];
