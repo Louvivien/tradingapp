@@ -20,6 +20,21 @@ const buildPriceResponse = (start, step, length = 60) => ({
   }),
 });
 
+const buildPriceResponseFromSeries = (closes) => ({
+  bars: closes.map((close, index) => {
+    const value = Number(Number(close).toFixed(4));
+    const timestamp = new Date(2020, 0, index + 1).toISOString();
+    return {
+      t: timestamp,
+      o: value,
+      h: value,
+      l: value,
+      c: value,
+      v: 1000,
+    };
+  }),
+});
+
 const installPriceMapMock = (priceMap) => {
   getCachedPrices.mockImplementation(async ({ symbol }) => {
     const entry = priceMap[symbol.toUpperCase()];
@@ -173,5 +188,45 @@ describe('evaluateDefsymphonyStrategy', () => {
     const result = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
     expect(result.positions.map((pos) => pos.symbol)).toEqual(['AAA']);
     expect(result.reasoning.some((line) => line.includes('Step 1b'))).toBe(true);
+  });
+
+  it('defaults to Wilder RSI (Composer-style) but can toggle to simple-average RSI', async () => {
+    const originalRsiMethod = process.env.RSI_METHOD;
+
+    const closes = [100];
+    for (let i = 0; i < 20; i += 1) {
+      closes.push(closes[closes.length - 1] + 1);
+    }
+    for (let i = 0; i < 20; i += 1) {
+      closes.push(closes[closes.length - 1] + (i % 2 === 0 ? -1 : 1));
+    }
+
+    installPriceMapMock({
+      AAA: buildPriceResponseFromSeries(closes),
+      WIN: buildPriceResponse(100, 0),
+      LOSE: buildPriceResponse(100, 0),
+    });
+
+    const strategy = `
+      (defsymphony "RSI Branch" {}
+        (if
+          (> (rsi "AAA" {:window 14}) 55)
+          [(asset "WIN")]
+          [(asset "LOSE")]))
+    `;
+
+    delete process.env.RSI_METHOD;
+    const wilderResult = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
+    expect(wilderResult.positions.map((pos) => pos.symbol)).toEqual(['WIN']);
+
+    process.env.RSI_METHOD = 'cutler';
+    const simpleResult = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
+    expect(simpleResult.positions.map((pos) => pos.symbol)).toEqual(['LOSE']);
+
+    if (originalRsiMethod === undefined) {
+      delete process.env.RSI_METHOD;
+    } else {
+      process.env.RSI_METHOD = originalRsiMethod;
+    }
   });
 });

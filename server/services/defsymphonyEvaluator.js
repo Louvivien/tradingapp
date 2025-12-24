@@ -409,22 +409,68 @@ const extractSymbolFromAssetNode = (node) => {
 
 const tail = (arr, count) => arr.slice(-count);
 
-const computeRSI = (series, window) => {
+const getRsiMethod = () => String(process.env.RSI_METHOD ?? 'wilder').trim().toLowerCase();
+
+const isSimpleRsiMethod = (method) => {
+  const normalized = String(method || '').trim().toLowerCase();
+  return normalized === 'simple' || normalized === 'cutler' || normalized === 'sma';
+};
+
+const computeRSI = (series, window, method = getRsiMethod()) => {
   if (series.length < window + 1) {
     throw new Error(`Not enough data to compute RSI window ${window}.`);
   }
-  let gains = 0;
-  let losses = 0;
-  for (let i = series.length - window; i < series.length; i += 1) {
+
+  if (isSimpleRsiMethod(method)) {
+    let gains = 0;
+    let losses = 0;
+    for (let i = series.length - window; i < series.length; i += 1) {
+      const diff = series[i] - series[i - 1];
+      if (diff > 0) {
+        gains += diff;
+      } else if (diff < 0) {
+        losses += Math.abs(diff);
+      }
+    }
+    const avgGain = gains / window;
+    const avgLoss = losses / window;
+    if (avgLoss === 0 && avgGain === 0) {
+      return 50;
+    }
+    if (avgLoss === 0) {
+      return 100;
+    }
+    const rs = avgGain / avgLoss;
+    return 100 - (100 / (1 + rs));
+  }
+
+  // Wilder-smoothed RSI (standard definition used by most charting platforms).
+  let avgGain = 0;
+  let avgLoss = 0;
+
+  for (let i = 1; i <= window; i += 1) {
     const diff = series[i] - series[i - 1];
-    if (diff >= 0) {
-      gains += diff;
-    } else {
-      losses += Math.abs(diff);
+    if (diff > 0) {
+      avgGain += diff;
+    } else if (diff < 0) {
+      avgLoss += Math.abs(diff);
     }
   }
-  const avgGain = gains / window;
-  const avgLoss = losses / window;
+
+  avgGain /= window;
+  avgLoss /= window;
+
+  for (let i = window + 1; i < series.length; i += 1) {
+    const diff = series[i] - series[i - 1];
+    const gain = diff > 0 ? diff : 0;
+    const loss = diff < 0 ? Math.abs(diff) : 0;
+    avgGain = (avgGain * (window - 1) + gain) / window;
+    avgLoss = (avgLoss * (window - 1) + loss) / window;
+  }
+
+  if (avgLoss === 0 && avgGain === 0) {
+    return 50;
+  }
   if (avgLoss === 0) {
     return 100;
   }
