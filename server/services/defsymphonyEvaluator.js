@@ -248,9 +248,11 @@ const simulateNodeSeries = (node, ctx, options) => {
     previewStack: null,
   };
   const previousIndex = ctx.priceIndex;
+  // Avoid lookahead bias: choose allocations using information available at (idx - 1),
+  // then apply the return from (idx - 1) -> idx.
   for (let idx = startIndex; idx < priceLength; idx += 1) {
-    simCtx.priceIndex = idx;
-    ctx.priceIndex = idx;
+    const decisionIndex = idx - 1;
+    simCtx.priceIndex = decisionIndex;
     let rawPositions = [];
     try {
       rawPositions = evaluateNode(node, 1, simCtx);
