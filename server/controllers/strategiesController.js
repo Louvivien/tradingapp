@@ -473,6 +473,64 @@ const toNumber = (value, fallback = null) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
+const FRACTIONAL_QTY_DECIMALS = 6;
+const ENABLE_FRACTIONAL_ORDERS =
+  String(process.env.ALPACA_ENABLE_FRACTIONAL ?? 'true').toLowerCase() !== 'false';
+const MIN_FRACTIONAL_NOTIONAL = (() => {
+  const parsed = Number(process.env.ALPACA_MIN_FRACTIONAL_NOTIONAL);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+})();
+
+const floorToDecimals = (value, decimals = 0) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return null;
+  }
+  const places = Math.max(0, Math.min(12, Number(decimals) || 0));
+  const factor = 10 ** places;
+  return Math.floor(num * factor) / factor;
+};
+
+const isEffectivelyInteger = (value, epsilon = 1e-9) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return false;
+  }
+  return Math.abs(num - Math.round(num)) <= epsilon;
+};
+
+const normalizeQtyForOrder = (qty) => {
+  const numeric = toNumber(qty, null);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return { qty: null, isFractional: false };
+  }
+  if (isEffectivelyInteger(numeric)) {
+    const rounded = Math.max(0, Math.round(numeric));
+    return { qty: rounded, isFractional: false };
+  }
+  const floored = floorToDecimals(numeric, FRACTIONAL_QTY_DECIMALS);
+  if (!Number.isFinite(floored) || floored <= 0) {
+    return { qty: null, isFractional: false };
+  }
+  return { qty: floored, isFractional: true };
+};
+
+const shouldFallbackToWholeShares = (error) => {
+  const status = Number(error?.response?.status);
+  const message = String(error?.response?.data?.message || error?.message || '').toLowerCase();
+  if (status !== 400 && status !== 422) {
+    return false;
+  }
+  return (
+    message.includes('fractional') ||
+    message.includes('cannot be fractional') ||
+    message.includes('qty must be integer') ||
+    message.includes('quantity must be integer') ||
+    message.includes('must be an integer') ||
+    message.includes('notional')
+  );
+};
+
 const extractTargetPositions = (rawPositions = []) => {
   if (!Array.isArray(rawPositions)) {
     return [];
@@ -931,15 +989,16 @@ exports.createCollaborative = async (req, res) => {
       }
 
       const desiredValue = planningBudget * target.targetWeight;
-      let qty = Math.floor(desiredValue / price);
-
       const remainingBudget = planningBudget - plannedCost;
-      if (qty * price > remainingBudget) {
-        qty = Math.floor(remainingBudget / price);
-      }
+      const cappedValue = Math.min(desiredValue, Math.max(0, remainingBudget));
+      let qty = ENABLE_FRACTIONAL_ORDERS
+        ? floorToDecimals(cappedValue / price, FRACTIONAL_QTY_DECIMALS) || 0
+        : Math.floor(cappedValue / price);
 
-      if (qty <= 0 && remainingBudget >= price) {
-        qty = 1;
+      if (!ENABLE_FRACTIONAL_ORDERS) {
+        if (qty <= 0 && remainingBudget >= price) {
+          qty = 1;
+        }
       }
 
       if (qty <= 0) {
@@ -947,6 +1006,9 @@ exports.createCollaborative = async (req, res) => {
       }
 
       const cost = qty * price;
+      if (ENABLE_FRACTIONAL_ORDERS && cost < MIN_FRACTIONAL_NOTIONAL) {
+        continue;
+      }
       plannedCost += cost;
       orderPlan.push({
         symbol,
@@ -962,6 +1024,16 @@ exports.createCollaborative = async (req, res) => {
 
     let remainingBudget = planningBudget - plannedCost;
     if (remainingBudget > 0 && orderPlan.length) {
+      if (ENABLE_FRACTIONAL_ORDERS) {
+        const topPlan = orderPlan[0];
+        const extraQty = floorToDecimals(remainingBudget / topPlan.price, FRACTIONAL_QTY_DECIMALS) || 0;
+        if (extraQty > 0) {
+          topPlan.qty = (topPlan.qty || 0) + extraQty;
+          topPlan.cost += extraQty * topPlan.price;
+          plannedCost += extraQty * topPlan.price;
+          remainingBudget = planningBudget - plannedCost;
+        }
+      } else {
       for (const plan of orderPlan) {
         if (remainingBudget < plan.price) {
           continue;
@@ -978,6 +1050,7 @@ exports.createCollaborative = async (req, res) => {
         if (plannedCost >= planningBudget || remainingBudget <= 0) {
           break;
         }
+      }
       }
     }
 
@@ -1019,24 +1092,49 @@ exports.createCollaborative = async (req, res) => {
 
     const orderPromises = finalizedPlan.map(({ symbol, qty }) => {
       return retry(() => {
-        return axios({
-          method: 'post',
-          url: alpacaConfig.apiURL + '/v2/orders',
-          headers: {
-            'APCA-API-KEY-ID': alpacaConfig.keyId,
-            'APCA-API-SECRET-KEY': alpacaConfig.secretKey
-          },
-          data: {
-            symbol,
-            qty,
-            side: 'buy',
-            type: 'market',
-            time_in_force: 'gtc'
-          }
-        }).then((response) => {
-          console.log(`Order of ${qty} shares for ${symbol} has been placed. Order ID: ${response.data.client_order_id}`);
-          return { qty, symbol, orderID: response.data.client_order_id };
-        });
+        const normalized = ENABLE_FRACTIONAL_ORDERS ? normalizeQtyForOrder(qty) : { qty: Math.floor(toNumber(qty, 0)), isFractional: false };
+        if (!normalized.qty) {
+          return Promise.resolve(null);
+        }
+        const qtyValue = normalized.isFractional
+          ? normalized.qty.toFixed(FRACTIONAL_QTY_DECIMALS)
+          : normalized.qty;
+        const timeInForce = normalized.isFractional ? 'day' : 'gtc';
+
+        const submit = (payloadQty, tif) =>
+          axios({
+            method: 'post',
+            url: alpacaConfig.apiURL + '/v2/orders',
+            headers: {
+              'APCA-API-KEY-ID': alpacaConfig.keyId,
+              'APCA-API-SECRET-KEY': alpacaConfig.secretKey
+            },
+            data: {
+              symbol,
+              qty: payloadQty,
+              side: 'buy',
+              type: 'market',
+              time_in_force: tif
+            }
+          });
+
+        return submit(qtyValue, timeInForce)
+          .then((response) => {
+            console.log(`Order of ${qtyValue} shares for ${symbol} has been placed. Order ID: ${response.data.client_order_id}`);
+            return { qty: normalized.qty, symbol, orderID: response.data.client_order_id };
+          })
+          .catch((error) => {
+            if (normalized.isFractional && shouldFallbackToWholeShares(error)) {
+              const fallbackQty = Math.floor(toNumber(qty, 0));
+              if (fallbackQty > 0) {
+                return submit(fallbackQty, 'gtc').then((response) => {
+                  console.log(`Order of ${fallbackQty} shares for ${symbol} has been placed (fallback). Order ID: ${response.data.client_order_id}`);
+                  return { qty: fallbackQty, symbol, orderID: response.data.client_order_id };
+                });
+              }
+            }
+            return Promise.reject(error);
+          });
       }, 5, 2000).catch((error) => {
         const status = error?.response?.status;
         const responseData = error?.response?.data;
@@ -1252,20 +1350,29 @@ exports.createCollaborative = async (req, res) => {
         });
       }
 
-      let sellOrderPromises = portfolio.stocks.map(stock => {
-        return alpacaApi.createOrder({
+      let sellOrderPromises = portfolio.stocks.map((stock) => {
+        const rawQty = toNumber(stock.quantity, 0);
+        const normalized = ENABLE_FRACTIONAL_ORDERS
+          ? normalizeQtyForOrder(rawQty)
+          : { qty: Math.floor(rawQty), isFractional: false };
+        if (!normalized.qty) {
+          return Promise.resolve(null);
+        }
+        const order = {
           symbol: stock.symbol,
-          qty: stock.quantity,
+          qty: normalized.isFractional ? normalized.qty.toFixed(FRACTIONAL_QTY_DECIMALS) : normalized.qty,
           side: 'sell',
           type: 'market',
-          time_in_force: 'gtc'
-        }).then((response) => {
-          console.log(`Sell order of ${stock.quantity} shares for ${stock.symbol} has been placed. Order ID: ${response.client_order_id}`);
-          return { qty: stock.quantity, symbol: stock.symbol, orderID: response.client_order_id};
-        }).catch((error) => {
-          console.error(`Failed to place sell order for ${stock.symbol}: ${error}`)
-          return null;
-        });
+          time_in_force: normalized.isFractional ? 'day' : 'gtc',
+        };
+        return alpacaApi.createOrder(order)
+          .then((response) => {
+            console.log(`Sell order of ${order.qty} shares for ${stock.symbol} has been placed. Order ID: ${response.client_order_id}`);
+            return { qty: normalized.qty, symbol: stock.symbol, orderID: response.client_order_id };
+          }).catch((error) => {
+            console.error(`Failed to place sell order for ${stock.symbol}: ${error}`);
+            return null;
+          });
       });
   
       Promise.all(sellOrderPromises).then(sellOrders => {
@@ -2699,27 +2806,40 @@ exports.resendCollaborativeOrders = async (req, res) => {
       });
     }
 
-    const buyPromises = (portfolio.stocks || [])
+    const buyPayloads = (portfolio.stocks || [])
       .filter((stock) => stock?.symbol && Number(stock.quantity) > 0)
-      .map((stock) =>
-        alpacaApi
-          .createOrder({
-            symbol: stock.symbol,
-            qty: Number(stock.quantity),
-            side: 'buy',
-            type: 'market',
-            time_in_force: 'gtc',
-          })
-          .then((response) => ({
-            symbol: stock.symbol,
-            qty: Number(stock.quantity),
-            orderID: response?.client_order_id || null,
-          }))
-          .catch((error) => {
-            console.error(`[ResendOrders] Failed to place buy order for ${stock.symbol}:`, error.message);
-            return null;
-          })
-      );
+      .map((stock) => {
+        const rawQty = toNumber(stock.quantity, 0);
+        const normalized = ENABLE_FRACTIONAL_ORDERS
+          ? normalizeQtyForOrder(rawQty)
+          : { qty: Math.floor(rawQty), isFractional: false };
+        if (!normalized.qty) {
+          return null;
+        }
+        return {
+          symbol: stock.symbol,
+          qty: normalized.isFractional ? normalized.qty.toFixed(FRACTIONAL_QTY_DECIMALS) : normalized.qty,
+          side: 'buy',
+          type: 'market',
+          time_in_force: normalized.isFractional ? 'day' : 'gtc',
+          __submittedQty: normalized.qty,
+        };
+      })
+      .filter(Boolean);
+
+    const buyPromises = buyPayloads.map((payload) =>
+      alpacaApi
+        .createOrder((({ __submittedQty, ...orderPayload }) => orderPayload)(payload))
+        .then((response) => ({
+          symbol: payload.symbol,
+          qty: payload.__submittedQty,
+          orderID: response?.client_order_id || null,
+        }))
+        .catch((error) => {
+          console.error(`[ResendOrders] Failed to place buy order for ${payload.symbol}:`, error.message);
+          return null;
+        })
+    );
 
     let buyOrders = await Promise.all(buyPromises);
     buyOrders = buyOrders.filter(Boolean);
