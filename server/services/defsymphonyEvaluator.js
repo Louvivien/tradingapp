@@ -12,6 +12,9 @@ const DEFAULT_LOOKBACK_BARS = 250;
 const MAX_CALENDAR_LOOKBACK_DAYS = 750;
 const TRADING_DAYS_PER_YEAR = 252;
 const CALENDAR_DAYS_PER_YEAR = 365;
+const ENABLE_FRACTIONAL_ORDERS =
+  String(process.env.ALPACA_ENABLE_FRACTIONAL ?? 'true').toLowerCase() !== 'false';
+const FRACTIONAL_QTY_DECIMALS = 6;
 
 const METRIC_DEFAULT_WINDOWS = {
   rsi: 14,
@@ -341,6 +344,16 @@ const isAssetNode = (node) => getNodeType(node) === 'asset';
 
 const sumWeights = (positions = []) =>
   positions.reduce((sum, pos) => sum + (Number(pos.weight) || 0), 0);
+
+const roundQuantity = (qty, decimals = FRACTIONAL_QTY_DECIMALS) => {
+  const num = Number(qty);
+  if (!Number.isFinite(num)) {
+    return 0;
+  }
+  const places = Math.max(0, Math.min(12, Number(decimals) || 0));
+  const factor = 10 ** places;
+  return Math.round((num + Number.EPSILON) * factor) / factor;
+};
 
 const mergePositions = (positions = []) => {
   const map = new Map();
@@ -1223,7 +1236,10 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
     const series = priceData.get(pos.symbol);
     const price = series.latest;
     const targetValue = budget * pos.weight;
-    const quantity = Math.max(Math.floor(targetValue / price), 0);
+    const rawQty = price > 0 ? targetValue / price : 0;
+    const quantity = ENABLE_FRACTIONAL_ORDERS
+      ? Math.max(roundQuantity(rawQty), 0)
+      : Math.max(Math.floor(rawQty), 0);
     return {
       symbol: pos.symbol,
       weight: pos.weight,

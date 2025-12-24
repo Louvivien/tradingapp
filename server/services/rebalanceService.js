@@ -7,6 +7,13 @@ const { recordStrategyLog } = require('./strategyLogger');
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
 
 const TOLERANCE = 0.01;
+const FRACTIONAL_QTY_DECIMALS = 6;
+const MIN_FRACTIONAL_NOTIONAL = (() => {
+  const parsed = Number(process.env.ALPACA_MIN_FRACTIONAL_NOTIONAL);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+})();
+const ENABLE_FRACTIONAL_ORDERS =
+  String(process.env.ALPACA_ENABLE_FRACTIONAL ?? 'true').toLowerCase() !== 'false';
 
 const RECURRENCE_LABELS = {
   every_minute: 'Every minute',
@@ -28,6 +35,73 @@ const roundToTwo = (value) => {
     return null;
   }
   return Math.round((value + Number.EPSILON) * 100) / 100;
+};
+
+const roundToDecimals = (value, decimals = 0) => {
+  if (!Number.isFinite(value)) {
+    return null;
+  }
+  const places = Math.max(0, Math.min(12, Number(decimals) || 0));
+  const factor = 10 ** places;
+  return Math.round((value + Number.EPSILON) * factor) / factor;
+};
+
+const isEffectivelyInteger = (value, epsilon = 1e-9) => {
+  if (!Number.isFinite(value)) {
+    return false;
+  }
+  return Math.abs(value - Math.round(value)) <= epsilon;
+};
+
+const normalizeQtyForOrder = (qty) => {
+  const numeric = toNumber(qty, null);
+  if (!Number.isFinite(numeric) || numeric <= 0) {
+    return { qty: null, isFractional: false };
+  }
+  if (isEffectivelyInteger(numeric)) {
+    const rounded = Math.max(0, Math.round(numeric));
+    return { qty: rounded, isFractional: false };
+  }
+  const rounded = roundToDecimals(numeric, FRACTIONAL_QTY_DECIMALS);
+  if (!Number.isFinite(rounded) || rounded <= 0) {
+    return { qty: null, isFractional: false };
+  }
+  return { qty: rounded, isFractional: true };
+};
+
+const computeWholeShareQtyDiff = (currentQty, desiredQty) => {
+  const currentInt = Math.max(0, Math.round(toNumber(currentQty, 0)));
+  const desiredInt = Math.max(0, Math.round(toNumber(desiredQty, 0)));
+  return desiredInt - currentInt;
+};
+
+const buildMarketOrderPayload = ({ symbol, side, qty, isFractional }) => {
+  const tif = isFractional ? 'day' : 'gtc';
+  const qtyValue = isFractional ? qty.toFixed(FRACTIONAL_QTY_DECIMALS) : String(qty);
+  return {
+    symbol,
+    qty: qtyValue,
+    side,
+    type: 'market',
+    time_in_force: tif,
+  };
+};
+
+const shouldFallbackToWholeShares = (error) => {
+  const status = Number(error?.response?.status);
+  const message = String(error?.response?.data?.message || error?.message || '').toLowerCase();
+  if (status !== 400 && status !== 422) {
+    return false;
+  }
+  return (
+    message.includes('fractional') ||
+    message.includes('fractional trading') ||
+    message.includes('cannot be fractional') ||
+    message.includes('qty must be integer') ||
+    message.includes('quantity must be integer') ||
+    message.includes('must be an integer') ||
+    message.includes('notional')
+  );
 };
 
 const formatCurrency = (value) => {
@@ -663,7 +737,8 @@ const buildAdjustments = async ({
       || 0;
     const currentValue = currentQty * currentPrice;
     const desiredValue = Math.max(0, target.targetWeight * budget);
-    const desiredQty = currentPrice > 0 ? Math.floor(desiredValue / currentPrice) : 0;
+    const desiredQtyRaw = currentPrice > 0 ? desiredValue / currentPrice : 0;
+    const desiredQty = ENABLE_FRACTIONAL_ORDERS ? desiredQtyRaw : Math.floor(desiredQtyRaw);
     return {
       symbol: target.symbol,
       currentQty,
@@ -1031,6 +1106,8 @@ const rebalancePortfolio = async (portfolio) => {
           symbol: adjustment.symbol,
           qty: qtyToSell,
           price: adjustment.currentPrice,
+          currentQty: adjustment.currentQty,
+          desiredQty: adjustment.desiredQty,
         });
       }
     } else if (qtyDiff > 0 && adjustment.currentPrice > 0) {
@@ -1038,29 +1115,72 @@ const rebalancePortfolio = async (portfolio) => {
         symbol: adjustment.symbol,
         qty: qtyDiff,
         price: adjustment.currentPrice,
+        currentQty: adjustment.currentQty,
+        desiredQty: adjustment.desiredQty,
       });
     }
   });
 
   let sellProceeds = 0;
   for (const sell of sells) {
+    const normalized = normalizeQtyForOrder(sell.qty);
+    if (!normalized.qty) {
+      continue;
+    }
+    const estimatedNotional = normalized.qty * sell.price;
+    if (normalized.isFractional && estimatedNotional < MIN_FRACTIONAL_NOTIONAL) {
+      continue;
+    }
     try {
-      const response = await placeOrder(tradingKeys, {
-        symbol: sell.symbol,
-        qty: sell.qty,
-        side: 'sell',
-        type: 'market',
-        time_in_force: 'gtc',
-      });
+      const response = await placeOrder(
+        tradingKeys,
+        buildMarketOrderPayload({
+          symbol: sell.symbol,
+          side: 'sell',
+          qty: normalized.qty,
+          isFractional: ENABLE_FRACTIONAL_ORDERS && normalized.isFractional,
+        })
+      );
       const orderId = response?.data?.client_order_id || response?.data?.id || null;
-      sellProceeds += sell.qty * sell.price;
+      sellProceeds += normalized.qty * sell.price;
       executedSells.push({
         symbol: sell.symbol,
-        qty: sell.qty,
+        qty: normalized.qty,
         price: sell.price,
         orderId,
       });
     } catch (error) {
+      if (ENABLE_FRACTIONAL_ORDERS && normalized.isFractional && shouldFallbackToWholeShares(error)) {
+        const wholeDiff = computeWholeShareQtyDiff(sell.currentQty, sell.desiredQty);
+        const fallbackQty = Math.max(0, -wholeDiff);
+        if (fallbackQty > 0) {
+          try {
+            const response = await placeOrder(
+              tradingKeys,
+              buildMarketOrderPayload({
+                symbol: sell.symbol,
+                side: 'sell',
+                qty: fallbackQty,
+                isFractional: false,
+              })
+            );
+            const orderId = response?.data?.client_order_id || response?.data?.id || null;
+            sellProceeds += fallbackQty * sell.price;
+            executedSells.push({
+              symbol: sell.symbol,
+              qty: fallbackQty,
+              price: sell.price,
+              orderId,
+            });
+            continue;
+          } catch (fallbackError) {
+            console.error(
+              `[Rebalance] Sell order failed for ${sell.symbol} (fractional + fallback):`,
+              fallbackError.message
+            );
+          }
+        }
+      }
       console.error(`[Rebalance] Sell order failed for ${sell.symbol}:`, error.message);
     }
   }
@@ -1087,59 +1207,149 @@ const rebalancePortfolio = async (portfolio) => {
   let buySpend = 0;
 
   for (const buy of buys) {
-    const estimatedCost = buy.qty * buy.price;
+    const normalized = normalizeQtyForOrder(buy.qty);
+    if (!normalized.qty) {
+      continue;
+    }
+    const estimatedCost = normalized.qty * buy.price;
+    if (normalized.isFractional && estimatedCost < MIN_FRACTIONAL_NOTIONAL) {
+      continue;
+    }
     if (estimatedCost <= availableCash) {
       try {
-        const response = await placeOrder(tradingKeys, {
-          symbol: buy.symbol,
-          qty: buy.qty,
-          side: 'buy',
-          type: 'market',
-          time_in_force: 'gtc',
-        });
+        const response = await placeOrder(
+          tradingKeys,
+          buildMarketOrderPayload({
+            symbol: buy.symbol,
+            side: 'buy',
+            qty: normalized.qty,
+            isFractional: ENABLE_FRACTIONAL_ORDERS && normalized.isFractional,
+          })
+        );
         const orderId = response?.data?.client_order_id || response?.data?.id || null;
         const filledPrice = await fetchOrderFillPrice(tradingKeys, orderId);
         const executionPrice = Number.isFinite(filledPrice) && filledPrice > 0 ? filledPrice : buy.price;
-        const actualCost = executionPrice * buy.qty;
+        const actualCost = executionPrice * normalized.qty;
         availableCash -= actualCost;
         strategyCash = Math.max(0, strategyCash - actualCost);
         buySpend += actualCost;
         executedBuys.push({
           symbol: buy.symbol,
-          qty: buy.qty,
+          qty: normalized.qty,
           price: executionPrice,
           orderId,
         });
       } catch (error) {
+        if (ENABLE_FRACTIONAL_ORDERS && normalized.isFractional && shouldFallbackToWholeShares(error)) {
+          const wholeDiff = computeWholeShareQtyDiff(buy.currentQty, buy.desiredQty);
+          const fallbackQty = Math.max(0, wholeDiff);
+          if (fallbackQty > 0) {
+            try {
+              const response = await placeOrder(
+                tradingKeys,
+                buildMarketOrderPayload({
+                  symbol: buy.symbol,
+                  side: 'buy',
+                  qty: fallbackQty,
+                  isFractional: false,
+                })
+              );
+              const orderId = response?.data?.client_order_id || response?.data?.id || null;
+              const filledPrice = await fetchOrderFillPrice(tradingKeys, orderId);
+              const executionPrice = Number.isFinite(filledPrice) && filledPrice > 0 ? filledPrice : buy.price;
+              const actualCost = executionPrice * fallbackQty;
+              availableCash -= actualCost;
+              strategyCash = Math.max(0, strategyCash - actualCost);
+              buySpend += actualCost;
+              executedBuys.push({
+                symbol: buy.symbol,
+                qty: fallbackQty,
+                price: executionPrice,
+                orderId,
+              });
+              continue;
+            } catch (fallbackError) {
+              console.error(
+                `[Rebalance] Buy order failed for ${buy.symbol} (fractional + fallback):`,
+                fallbackError.message
+              );
+            }
+          }
+        }
         console.error(`[Rebalance] Buy order failed for ${buy.symbol}:`, error.message);
       }
     } else {
-      const affordableQty = Math.floor(availableCash / buy.price);
-      if (affordableQty > 0) {
+      const rawAffordableQty = availableCash / buy.price;
+      const affordableQty = ENABLE_FRACTIONAL_ORDERS
+        ? Math.min(toNumber(buy.qty, 0), rawAffordableQty)
+        : Math.min(toNumber(buy.qty, 0), Math.floor(rawAffordableQty));
+      const normalizedAffordable = normalizeQtyForOrder(affordableQty);
+      if (normalizedAffordable.qty) {
+        const estimatedAffordableCost = normalizedAffordable.qty * buy.price;
+        if (normalizedAffordable.isFractional && estimatedAffordableCost < MIN_FRACTIONAL_NOTIONAL) {
+          continue;
+        }
         try {
-          const response = await placeOrder(tradingKeys, {
+          const response = await placeOrder(
+            tradingKeys,
+            buildMarketOrderPayload({
+              symbol: buy.symbol,
+              side: 'buy',
+              qty: normalizedAffordable.qty,
+              isFractional: ENABLE_FRACTIONAL_ORDERS && normalizedAffordable.isFractional,
+            })
+          );
+          const orderId = response?.data?.client_order_id || response?.data?.id || null;
+          const filledPrice = await fetchOrderFillPrice(tradingKeys, orderId);
+          const executionPrice = Number.isFinite(filledPrice) && filledPrice > 0 ? filledPrice : buy.price;
+          const actualCost = executionPrice * normalizedAffordable.qty;
+          availableCash -= actualCost;
+          strategyCash = Math.max(0, strategyCash - actualCost);
+          buySpend += actualCost;
+          executedBuys.push({
             symbol: buy.symbol,
-            qty: affordableQty,
-            side: 'buy',
-            type: 'market',
-            time_in_force: 'gtc',
-        });
-        const orderId = response?.data?.client_order_id || response?.data?.id || null;
-        const filledPrice = await fetchOrderFillPrice(tradingKeys, orderId);
-        const executionPrice = Number.isFinite(filledPrice) && filledPrice > 0 ? filledPrice : buy.price;
-        const actualCost = executionPrice * affordableQty;
-        availableCash -= actualCost;
-        strategyCash = Math.max(0, strategyCash - actualCost);
-        buySpend += actualCost;
-        executedBuys.push({
-          symbol: buy.symbol,
-          qty: affordableQty,
-          price: executionPrice,
-          orderId,
-        });
-      } catch (error) {
-        console.error(`[Rebalance] Partial buy order failed for ${buy.symbol}:`, error.message);
-      }
+            qty: normalizedAffordable.qty,
+            price: executionPrice,
+            orderId,
+          });
+        } catch (error) {
+          if (ENABLE_FRACTIONAL_ORDERS && normalizedAffordable.isFractional && shouldFallbackToWholeShares(error)) {
+            const fallbackQty = Math.floor(toNumber(affordableQty, 0));
+            if (fallbackQty > 0) {
+              try {
+                const response = await placeOrder(
+                  tradingKeys,
+                  buildMarketOrderPayload({
+                    symbol: buy.symbol,
+                    side: 'buy',
+                    qty: fallbackQty,
+                    isFractional: false,
+                  })
+                );
+                const orderId = response?.data?.client_order_id || response?.data?.id || null;
+                const filledPrice = await fetchOrderFillPrice(tradingKeys, orderId);
+                const executionPrice = Number.isFinite(filledPrice) && filledPrice > 0 ? filledPrice : buy.price;
+                const actualCost = executionPrice * fallbackQty;
+                availableCash -= actualCost;
+                strategyCash = Math.max(0, strategyCash - actualCost);
+                buySpend += actualCost;
+                executedBuys.push({
+                  symbol: buy.symbol,
+                  qty: fallbackQty,
+                  price: executionPrice,
+                  orderId,
+                });
+                continue;
+            } catch (fallbackError) {
+              console.error(
+                `[Rebalance] Partial buy order failed for ${buy.symbol} (fractional + fallback):`,
+                fallbackError.message
+              );
+            }
+          }
+        }
+          console.error(`[Rebalance] Partial buy order failed for ${buy.symbol}:`, error.message);
+        }
       }
     }
   }
