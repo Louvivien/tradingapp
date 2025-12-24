@@ -18,6 +18,7 @@ const priceCacheSchema = new mongoose.Schema(
     start: { type: Date, required: true },
     end: { type: Date, required: true },
     granularity: { type: String, default: '1Day' },
+    adjustment: { type: String, default: 'raw' },
     bars: { type: [barSchema], default: [] },
     refreshedAt: { type: Date, default: Date.now },
     dataSource: { type: String, default: 'alpaca' },
@@ -27,7 +28,7 @@ const priceCacheSchema = new mongoose.Schema(
   }
 );
 
-priceCacheSchema.index({ symbol: 1, granularity: 1 });
+priceCacheSchema.index({ symbol: 1, granularity: 1, adjustment: 1 });
 
 const PriceCache = mongoose.model('PriceCache', priceCacheSchema);
 

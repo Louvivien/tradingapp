@@ -5,6 +5,17 @@ const { getAlpacaConfig } = require('../config/alpacaConfig');
 const MAX_LOOKBACK_DAYS = 750; // roughly 3 years
 const CACHE_TTL_HOURS = 24;
 
+const normalizeAdjustment = (value) => {
+  const normalized = String(value ?? '').trim().toLowerCase();
+  if (!normalized) {
+    return 'all';
+  }
+  if (['raw', 'split', 'dividend', 'all'].includes(normalized)) {
+    return normalized;
+  }
+  return 'all';
+};
+
 const toISO = (value) => {
   const date = value instanceof Date ? value : new Date(value);
   return date.toISOString();
@@ -28,7 +39,7 @@ const barsCoverRange = (bars = [], start, end) => {
   return first <= start && last >= end;
 };
 
-const fetchBarsFromAlpaca = async ({ symbol, start, end }) => {
+const fetchBarsFromAlpaca = async ({ symbol, start, end, adjustment }) => {
   const alpacaConfig = await getAlpacaConfig();
   const dataKeys = alpacaConfig.getDataKeys();
   const client = dataKeys.client || Axios.create();
@@ -38,6 +49,7 @@ const fetchBarsFromAlpaca = async ({ symbol, start, end }) => {
       start: toISO(start),
       end: toISO(end),
       limit: '10000',
+      adjustment: normalizeAdjustment(adjustment),
     });
     return searchParams.toString();
   };
@@ -89,7 +101,7 @@ const fetchBarsFromAlpaca = async ({ symbol, start, end }) => {
   return [];
 };
 
-const parseYahooResponse = (data) => {
+const parseYahooResponse = (data, adjustment) => {
   if (data?.chart?.error) {
     const { description, code } = data.chart.error;
     const message = description || code || 'Unknown Yahoo Finance error';
@@ -102,13 +114,16 @@ const parseYahooResponse = (data) => {
   }
 
   const quote = result.indicators?.quote?.[0] || {};
+  const adjcloseSeries = result.indicators?.adjclose?.[0]?.adjclose || [];
   const timestamps = result.timestamp || [];
+  const useAdjClose = ['dividend', 'all'].includes(normalizeAdjustment(adjustment));
   const bars = timestamps
     .map((ts, idx) => {
       const open = quote.open?.[idx];
       const high = quote.high?.[idx];
       const low = quote.low?.[idx];
       const close = quote.close?.[idx];
+      const adjClose = adjcloseSeries?.[idx];
       const volume = quote.volume?.[idx];
       if (
         !Number.isFinite(open) ||
@@ -119,12 +134,13 @@ const parseYahooResponse = (data) => {
       ) {
         return null;
       }
+      const effectiveClose = useAdjClose && Number.isFinite(adjClose) ? adjClose : close;
       return {
         t: new Date(ts * 1000).toISOString(),
         o: open,
         h: high,
         l: low,
-        c: close,
+        c: effectiveClose,
         v: volume,
       };
     })
@@ -134,7 +150,7 @@ const parseYahooResponse = (data) => {
   return bars;
 };
 
-const fetchBarsFromYahoo = async ({ symbol, start, end }) => {
+const fetchBarsFromYahoo = async ({ symbol, start, end, adjustment }) => {
   const period1 = Math.floor(start.getTime() / 1000);
   const period2 = Math.floor(end.getTime() / 1000);
 
@@ -162,7 +178,7 @@ const fetchBarsFromYahoo = async ({ symbol, start, end }) => {
             'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36',
         },
       });
-      const bars = parseYahooResponse(data);
+      const bars = parseYahooResponse(data, adjustment);
       if (bars.length) {
         return bars;
       }
@@ -185,9 +201,9 @@ const fetchBarsFromYahoo = async ({ symbol, start, end }) => {
   return [];
 };
 
-const fetchBarsWithFallback = async ({ symbol, start, end }) => {
+const fetchBarsWithFallback = async ({ symbol, start, end, adjustment }) => {
   try {
-    const alpacaBars = await fetchBarsFromAlpaca({ symbol, start, end });
+    const alpacaBars = await fetchBarsFromAlpaca({ symbol, start, end, adjustment });
     if (alpacaBars.length) {
       return { bars: alpacaBars, dataSource: 'alpaca' };
     }
@@ -196,7 +212,7 @@ const fetchBarsWithFallback = async ({ symbol, start, end }) => {
   }
 
   try {
-    const yahooBars = await fetchBarsFromYahoo({ symbol, start, end });
+    const yahooBars = await fetchBarsFromYahoo({ symbol, start, end, adjustment });
     if (yahooBars.length) {
       return { bars: yahooBars, dataSource: 'yahoo' };
     }
@@ -213,8 +229,15 @@ const getCachedPrices = async ({ symbol, startDate, endDate }) => {
     throw new Error('Symbol is required.');
   }
   const { start, end } = normalizeDateRange(startDate, endDate);
+  const adjustment = normalizeAdjustment(process.env.ALPACA_DATA_ADJUSTMENT);
 
-  let cache = await PriceCache.findOne({ symbol: uppercaseSymbol });
+  const baseQuery = { symbol: uppercaseSymbol, granularity: '1Day' };
+  const cacheQuery =
+    adjustment === 'raw'
+      ? { ...baseQuery, $or: [{ adjustment: 'raw' }, { adjustment: { $exists: false } }] }
+      : { ...baseQuery, adjustment };
+
+  let cache = await PriceCache.findOne(cacheQuery);
   const isFresh =
     cache &&
     cache.refreshedAt &&
@@ -226,15 +249,17 @@ const getCachedPrices = async ({ symbol, startDate, endDate }) => {
       symbol: uppercaseSymbol,
       start,
       end,
+      adjustment,
     });
     cache = await PriceCache.findOneAndUpdate(
-      { symbol: uppercaseSymbol },
+      cacheQuery,
       {
         symbol: uppercaseSymbol,
         start: bars[0].t,
         end: bars[bars.length - 1].t,
         bars,
         granularity: '1Day',
+        adjustment,
         refreshedAt: new Date(),
         dataSource,
       },
