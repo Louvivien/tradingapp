@@ -8,12 +8,12 @@ const CACHE_TTL_HOURS = 24;
 const normalizeAdjustment = (value) => {
   const normalized = String(value ?? '').trim().toLowerCase();
   if (!normalized) {
-    return 'all';
+    return 'raw';
   }
   if (['raw', 'split', 'dividend', 'all'].includes(normalized)) {
     return normalized;
   }
-  return 'all';
+  return 'raw';
 };
 
 const toISO = (value) => {
