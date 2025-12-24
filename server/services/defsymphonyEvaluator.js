@@ -79,7 +79,13 @@ const inferMetricWindow = (expr) => {
 
 const collectAstStats = (
   node,
-  stats = { hasGroup: false, hasGroupFilter: false, groupFilterMaxWindow: 0, maxWindow: 0 }
+  stats = {
+    hasGroup: false,
+    hasGroupFilter: false,
+    groupFilterMaxWindow: 0,
+    maxWindow: 0,
+    maxRsiWindow: 0,
+  }
 ) => {
   if (!node) {
     return stats;
@@ -118,6 +124,9 @@ const collectAstStats = (
         const window = Number.isFinite(configured) ? configured : defaultWindow;
         if (Number.isFinite(window) && window > stats.maxWindow) {
           stats.maxWindow = window;
+        }
+        if (head === 'rsi' && Number.isFinite(window) && window > stats.maxRsiWindow) {
+          stats.maxRsiWindow = window;
         }
       }
       node.slice(1).forEach((child) => collectAstStats(child, stats));
@@ -1196,9 +1205,13 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
   const blueprint = buildEvaluationBlueprint(ast) || [];
   const nodeIdMap = assignNodeIds(ast);
 
+  const rsiWindow = Math.max(0, Number(astStats.maxRsiWindow) || 0);
+  const rsiHistoryBuffer = rsiWindow ? 250 : 0;
+
   const requiredBars = Math.max(
     DEFAULT_LOOKBACK_BARS,
-    Math.max(0, Number(astStats.maxWindow) || 0) + 5
+    Math.max(0, Number(astStats.maxWindow) || 0) + 5,
+    rsiWindow + rsiHistoryBuffer
   );
   const calendarLookbackDays = Math.min(
     MAX_CALENDAR_LOOKBACK_DAYS,
