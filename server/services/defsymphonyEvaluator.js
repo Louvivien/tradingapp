@@ -15,6 +15,8 @@ const CALENDAR_DAYS_PER_YEAR = 365;
 const ENABLE_FRACTIONAL_ORDERS =
   String(process.env.ALPACA_ENABLE_FRACTIONAL ?? 'true').toLowerCase() !== 'false';
 const FRACTIONAL_QTY_DECIMALS = 6;
+const ENABLE_INDICATOR_DEBUG =
+  String(process.env.COMPOSER_DEBUG_INDICATORS ?? 'false').toLowerCase() === 'true';
 
 const METRIC_DEFAULT_WINDOWS = {
   rsi: 14,
@@ -386,6 +388,26 @@ const pushReasoning = (ctx, message) => {
   }
 };
 
+const formatIndicatorValue = (value) => {
+  if (value == null) {
+    return 'n/a';
+  }
+  if (typeof value !== 'number') {
+    return String(value);
+  }
+  if (!Number.isFinite(value)) {
+    return String(value);
+  }
+  const absValue = Math.abs(value);
+  if (absValue >= 100) {
+    return value.toFixed(2);
+  }
+  if (absValue >= 10) {
+    return value.toFixed(3);
+  }
+  return value.toFixed(4);
+};
+
 const describePositionPlan = (positions = []) => {
   if (!positions.length) {
     return 'No tradable positions were derived.';
@@ -625,6 +647,12 @@ const evaluateCondition = (node, ctx) => {
   const operator = String(node[0]);
   const left = evaluateExpression(node[1], ctx);
   const right = evaluateExpression(node[2], ctx);
+  if (ctx?.reasoning && ctx?.debugIndicators) {
+    const conditionLabel = describeCondition(node);
+    ctx.reasoning.push(
+      `Indicator debug: ${conditionLabel}. Left=${formatIndicatorValue(left)}; Right=${formatIndicatorValue(right)}.`
+    );
+  }
   if (
     left == null ||
     right == null ||
@@ -1228,6 +1256,7 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
     missingSymbols: new Map(),
     nodeIdMap,
     enableGroupMetrics: false,
+    debugIndicators: ENABLE_INDICATOR_DEBUG,
     reasoning: [
       `Step 1: Loaded ${priceData.size} of ${tickers.length} tickers from local Alpaca cache (calendar lookback ${calendarLookbackDays} days, usable ${usableHistory} bars).`,
     ],
