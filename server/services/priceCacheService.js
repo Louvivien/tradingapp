@@ -167,6 +167,79 @@ const parseYahooResponse = (data, adjustment) => {
   return bars;
 };
 
+const fetchLatestPriceFromAlpaca = async ({ symbol }) => {
+  const alpacaConfig = await getAlpacaConfig();
+  const dataKeys = alpacaConfig.getDataKeys();
+  const client = dataKeys.client || Axios.create();
+  const { data } = await client.get(`${dataKeys.apiUrl}/v2/stocks/${symbol}/trades/latest`, {
+    headers: {
+      'APCA-API-KEY-ID': dataKeys.keyId,
+      'APCA-API-SECRET-KEY': dataKeys.secretKey,
+    },
+  });
+  const price = Number(data?.trade?.p);
+  return Number.isFinite(price) && price > 0 ? price : null;
+};
+
+const fetchLatestPriceFromYahoo = async ({ symbol }) => {
+  const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${encodeURIComponent(symbol)}`;
+  const { data } = await Axios.get(url, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36',
+    },
+  });
+  const quote = data?.quoteResponse?.result?.[0];
+  const price = Number(quote?.regularMarketPrice ?? quote?.postMarketPrice ?? quote?.preMarketPrice);
+  return Number.isFinite(price) && price > 0 ? price : null;
+};
+
+const fetchLatestPrice = async ({ symbol, source } = {}) => {
+  const normalizedSource = String(source ?? '').trim().toLowerCase();
+  if (!symbol) {
+    throw new Error('Symbol is required.');
+  }
+  if (normalizedSource === 'yahoo') {
+    try {
+      const price = await fetchLatestPriceFromYahoo({ symbol });
+      if (price) {
+        return price;
+      }
+    } catch (error) {
+      console.warn(`[PriceCache] Yahoo latest price failed for ${symbol}: ${error.message}`);
+    }
+  } else if (normalizedSource === 'alpaca') {
+    try {
+      const price = await fetchLatestPriceFromAlpaca({ symbol });
+      if (price) {
+        return price;
+      }
+    } catch (error) {
+      console.warn(`[PriceCache] Alpaca latest price failed for ${symbol}: ${error.message}`);
+    }
+  }
+
+  try {
+    const price = await fetchLatestPriceFromAlpaca({ symbol });
+    if (price) {
+      return price;
+    }
+  } catch (error) {
+    console.warn(`[PriceCache] Alpaca latest price fallback failed for ${symbol}: ${error.message}`);
+  }
+
+  try {
+    const price = await fetchLatestPriceFromYahoo({ symbol });
+    if (price) {
+      return price;
+    }
+  } catch (error) {
+    console.warn(`[PriceCache] Yahoo latest price fallback failed for ${symbol}: ${error.message}`);
+  }
+
+  return null;
+};
+
 const fetchBarsFromYahoo = async ({ symbol, start, end, adjustment }) => {
   const period1 = Math.floor(start.getTime() / 1000);
   const period2 = Math.floor(end.getTime() / 1000);
@@ -333,4 +406,5 @@ module.exports = {
   getCachedPrices,
   normalizeAdjustment,
   fetchBarsFromYahoo,
+  fetchLatestPrice,
 };

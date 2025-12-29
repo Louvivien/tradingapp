@@ -6,7 +6,7 @@ const {
   describeSelectionNode,
   describeCondition,
 } = require('../utils/composerDslParser');
-const { getCachedPrices, normalizeAdjustment } = require('./priceCacheService');
+const { getCachedPrices, normalizeAdjustment, fetchLatestPrice } = require('./priceCacheService');
 
 const DEFAULT_LOOKBACK_BARS = 250;
 const MAX_CALENDAR_LOOKBACK_DAYS = 750;
@@ -386,6 +386,14 @@ const normalizeAsOfMode = (value) => {
     return 'current';
   }
   return null;
+};
+
+const toISODateKey = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date.toISOString().slice(0, 10);
 };
 
 const normalizePriceSource = (value) => {
@@ -1472,6 +1480,42 @@ const loadPriceData = async (
         forceRefresh,
       });
       let bars = response.bars || [];
+      if (asOfMode === 'current') {
+        const livePrice = await fetchLatestPrice({ symbol: upper, source: priceSource });
+        if (Number.isFinite(livePrice) && livePrice > 0) {
+          const todayKey = toISODateKey(new Date());
+          const lastBar = bars.length ? bars[bars.length - 1] : null;
+          const lastDateKey = lastBar?.t ? toISODateKey(lastBar.t) : null;
+          if (lastBar && lastDateKey === todayKey) {
+            lastBar.c = livePrice;
+            if (Number.isFinite(lastBar.h)) {
+              lastBar.h = Math.max(lastBar.h, livePrice);
+            } else {
+              lastBar.h = livePrice;
+            }
+            if (Number.isFinite(lastBar.l)) {
+              lastBar.l = Math.min(lastBar.l, livePrice);
+            } else {
+              lastBar.l = livePrice;
+            }
+            if (!Number.isFinite(lastBar.o)) {
+              lastBar.o = livePrice;
+            }
+          } else {
+            bars = [
+              ...bars,
+              {
+                t: new Date().toISOString(),
+                o: livePrice,
+                h: livePrice,
+                l: livePrice,
+                c: livePrice,
+                v: 0,
+              },
+            ];
+          }
+        }
+      }
       if (asOfMode === 'previous-close' && bars.length > 1) {
         bars = bars.slice(0, -1);
       }

@@ -128,6 +128,17 @@ const formatPercentage = (value) => {
   return `${value.toFixed(1)}%`;
 };
 
+const normalizePercentValue = (value, fallback) => {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) {
+    return fallback;
+  }
+  if (num > 1) {
+    return num / 100;
+  }
+  return num;
+};
+
 const formatQuantity = (value) => {
   const num = toNumber(value, null);
   if (!Number.isFinite(num)) {
@@ -773,6 +784,15 @@ const normalizeTargets = (targets = []) => {
       targetQuantity: target.targetQuantity !== undefined ? toNumber(target.targetQuantity, null) : null,
       targetValue: target.targetValue !== undefined ? toNumber(target.targetValue, null) : null,
       targetWeight: target.targetWeight !== undefined ? toNumber(target.targetWeight, null) : null,
+      targetQuantitySnapshot: target.targetQuantitySnapshot !== undefined
+        ? toNumber(target.targetQuantitySnapshot, null)
+        : null,
+      targetPriceSnapshot: target.targetPriceSnapshot !== undefined
+        ? toNumber(target.targetPriceSnapshot, null)
+        : null,
+      targetValueSnapshot: target.targetValueSnapshot !== undefined
+        ? toNumber(target.targetValueSnapshot, null)
+        : null,
     }))
     .filter((entry) => !!entry.symbol);
 
@@ -905,6 +925,8 @@ const buildAdjustments = async ({
   priceCache,
   dataKeys,
   trackedHoldings = {},
+  useSnapshotQuantities = false,
+  maxSnapshotDriftPct = 0,
 }) => {
   const symbolUniverse = new Set([
     ...targets.map((target) => target.symbol),
@@ -931,8 +953,44 @@ const buildAdjustments = async ({
       || 0;
     const currentValue = currentQty * currentPrice;
     const desiredValue = Math.max(0, target.targetWeight * budget);
-    const desiredQtyRaw = currentPrice > 0 ? desiredValue / currentPrice : 0;
-    const desiredQty = ENABLE_FRACTIONAL_ORDERS ? desiredQtyRaw : Math.floor(desiredQtyRaw);
+    const snapshotQty = Number.isFinite(target.targetQuantitySnapshot)
+      ? target.targetQuantitySnapshot
+      : null;
+    const snapshotPrice = Number.isFinite(target.targetPriceSnapshot)
+      ? target.targetPriceSnapshot
+      : null;
+    const priceDriftPct =
+      Number.isFinite(snapshotPrice) && snapshotPrice > 0 && Number.isFinite(currentPrice) && currentPrice > 0
+        ? Math.abs(currentPrice - snapshotPrice) / snapshotPrice
+        : null;
+    const snapshotValueNow =
+      Number.isFinite(snapshotQty) && snapshotQty > 0 && Number.isFinite(currentPrice) && currentPrice > 0
+        ? snapshotQty * currentPrice
+        : null;
+    const snapshotOvershootPct =
+      Number.isFinite(desiredValue) && desiredValue > 0 && Number.isFinite(snapshotValueNow)
+        ? (snapshotValueNow - desiredValue) / desiredValue
+        : null;
+    let useSnapshotSizing = Boolean(
+      useSnapshotQuantities
+      && Number.isFinite(snapshotQty)
+      && snapshotQty > 0
+      && Number.isFinite(snapshotPrice)
+      && snapshotPrice > 0
+      && (priceDriftPct === null || priceDriftPct <= maxSnapshotDriftPct)
+      && (snapshotOvershootPct === null || snapshotOvershootPct <= maxSnapshotDriftPct)
+    );
+
+    let desiredQtyRaw = useSnapshotSizing
+      ? snapshotQty
+      : (currentPrice > 0 ? desiredValue / currentPrice : 0);
+    let desiredQty = ENABLE_FRACTIONAL_ORDERS ? desiredQtyRaw : Math.floor(desiredQtyRaw);
+
+    if (useSnapshotSizing && desiredQty <= 0 && desiredValue > 0 && currentPrice > 0) {
+      useSnapshotSizing = false;
+      desiredQtyRaw = desiredValue / currentPrice;
+      desiredQty = ENABLE_FRACTIONAL_ORDERS ? desiredQtyRaw : Math.floor(desiredQtyRaw);
+    }
     return {
       symbol: target.symbol,
       currentQty,
@@ -941,6 +999,11 @@ const buildAdjustments = async ({
       desiredValue,
       currentValue,
       targetWeight: target.targetWeight,
+      snapshotQty,
+      snapshotPrice,
+      priceDriftPct,
+      snapshotOvershootPct,
+      usedSnapshotSizing: useSnapshotSizing,
     };
   });
 
@@ -1029,6 +1092,12 @@ const rebalancePortfolio = async (portfolio) => {
   const tradingKeys = alpacaConfig.getTradingKeys();
   const dataKeys = alpacaConfig.getDataKeys();
   const now = new Date();
+  const snapshotSizingEnabled =
+    String(process.env.COMPOSER_LOCK_SNAPSHOT_QTY ?? 'true').toLowerCase() !== 'false';
+  const maxSnapshotDriftPct = normalizePercentValue(
+    process.env.COMPOSER_SNAPSHOT_MAX_DRIFT_PCT,
+    0.02
+  );
   const baseThoughtProcess = {
     strategySummary: strategy?.summary || null,
     originalDecisions: Array.isArray(strategy?.decisions) ? strategy.decisions : [],
@@ -1263,12 +1332,24 @@ const rebalancePortfolio = async (portfolio) => {
     }
 
     const composerTargets = normalizeTargets(
-      composerEvaluation.positions.map((pos) => ({
-        symbol: pos.symbol ? String(pos.symbol).trim().toUpperCase() : null,
-        targetWeight: toNumber(pos.weight, null),
-        targetQuantity: toNumber(pos.quantity, null),
-        targetValue: toNumber(pos.estimated_cost, null),
-      }))
+      composerEvaluation.positions.map((pos) => {
+        const symbol = pos.symbol ? String(pos.symbol).trim().toUpperCase() : null;
+        const quantity = toNumber(pos.quantity, null);
+        const estimatedCost = toNumber(pos.estimated_cost, null);
+        const snapshotPrice =
+          Number.isFinite(quantity) && quantity > 0 && Number.isFinite(estimatedCost)
+            ? estimatedCost / quantity
+            : null;
+        return {
+          symbol,
+          targetWeight: toNumber(pos.weight, null),
+          targetQuantity: quantity,
+          targetValue: estimatedCost,
+          targetQuantitySnapshot: quantity,
+          targetPriceSnapshot: snapshotPrice,
+          targetValueSnapshot: estimatedCost,
+        };
+      })
     );
 
     if (composerTargets.length) {
@@ -1285,6 +1366,12 @@ const rebalancePortfolio = async (portfolio) => {
         baseThoughtProcess.reasoning = composerEvaluation.reasoning;
       }
       baseThoughtProcess.composerPositions = composerEvaluation.positions;
+      if (baseThoughtProcess.tooling?.localEvaluator) {
+        baseThoughtProcess.tooling.localEvaluator.snapshotSizing = {
+          enabled: snapshotSizingEnabled,
+          maxPriceDriftPct: maxSnapshotDriftPct,
+        };
+      }
     }
   }
 
@@ -1304,6 +1391,8 @@ const rebalancePortfolio = async (portfolio) => {
     priceCache,
     dataKeys,
     trackedHoldings,
+    useSnapshotQuantities: snapshotSizingEnabled,
+    maxSnapshotDriftPct,
   });
 
   const sells = [];
@@ -1657,7 +1746,17 @@ const rebalancePortfolio = async (portfolio) => {
         return 'Holding position; allocation already within tolerance of target weight.';
       }
       const direction = action === 'buy' ? 'increase' : 'reduce';
-      return `Need to ${direction} exposure to align ${pct !== null ? `${pct}%` : 'target'} weight. Desired ${adjustment.desiredQty} shares versus current ${adjustment.currentQty}.`;
+      const base = `Need to ${direction} exposure to align ${pct !== null ? `${pct}%` : 'target'} weight. Desired ${adjustment.desiredQty} shares versus current ${adjustment.currentQty}.`;
+      if (adjustment.usedSnapshotSizing) {
+        const drift = Number.isFinite(adjustment.priceDriftPct)
+          ? ` (price drift ${(adjustment.priceDriftPct * 100).toFixed(2)}%)`
+          : '';
+        return `${base} Snapshot sizing applied${drift}.`;
+      }
+      if (Number.isFinite(adjustment.priceDriftPct) && adjustment.snapshotQty) {
+        return `${base} Snapshot sizing skipped due to price drift ${(adjustment.priceDriftPct * 100).toFixed(2)}%.`;
+      }
+      return base;
     })();
     return {
       symbol: adjustment.symbol,
@@ -1845,4 +1944,5 @@ const runDueRebalances = async () => {
 module.exports = {
   runDueRebalances,
   rebalancePortfolio,
+  buildAdjustments,
 };
