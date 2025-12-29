@@ -81,6 +81,13 @@ const formatRecurrenceLabel = (value) => {
   return RECURRENCE_LABELS[normalized] || normalized;
 };
 
+const stripEvaluatorShareEstimates = (summary) => {
+  if (typeof summary !== 'string' || !summary) {
+    return summary;
+  }
+  return summary.replace(/\(\s*[-+]?\d*\.?\d+\s+shares,\s*/gi, '(');
+};
+
 const roundToTwo = (value) => {
   if (!Number.isFinite(value)) {
     return null;
@@ -1270,10 +1277,12 @@ exports.createCollaborative = async (req, res) => {
       message: 'Strategy created successfully.',
     });
 
+    const summaryForUi = stripEvaluatorShareEstimates(workingSummary);
+
     return res.status(200).json({
       status: "success",
       orders,
-      summary: workingSummary || "",
+      summary: summaryForUi || "",
       decisions: workingDecisions || [],
       reasoning: composerReasoning || [],
       schedule,
