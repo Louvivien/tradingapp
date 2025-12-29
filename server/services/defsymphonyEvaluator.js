@@ -407,6 +407,21 @@ const normalizePriceRefresh = (value) => {
   return null;
 };
 
+const runWithConcurrency = async (items, limit, handler) => {
+  const queue = [...items];
+  const workerCount = Math.max(1, Math.min(limit, queue.length));
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (queue.length) {
+      const item = queue.shift();
+      if (!item) {
+        return;
+      }
+      await handler(item);
+    }
+  });
+  await Promise.all(workers);
+};
+
 const isArray = Array.isArray;
 const isObj = (val) => val && typeof val === 'object' && !Array.isArray(val);
 
@@ -1282,39 +1297,43 @@ const loadPriceData = async (
   const forceRefresh = normalizePriceRefresh(options.forceRefresh);
   const map = new Map();
   const missing = [];
-  await Promise.all(
-    symbols.map(async (symbol) => {
-      const upper = symbol.toUpperCase();
-      try {
-        const response = await getCachedPrices({
-          symbol: upper,
-          startDate: start,
-          endDate: end,
-          adjustment,
-          source: priceSource,
-          forceRefresh,
-        });
-        let bars = response.bars || [];
-        if (asOfMode === 'previous-close' && bars.length > 1) {
-          bars = bars.slice(0, -1);
-        }
-        const closes = bars.map((bar) => Number(bar.c));
-        if (!closes.length) {
-          throw new Error('No close prices returned.');
-        }
-        map.set(upper, {
-          closes,
-          latest: closes[closes.length - 1],
-          bars,
-        });
-      } catch (error) {
-        missing.push({
-          symbol: upper,
-          reason: error?.message || 'Unknown pricing error.',
-        });
+  const handleSymbol = async (symbol) => {
+    const upper = symbol.toUpperCase();
+    try {
+      const response = await getCachedPrices({
+        symbol: upper,
+        startDate: start,
+        endDate: end,
+        adjustment,
+        source: priceSource,
+        forceRefresh,
+      });
+      let bars = response.bars || [];
+      if (asOfMode === 'previous-close' && bars.length > 1) {
+        bars = bars.slice(0, -1);
       }
-    })
-  );
+      const closes = bars.map((bar) => Number(bar.c));
+      if (!closes.length) {
+        throw new Error('No close prices returned.');
+      }
+      map.set(upper, {
+        closes,
+        latest: closes[closes.length - 1],
+        bars,
+      });
+    } catch (error) {
+      missing.push({
+        symbol: upper,
+        reason: error?.message || 'Unknown pricing error.',
+      });
+    }
+  };
+
+  if (priceSource === 'yahoo') {
+    await runWithConcurrency(symbols, 4, handleSymbol);
+  } else {
+    await Promise.all(symbols.map(handleSymbol));
+  }
   let asOfDateUsed = null;
   map.forEach((series) => {
     const lastBar = Array.isArray(series.bars) && series.bars.length
