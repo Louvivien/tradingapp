@@ -1474,8 +1474,7 @@ const loadPriceData = async (
   const asOfMode = normalizeAsOfMode(options.asOfMode) || 'previous-close';
   const appendLivePrice =
     normalizeAppendLivePrice(options.appendLivePrice ?? process.env.COMPOSER_APPEND_LIVE_PRICE) ??
-    asOfMode === 'current' ||
-    asOfMode === 'previous-close';
+    (asOfMode === 'current' || asOfMode === 'previous-close');
   const priceSource = normalizePriceSource(options.priceSource);
   const forceRefresh = normalizePriceRefresh(options.forceRefresh);
   const map = new Map();
