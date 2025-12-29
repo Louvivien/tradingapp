@@ -252,26 +252,74 @@ const computePortfolioReturn = (positions = [], priceData, priceIndex) => {
   return total;
 };
 
-const pickDateAxis = (mapsBySymbol, preferredSymbol) => {
+const pickDateAxis = (mapsBySymbol, preferredSymbol, desiredStartKey = null) => {
   if (!mapsBySymbol || typeof mapsBySymbol.get !== 'function') {
     return [];
   }
+
+  const resolveMinKey = (map) => {
+    let min = null;
+    if (!map || typeof map.keys !== 'function') {
+      return null;
+    }
+    for (const key of map.keys()) {
+      if (!min || key < min) {
+        min = key;
+      }
+    }
+    return min;
+  };
+
   const preferred = preferredSymbol?.toUpperCase?.();
   const preferredMap = preferred ? mapsBySymbol.get(preferred) : null;
-  if (preferredMap && preferredMap.size) {
+  const preferredMinKey = preferredMap ? resolveMinKey(preferredMap) : null;
+  const preferredEligible =
+    preferredMap && preferredMap.size && (!desiredStartKey || (preferredMinKey && preferredMinKey <= desiredStartKey));
+  if (preferredEligible) {
     return Array.from(preferredMap.keys()).sort();
   }
 
   let best = null;
+  let bestMinKey = null;
   mapsBySymbol.forEach((map, symbol) => {
     if (!map?.size) {
       return;
     }
-    if (!best || map.size > best.map.size) {
+    const minKey = resolveMinKey(map);
+    if (desiredStartKey && (!minKey || minKey > desiredStartKey)) {
+      return;
+    }
+    if (!best) {
       best = { symbol, map };
+      bestMinKey = minKey;
+      return;
+    }
+
+    if (minKey && bestMinKey && minKey < bestMinKey) {
+      best = { symbol, map };
+      bestMinKey = minKey;
+      return;
+    }
+    if (minKey === bestMinKey && map.size > best.map.size) {
+      best = { symbol, map };
+      bestMinKey = minKey;
     }
   });
-  return best ? Array.from(best.map.keys()).sort() : [];
+  if (best) {
+    return Array.from(best.map.keys()).sort();
+  }
+
+  // If no map covers the desired warmup period, fall back to "largest series" selection.
+  let fallback = null;
+  mapsBySymbol.forEach((map, symbol) => {
+    if (!map?.size) {
+      return;
+    }
+    if (!fallback || map.size > fallback.map.size) {
+      fallback = { symbol, map };
+    }
+  });
+  return fallback ? Array.from(fallback.map.keys()).sort() : [];
 };
 
 const buildAlignedSeriesForAxis = (symbol, barMap, axisKeys) => {
@@ -1553,7 +1601,7 @@ const loadPriceData = async (
   const asOfMode = normalizeAsOfMode(options.asOfMode) || 'previous-close';
   const appendLivePrice =
     normalizeAppendLivePrice(options.appendLivePrice ?? process.env.COMPOSER_APPEND_LIVE_PRICE) ??
-    (asOfMode === 'current' || asOfMode === 'previous-close');
+    asOfMode === 'current';
   const priceSource = normalizePriceSource(options.priceSource);
   const forceRefresh = normalizePriceRefresh(options.forceRefresh);
   const map = new Map();
@@ -1571,7 +1619,12 @@ const loadPriceData = async (
       });
       let bars = response.bars || [];
       if (asOfMode === 'previous-close' && bars.length > 1) {
-        bars = bars.slice(0, -1);
+        const asOfKey = toISODateKey(asOfDate);
+        const lastBar = bars[bars.length - 1];
+        const lastKey = lastBar?.t ? toISODateKey(lastBar.t) : null;
+        if (asOfKey && lastKey && lastKey === asOfKey) {
+          bars = bars.slice(0, -1);
+        }
       }
       if (appendLivePrice) {
         const livePrice = await fetchLatestPrice({ symbol: upper, source: priceSource });
@@ -1682,7 +1735,7 @@ const evaluateDefsymphonyStrategy = async ({
   const resolvedRsiMethod =
     normalizeRsiMethod(rsiMethod) || normalizeRsiMethod(process.env.RSI_METHOD) || 'wilder';
   const resolvedAdjustment = normalizeAdjustment(
-    dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT ?? 'raw'
+    dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT ?? 'split'
   );
   const resolvedAsOfMode =
     normalizeAsOfMode(asOfMode) || normalizeAsOfMode(process.env.COMPOSER_ASOF_MODE) || 'previous-close';
@@ -2075,10 +2128,10 @@ const backtestDefsymphonyStrategy = async ({
   const resolvedRsiMethod =
     normalizeRsiMethod(rsiMethod) || normalizeRsiMethod(process.env.RSI_METHOD) || 'wilder';
   const resolvedAdjustment = normalizeAdjustment(
-    dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT ?? 'raw'
+    dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT ?? 'split'
   );
   const resolvedPriceSource =
-    normalizePriceSource(priceSource) || normalizePriceSource(process.env.PRICE_DATA_SOURCE) || 'yahoo';
+    normalizePriceSource(priceSource) || normalizePriceSource(process.env.PRICE_DATA_SOURCE) || null;
   const resolvedPriceRefresh =
     normalizePriceRefresh(priceRefresh) ??
     normalizePriceRefresh(process.env.PRICE_DATA_FORCE_REFRESH) ??
@@ -2106,13 +2159,14 @@ const backtestDefsymphonyStrategy = async ({
   };
 
   const symbolsToFetch = Array.from(new Set([...tickers.map((t) => t.toUpperCase()), calendarSymbol]));
-  if (resolvedPriceSource === 'yahoo') {
+  if (resolvedPriceSource === 'yahoo' || resolvedPriceSource == null) {
     await runWithConcurrency(symbolsToFetch, 4, async (ticker) => fetchSymbol(ticker.toUpperCase()));
   } else {
     await Promise.all(symbolsToFetch.map((ticker) => fetchSymbol(ticker.toUpperCase())));
   }
 
-  const axisDates = pickDateAxis(priceBarsBySymbol, calendarSymbol);
+  const desiredAxisStartKey = toISODateKey(dataStart);
+  const axisDates = pickDateAxis(priceBarsBySymbol, calendarSymbol, desiredAxisStartKey);
   if (axisDates.length < requiredBars + 2) {
     throw new Error(
       `Not enough trading days available to backtest (need at least ${requiredBars + 2}, have ${axisDates.length}).`
@@ -2145,7 +2199,17 @@ const backtestDefsymphonyStrategy = async ({
   const minExecutionIndex = Math.max(1, ...offsets.map((offset) => offset + requiredBars + 1));
   const executionStartIdx = Math.max(requestedStartIdx, minExecutionIndex);
   if (executionStartIdx > requestedEndIdx) {
-    throw new Error('Requested range is too early; not enough warmup history for indicators.');
+    const earliestKey = axisDates[Math.min(minExecutionIndex, axisDates.length - 1)];
+    const axisStart = axisDates[0];
+    const axisEnd = axisDates[axisDates.length - 1];
+    throw new Error(
+      [
+        'Requested range is too early; not enough warmup history for indicators.',
+        `Need at least ${requiredBars} warmup bars before the first evaluation day.`,
+        `Earliest startDate for this strategy is ${earliestKey} (based on available data ${axisStart}..${axisEnd}).`,
+        'Try a later startDate, reduce indicator windows, or ensure your data source has more history (e.g. PRICE_DATA_SOURCE=tiingo).',
+      ].join(' ')
+    );
   }
 
   const backtestDays = requestedEndIdx - executionStartIdx + 1;

@@ -453,9 +453,21 @@ exports.backtestComposerStrategyLocal = async (req, res) => {
     });
   } catch (error) {
     console.error('[ComposerBacktest]', error);
-    return res.status(500).json({
+    const message = error?.message || 'Local Composer backtest failed.';
+    const normalized = String(message).toLowerCase();
+    const isClientError =
+      normalized.includes('is required') ||
+      normalized.includes('invalid') ||
+      normalized.includes('must be before') ||
+      normalized.includes('failed to parse') ||
+      normalized.includes('no tickers found') ||
+      normalized.includes('not enough') ||
+      normalized.includes('backtest range too large') ||
+      normalized.includes('requested range is too early');
+
+    return res.status(isClientError ? 400 : 500).json({
       status: 'fail',
-      message: error.message || 'Local Composer backtest failed.',
+      message,
     });
   }
 };
