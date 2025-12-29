@@ -90,11 +90,12 @@ const buildMarketOrderPayload = ({ symbol, side, qty, isFractional }) => {
 const shouldFallbackToWholeShares = (error) => {
   const status = Number(error?.response?.status);
   const message = String(error?.response?.data?.message || error?.message || '').toLowerCase();
-  if (status !== 400 && status !== 422) {
+  if (status !== 400 && status !== 403 && status !== 422) {
     return false;
   }
   return (
     message.includes('fractional') ||
+    message.includes('fractionable') ||
     message.includes('fractional trading') ||
     message.includes('cannot be fractional') ||
     message.includes('qty must be integer') ||
@@ -850,6 +851,21 @@ const rebalancePortfolio = async (portfolio) => {
       },
     },
   };
+  const describeOrderError = (error) => {
+    const message = String(error?.response?.data?.message || error?.message || '').trim();
+    return message || null;
+  };
+  const recordFallback = ({ symbol, side, error, qty }) => {
+    if (!symbol) {
+      return;
+    }
+    const reason = describeOrderError(error) || 'fractional order rejected';
+    const action = side === 'sell' ? 'Sell' : 'Buy';
+    const qtyLabel = Number.isFinite(qty) ? `${qty} shares` : 'whole shares';
+    baseThoughtProcess.reasoning.push(
+      `${action} fallback to whole shares for ${symbol}: ${reason}. Submitted ${qtyLabel}.`
+    );
+  };
 
   const clockData = await fetchMarketClock(tradingKeys);
   if (clockData && clockData.is_open === false) {
@@ -1172,6 +1188,7 @@ const rebalancePortfolio = async (portfolio) => {
               price: sell.price,
               orderId,
             });
+            recordFallback({ symbol: sell.symbol, side: 'sell', error, qty: fallbackQty });
             continue;
           } catch (fallbackError) {
             console.error(
@@ -1267,6 +1284,7 @@ const rebalancePortfolio = async (portfolio) => {
                 price: executionPrice,
                 orderId,
               });
+              recordFallback({ symbol: buy.symbol, side: 'buy', error, qty: fallbackQty });
               continue;
             } catch (fallbackError) {
               console.error(
@@ -1339,6 +1357,7 @@ const rebalancePortfolio = async (portfolio) => {
                   price: executionPrice,
                   orderId,
                 });
+                recordFallback({ symbol: buy.symbol, side: 'buy', error, qty: fallbackQty });
                 continue;
             } catch (fallbackError) {
               console.error(
