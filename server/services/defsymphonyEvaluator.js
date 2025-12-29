@@ -1281,7 +1281,7 @@ const evaluateDefsymphonyStrategy = async ({
   const rsiWindow = Math.max(0, Number(astStats.maxRsiWindow) || 0);
   const rsiHistoryBuffer = rsiWindow ? 250 : 0;
 
-  const normalizedAsOfDate = normalizeAsOfDate(asOfDate);
+  const resolvedAsOfDate = normalizeAsOfDate(asOfDate) || now();
   const resolvedRsiMethod = normalizeRsiMethod(rsiMethod) || getRsiMethod();
   const resolvedAdjustment = normalizeAdjustment(dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT);
 
@@ -1299,7 +1299,7 @@ const evaluateDefsymphonyStrategy = async ({
     tickers,
     calendarLookbackDays,
     {
-      asOfDate: normalizedAsOfDate,
+      asOfDate: resolvedAsOfDate,
       dataAdjustment: resolvedAdjustment,
     }
   );
@@ -1307,7 +1307,7 @@ const evaluateDefsymphonyStrategy = async ({
   if (!usableHistory) {
     throw new Error('Unable to align price history for the requested lookback window.');
   }
-  const asOfLabel = normalizedAsOfDate ? `, as of ${formatDateForLog(normalizedAsOfDate)}` : '';
+  const asOfLabel = `, as of ${formatDateForLog(resolvedAsOfDate)}`;
   const context = {
     priceData,
     missingSymbols: new Map(),
@@ -1315,7 +1315,7 @@ const evaluateDefsymphonyStrategy = async ({
     enableGroupMetrics: false,
     debugIndicators: ENABLE_INDICATOR_DEBUG,
     rsiMethod: resolvedRsiMethod,
-    asOfDate: normalizedAsOfDate,
+    asOfDate: resolvedAsOfDate,
     dataAdjustment: resolvedAdjustment,
     reasoning: [
       `Step 1: Loaded ${priceData.size} of ${tickers.length} tickers from local Alpaca cache (calendar lookback ${calendarLookbackDays} days, usable ${usableHistory} bars${asOfLabel}).`,
@@ -1424,9 +1424,7 @@ const evaluateDefsymphonyStrategy = async ({
     `Local defsymphony evaluation completed with ${withPricing.length} positions.`,
     `Budget allocated: $${budget.toFixed(2)}.`,
   ];
-  if (normalizedAsOfDate) {
-    summaryLines.push(`As-of date: ${formatDateForLog(normalizedAsOfDate)}.`);
-  }
+  summaryLines.push(`As-of date: ${formatDateForLog(resolvedAsOfDate)}.`);
   const missingCount = context.missingSymbols?.size || 0;
   if (missingCount) {
     summaryLines.push(
@@ -1454,7 +1452,7 @@ const evaluateDefsymphonyStrategy = async ({
         historyLength: usableHistory,
         groupSimulation: Boolean(context.enableGroupMetrics),
         groupSeriesMeta: context.groupSeriesMeta || null,
-        asOfDate: normalizedAsOfDate ? normalizedAsOfDate.toISOString() : null,
+        asOfDate: resolvedAsOfDate.toISOString(),
         rsiMethod: resolvedRsiMethod,
         dataAdjustment: resolvedAdjustment,
         missingData: context.missingSymbols
