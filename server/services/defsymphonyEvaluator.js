@@ -464,6 +464,68 @@ const normalizeAsOfDate = (value) => {
   return date;
 };
 
+const normalizeDateKeyInput = (value) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return /^\d{4}-\d{2}-\d{2}$/.test(trimmed) ? trimmed : null;
+};
+
+const formatDateKeyInTimeZone = (value, timeZone) => {
+  try {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  } catch (error) {
+    return null;
+  }
+};
+
+const getTimePartsInTimeZone = (value, timeZone) => {
+  try {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+    }).formatToParts(date);
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+    const minute = Number(parts.find((part) => part.type === 'minute')?.value);
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+      return null;
+    }
+    return { hour, minute };
+  } catch (error) {
+    return null;
+  }
+};
+
+const isAfterUsMarketClose = (date, { dateKeyOverride } = {}) => {
+  if (dateKeyOverride) {
+    return true;
+  }
+  const parts = getTimePartsInTimeZone(date, 'America/New_York');
+  if (!parts) {
+    return false;
+  }
+  return parts.hour > 16 || (parts.hour === 16 && parts.minute >= 0);
+};
+
 const formatDateForLog = (value) => {
   try {
     const date = value instanceof Date ? value : new Date(value);
@@ -1594,7 +1656,10 @@ const loadPriceData = async (
     Math.max(1, Number(calendarLookbackDays) || DEFAULT_LOOKBACK_BARS),
     MAX_CALENDAR_LOOKBACK_DAYS
   );
-  const asOfDate = normalizeAsOfDate(options.asOfDate) || now();
+  const asOfDateKeyOverride = normalizeDateKeyInput(options.asOfDate);
+  const asOfDate = asOfDateKeyOverride
+    ? new Date(`${asOfDateKeyOverride}T23:59:59.999Z`)
+    : normalizeAsOfDate(options.asOfDate) || now();
   const start = new Date(asOfDate.getTime() - boundedLookback * 24 * 60 * 60 * 1000);
   const end = asOfDate;
   const adjustment = options.dataAdjustment;
@@ -1619,10 +1684,20 @@ const loadPriceData = async (
       });
       let bars = response.bars || [];
       if (asOfMode === 'previous-close' && bars.length > 1) {
-        const asOfKey = toISODateKey(asOfDate);
+        const asOfDayKey =
+          formatDateKeyInTimeZone(asOfDate, 'America/New_York') ||
+          (asOfDateKeyOverride ? asOfDateKeyOverride : null) ||
+          toISODateKey(asOfDate);
         const lastBar = bars[bars.length - 1];
-        const lastKey = lastBar?.t ? toISODateKey(lastBar.t) : null;
-        if (asOfKey && lastKey && lastKey === asOfKey) {
+        const lastDayKey = lastBar?.t
+          ? formatDateKeyInTimeZone(lastBar.t, 'America/New_York') || toISODateKey(lastBar.t)
+          : null;
+        const shouldDropIntradayBar =
+          asOfDayKey &&
+          lastDayKey &&
+          lastDayKey === asOfDayKey &&
+          !isAfterUsMarketClose(asOfDate, { dateKeyOverride: asOfDateKeyOverride });
+        if (shouldDropIntradayBar) {
           bars = bars.slice(0, -1);
         }
       }
