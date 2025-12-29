@@ -415,6 +415,14 @@ const normalizePriceRefresh = (value) => {
   return null;
 };
 
+const normalizeAppendLivePrice = (value) => {
+  const normalized = normalizeBoolean(value);
+  if (normalized !== null) {
+    return normalized;
+  }
+  return null;
+};
+
 const runWithConcurrency = async (items, limit, handler) => {
   const queue = [...items];
   const workerCount = Math.max(1, Math.min(limit, queue.length));
@@ -1464,6 +1472,10 @@ const loadPriceData = async (
   const end = asOfDate;
   const adjustment = options.dataAdjustment;
   const asOfMode = normalizeAsOfMode(options.asOfMode) || 'previous-close';
+  const appendLivePrice =
+    normalizeAppendLivePrice(options.appendLivePrice ?? process.env.COMPOSER_APPEND_LIVE_PRICE) ??
+    asOfMode === 'current' ||
+    asOfMode === 'previous-close';
   const priceSource = normalizePriceSource(options.priceSource);
   const forceRefresh = normalizePriceRefresh(options.forceRefresh);
   const map = new Map();
@@ -1480,7 +1492,10 @@ const loadPriceData = async (
         forceRefresh,
       });
       let bars = response.bars || [];
-      if (asOfMode === 'current') {
+      if (asOfMode === 'previous-close' && bars.length > 1) {
+        bars = bars.slice(0, -1);
+      }
+      if (appendLivePrice) {
         const livePrice = await fetchLatestPrice({ symbol: upper, source: priceSource });
         if (Number.isFinite(livePrice) && livePrice > 0) {
           const todayKey = toISODateKey(new Date());
@@ -1515,9 +1530,6 @@ const loadPriceData = async (
             ];
           }
         }
-      }
-      if (asOfMode === 'previous-close' && bars.length > 1) {
-        bars = bars.slice(0, -1);
       }
       const closes = bars.map((bar) => Number(bar.c));
       if (!closes.length) {
@@ -1787,6 +1799,7 @@ const evaluateDefsymphonyStrategy = async ({
         dataAdjustment: resolvedAdjustment,
         debugIndicators: resolvedDebugIndicators,
         asOfMode: resolvedDataAsOfMode || resolvedAsOfMode,
+        appendLivePrice,
         priceSource: resolvedPriceSource,
         priceRefresh: resolvedPriceRefresh,
         missingData: context.missingSymbols
