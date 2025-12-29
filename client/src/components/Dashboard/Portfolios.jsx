@@ -1,5 +1,5 @@
 import React, { useContext, useState } from "react";
-import { Link, Collapse, IconButton, Modal, Button, Typography, useTheme, LinearProgress, Box, TextField, MenuItem, CircularProgress, Tooltip } from "@mui/material";
+import { Link, Collapse, IconButton, Modal, Button, Typography, useTheme, LinearProgress, Box, TextField, MenuItem, CircularProgress, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Divider } from "@mui/material";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -17,6 +17,7 @@ import EditCalendarIcon from '@mui/icons-material/EditCalendar';
 import { useNavigate } from "react-router-dom";
 import { logError } from "../../utils/logger";
 import StrategyEquityChart from "./StrategyEquityChart";
+import LineChartPort from "../Template/LineChartPort.jsx";
 
 
 
@@ -38,6 +39,15 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
   const [resendOpen, setResendOpen] = useState(false);
   const [strategyToResend, setStrategyToResend] = useState(null);
   const [scheduleEditor, setScheduleEditor] = useState(() => createScheduleEditorState());
+  const [strategyTextCache, setStrategyTextCache] = useState({});
+  const [backtestOpen, setBacktestOpen] = useState(false);
+  const [backtestPortfolio, setBacktestPortfolio] = useState(null);
+  const [backtestStartDate, setBacktestStartDate] = useState("");
+  const [backtestEndDate, setBacktestEndDate] = useState("");
+  const [backtestCostBps, setBacktestCostBps] = useState("0");
+  const [backtestLoading, setBacktestLoading] = useState(false);
+  const [backtestResult, setBacktestResult] = useState(null);
+  const [backtestError, setBacktestError] = useState(null);
 
 
 
@@ -56,6 +66,138 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
       return '—';
     }
     return `$${roundNumber(numeric).toLocaleString()}`;
+  };
+
+  const toISODateInput = (value) => {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+    return date.toISOString().slice(0, 10);
+  };
+
+  const formatPct = (value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      return "—";
+    }
+    return `${(num * 100).toFixed(1)}%`;
+  };
+
+  const formatNumber = (value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      return "—";
+    }
+    return num.toFixed(3);
+  };
+
+  const fetchStrategyText = async (strategyId) => {
+    if (!strategyId) {
+      return null;
+    }
+    if (Object.prototype.hasOwnProperty.call(strategyTextCache, strategyId)) {
+      return strategyTextCache[strategyId];
+    }
+    if (!userData?.user?.id || !userData?.token) {
+      return null;
+    }
+    try {
+      const url = `${config.base_url}/api/strategies/all/${userData.user.id}`;
+      const headers = { "x-auth-token": userData.token };
+      const response = await Axios.get(url, { headers });
+      const strategies = Array.isArray(response.data?.strategies) ? response.data.strategies : [];
+      const match = strategies.find((entry) => String(entry.id) === String(strategyId));
+      const strategyText = match?.strategy || null;
+      setStrategyTextCache((prev) => ({ ...prev, [strategyId]: strategyText }));
+      return strategyText;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  const openBacktestDialog = async (portfolio, event) => {
+    if (event?.stopPropagation) {
+      event.stopPropagation();
+    }
+    if (!portfolio) {
+      return;
+    }
+    setBacktestError(null);
+    setBacktestResult(null);
+    setBacktestPortfolio(portfolio);
+    const today = new Date();
+    const oneYearAgo = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
+    setBacktestStartDate(toISODateInput(oneYearAgo));
+    setBacktestEndDate(toISODateInput(today));
+    setBacktestOpen(true);
+  };
+
+  const closeBacktestDialog = () => {
+    if (backtestLoading) {
+      return;
+    }
+    setBacktestOpen(false);
+    setBacktestPortfolio(null);
+  };
+
+  const runBacktest = async () => {
+    if (!backtestPortfolio) {
+      setBacktestError("No strategy selected.");
+      return;
+    }
+    if (!backtestStartDate || !backtestEndDate) {
+      setBacktestError("Please select a start and end date.");
+      return;
+    }
+    if (!userData?.user?.id) {
+      setBacktestError("You must be logged in to run a backtest.");
+      return;
+    }
+
+    setBacktestLoading(true);
+    setBacktestError(null);
+    setBacktestResult(null);
+
+    try {
+      const strategyText = await fetchStrategyText(backtestPortfolio.strategy_id);
+      if (!strategyText || typeof strategyText !== "string" || !strategyText.trim()) {
+        throw new Error("Unable to load this strategy script for backtesting.");
+      }
+      const headers = {};
+      if (userData?.token) {
+        headers["x-auth-token"] = userData.token;
+      }
+      const initialCapital =
+        Number(backtestPortfolio.cashLimit) > 0
+          ? Number(backtestPortfolio.cashLimit)
+          : Number(backtestPortfolio.budget) > 0
+            ? Number(backtestPortfolio.budget)
+            : Number(backtestPortfolio.initialInvestment) > 0
+              ? Number(backtestPortfolio.initialInvestment)
+              : 10000;
+
+      const payload = {
+        strategyText,
+        startDate: backtestStartDate,
+        endDate: backtestEndDate,
+        initialCapital,
+        transactionCostBps: Number(backtestCostBps) || 0,
+        includeBenchmark: true,
+        benchmarkSymbol: "SPY",
+      };
+
+      const response = await Axios.post(`${config.base_url}/api/data/composer/backtest-local`, payload, { headers });
+      if (response.status === 200 && response.data?.status === "success") {
+        setBacktestResult(response.data.data);
+      } else {
+        setBacktestError(response.data?.message || "Backtest failed.");
+      }
+    } catch (error) {
+      setBacktestError(error?.response?.data?.message || error.message || "Backtest failed.");
+    } finally {
+      setBacktestLoading(false);
+    }
   };
 
   const openSaleModal = (stock) => {
@@ -406,6 +548,14 @@ const deleteStrategy = async (strategyId) => {
                   size="small"
                   variant="outlined"
                   sx={{ ml: 1 }}
+                  onClick={(event) => openBacktestDialog(portfolio, event)}
+                >
+                  Backtest
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  sx={{ ml: 1 }}
                   onClick={(event) => openResendModal(portfolio, event)}
                   disabled={!!resendStatus[portfolio.strategy_id]?.loading}
                 >
@@ -746,6 +896,100 @@ const deleteStrategy = async (strategyId) => {
           </Box>
         </Box>
       </Modal>
+
+      <Dialog open={backtestOpen} onClose={closeBacktestDialog} fullWidth maxWidth="md">
+        <DialogTitle>Backtest: {backtestPortfolio?.name || "Strategy"}</DialogTitle>
+        <DialogContent>
+          <Box display="flex" gap={2} flexWrap="wrap" mt={1}>
+            <TextField
+              label="Start date"
+              type="date"
+              value={backtestStartDate}
+              onChange={(e) => setBacktestStartDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              disabled={backtestLoading}
+            />
+            <TextField
+              label="End date"
+              type="date"
+              value={backtestEndDate}
+              onChange={(e) => setBacktestEndDate(e.target.value)}
+              InputLabelProps={{ shrink: true }}
+              disabled={backtestLoading}
+            />
+            <TextField
+              label="Transaction cost (bps)"
+              type="number"
+              value={backtestCostBps}
+              onChange={(e) => setBacktestCostBps(e.target.value)}
+              inputProps={{ min: 0, step: 1 }}
+              disabled={backtestLoading}
+            />
+          </Box>
+
+          {backtestError && (
+            <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+              {backtestError}
+            </Typography>
+          )}
+
+          <Box sx={{ mt: 2, minHeight: 260, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {backtestLoading ? (
+              <CircularProgress size={22} />
+            ) : backtestResult?.series?.length ? (
+              <Box sx={{ width: "100%" }}>
+                <LineChartPort
+                  pastDataPeriod={{
+                    history: backtestResult.series.map((point) => ({
+                      timestamp: `${point.date}T00:00:00.000Z`,
+                      equity: point.value,
+                    })),
+                  }}
+                  duration="backtest"
+                />
+              </Box>
+            ) : (
+              <Typography variant="body2" color="textSecondary">
+                Run a backtest to see the equity curve.
+              </Typography>
+            )}
+          </Box>
+
+          {backtestResult?.metrics && (
+            <>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2">Key metrics</Typography>
+              <Typography variant="body2">CAGR: {formatPct(backtestResult.metrics.cagr)}</Typography>
+              <Typography variant="body2">Total return: {formatPct(backtestResult.metrics.totalReturn)}</Typography>
+              <Typography variant="body2">Max drawdown: {formatPct(backtestResult.metrics.maxDrawdown)}</Typography>
+              <Typography variant="body2">Volatility: {formatNumber(backtestResult.metrics.volatility)}</Typography>
+              <Typography variant="body2">Sharpe: {formatNumber(backtestResult.metrics.sharpe)}</Typography>
+              <Typography variant="body2">Avg turnover: {formatPct(backtestResult.metrics.avgTurnover)}</Typography>
+              {backtestResult.benchmark?.metrics && (
+                <>
+                  <Divider sx={{ my: 2 }} />
+                  <Typography variant="subtitle2">Benchmark ({backtestResult.benchmark.symbol})</Typography>
+                  <Typography variant="body2">CAGR: {formatPct(backtestResult.benchmark.metrics.cagr)}</Typography>
+                  <Typography variant="body2">
+                    Total return: {formatPct(backtestResult.benchmark.metrics.totalReturn)}
+                  </Typography>
+                  <Typography variant="body2">
+                    Max drawdown: {formatPct(backtestResult.benchmark.metrics.maxDrawdown)}
+                  </Typography>
+                </>
+              )}
+            </>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeBacktestDialog} disabled={backtestLoading}>
+            Close
+          </Button>
+          <Button onClick={runBacktest} variant="contained" disabled={backtestLoading || !backtestPortfolio}>
+            Run backtest
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {saleOpen && stock && (
         <SaleModal setSaleOpen={setSaleOpen} stock={stock} />
