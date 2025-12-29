@@ -388,6 +388,17 @@ const normalizeAsOfMode = (value) => {
   return null;
 };
 
+const normalizePriceSource = (value) => {
+  if (!value) {
+    return null;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (normalized === 'yahoo' || normalized === 'alpaca') {
+    return normalized;
+  }
+  return null;
+};
+
 const isArray = Array.isArray;
 const isObj = (val) => val && typeof val === 'object' && !Array.isArray(val);
 
@@ -1259,6 +1270,7 @@ const loadPriceData = async (
   const end = asOfDate;
   const adjustment = options.dataAdjustment;
   const asOfMode = normalizeAsOfMode(options.asOfMode) || 'previous-close';
+  const priceSource = normalizePriceSource(options.priceSource);
   const map = new Map();
   const missing = [];
   await Promise.all(
@@ -1270,6 +1282,7 @@ const loadPriceData = async (
           startDate: start,
           endDate: end,
           adjustment,
+          source: priceSource,
         });
         let bars = response.bars || [];
         if (asOfMode === 'previous-close' && bars.length > 1) {
@@ -1321,6 +1334,7 @@ const evaluateDefsymphonyStrategy = async ({
   dataAdjustment = null,
   debugIndicators = null,
   asOfMode = null,
+  priceSource = null,
 }) => {
   const ast = parseComposerScript(strategyText);
   if (!ast) {
@@ -1345,6 +1359,8 @@ const evaluateDefsymphonyStrategy = async ({
   );
   const resolvedAsOfMode =
     normalizeAsOfMode(asOfMode) || normalizeAsOfMode(process.env.COMPOSER_ASOF_MODE) || 'previous-close';
+  const resolvedPriceSource =
+    normalizePriceSource(priceSource) || normalizePriceSource(process.env.PRICE_DATA_SOURCE) || 'yahoo';
   const resolvedDebugIndicators =
     normalizeBoolean(debugIndicators) ?? ENABLE_INDICATOR_DEBUG;
 
@@ -1370,6 +1386,7 @@ const evaluateDefsymphonyStrategy = async ({
       asOfDate: resolvedAsOfDate,
       dataAdjustment: resolvedAdjustment,
       asOfMode: resolvedAsOfMode,
+      priceSource: resolvedPriceSource,
     }
   );
   const effectiveAsOfDate = dataAsOfDate || resolvedAsOfDate;
@@ -1388,7 +1405,7 @@ const evaluateDefsymphonyStrategy = async ({
     asOfDate: effectiveAsOfDate,
     dataAdjustment: resolvedAdjustment,
     reasoning: [
-      `Step 1: Loaded ${priceData.size} of ${tickers.length} tickers from local Alpaca cache (calendar lookback ${calendarLookbackDays} days, usable ${usableHistory} bars${asOfLabel}).`,
+      `Step 1: Loaded ${priceData.size} of ${tickers.length} tickers from local price cache (source ${resolvedPriceSource}, calendar lookback ${calendarLookbackDays} days, usable ${usableHistory} bars${asOfLabel}).`,
     ],
   };
   if (missingFromCache.length) {
@@ -1527,6 +1544,7 @@ const evaluateDefsymphonyStrategy = async ({
         dataAdjustment: resolvedAdjustment,
         debugIndicators: resolvedDebugIndicators,
         asOfMode: resolvedDataAsOfMode || resolvedAsOfMode,
+        priceSource: resolvedPriceSource,
         missingData: context.missingSymbols
           ? Array.from(context.missingSymbols.entries()).map(([symbol, reason]) => ({ symbol, reason }))
           : [],

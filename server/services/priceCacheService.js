@@ -201,7 +201,16 @@ const fetchBarsFromYahoo = async ({ symbol, start, end, adjustment }) => {
   return [];
 };
 
-const fetchBarsWithFallback = async ({ symbol, start, end, adjustment }) => {
+const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source }) => {
+  const normalizedSource = String(source ?? '').trim().toLowerCase();
+  if (normalizedSource === 'yahoo') {
+    const yahooBars = await fetchBarsFromYahoo({ symbol, start, end, adjustment });
+    return { bars: yahooBars, dataSource: 'yahoo' };
+  }
+  if (normalizedSource === 'alpaca') {
+    const alpacaBars = await fetchBarsFromAlpaca({ symbol, start, end, adjustment });
+    return { bars: alpacaBars, dataSource: 'alpaca' };
+  }
   try {
     const alpacaBars = await fetchBarsFromAlpaca({ symbol, start, end, adjustment });
     if (alpacaBars.length) {
@@ -223,19 +232,24 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment }) => {
   throw new Error(`No market data returned for ${symbol}.`);
 };
 
-const getCachedPrices = async ({ symbol, startDate, endDate, adjustment }) => {
+const getCachedPrices = async ({ symbol, startDate, endDate, adjustment, source }) => {
   const uppercaseSymbol = symbol?.toUpperCase?.();
   if (!uppercaseSymbol) {
     throw new Error('Symbol is required.');
   }
   const { start, end } = normalizeDateRange(startDate, endDate);
   const resolvedAdjustment = normalizeAdjustment(adjustment ?? process.env.ALPACA_DATA_ADJUSTMENT);
+  const resolvedSource = String(source ?? process.env.PRICE_DATA_SOURCE ?? '').trim().toLowerCase();
 
   const baseQuery = { symbol: uppercaseSymbol, granularity: '1Day' };
+  const sourceQuery =
+    resolvedSource === 'yahoo' || resolvedSource === 'alpaca'
+      ? { dataSource: resolvedSource }
+      : {};
   const cacheQuery =
     resolvedAdjustment === 'raw'
-      ? { ...baseQuery, $or: [{ adjustment: 'raw' }, { adjustment: { $exists: false } }] }
-      : { ...baseQuery, adjustment: resolvedAdjustment };
+      ? { ...baseQuery, ...sourceQuery, $or: [{ adjustment: 'raw' }, { adjustment: { $exists: false } }] }
+      : { ...baseQuery, ...sourceQuery, adjustment: resolvedAdjustment };
 
   let cache = await PriceCache.findOne(cacheQuery);
   const isFresh =
@@ -250,6 +264,7 @@ const getCachedPrices = async ({ symbol, startDate, endDate, adjustment }) => {
       start,
       end,
       adjustment: resolvedAdjustment,
+      source: resolvedSource,
     });
     cache = await PriceCache.findOneAndUpdate(
       cacheQuery,
@@ -290,4 +305,5 @@ const getCachedPrices = async ({ symbol, startDate, endDate, adjustment }) => {
 module.exports = {
   getCachedPrices,
   normalizeAdjustment,
+  fetchBarsFromYahoo,
 };

@@ -253,6 +253,7 @@ exports.evaluateComposerStrategy = async (req, res) => {
       dataAdjustment,
       debugIndicators,
       asOfMode,
+      priceSource,
     } = req.body || {};
     if (!strategyText || typeof strategyText !== 'string' || !strategyText.trim()) {
       return res.status(400).json({
@@ -271,6 +272,7 @@ exports.evaluateComposerStrategy = async (req, res) => {
       dataAdjustment,
       debugIndicators,
       asOfMode,
+      priceSource,
     });
 
     if (!composerResult || !Array.isArray(composerResult.positions) || !composerResult.positions.length) {
@@ -305,6 +307,7 @@ exports.evaluateComposerStrategyLocal = async (req, res) => {
       dataAdjustment,
       debugIndicators,
       asOfMode,
+      priceSource,
     } = req.body || {};
     if (!strategyText || typeof strategyText !== 'string' || !strategyText.trim()) {
       return res.status(400).json({
@@ -331,6 +334,7 @@ exports.evaluateComposerStrategyLocal = async (req, res) => {
         dataAdjustment: dataAdjustment || null,
         debugIndicators: debugIndicators ?? null,
         asOfMode: asOfMode || null,
+        priceSource: priceSource || null,
       },
       handler: () =>
         evaluateDefsymphonyStrategy({
@@ -341,6 +345,7 @@ exports.evaluateComposerStrategyLocal = async (req, res) => {
           dataAdjustment,
           debugIndicators,
           asOfMode,
+          priceSource,
         }),
     });
 
