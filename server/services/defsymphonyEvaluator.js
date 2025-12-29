@@ -1282,8 +1282,11 @@ const evaluateDefsymphonyStrategy = async ({
   const rsiHistoryBuffer = rsiWindow ? 250 : 0;
 
   const resolvedAsOfDate = normalizeAsOfDate(asOfDate) || now();
-  const resolvedRsiMethod = normalizeRsiMethod(rsiMethod) || getRsiMethod();
-  const resolvedAdjustment = normalizeAdjustment(dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT);
+  const resolvedRsiMethod =
+    normalizeRsiMethod(rsiMethod) || normalizeRsiMethod(process.env.RSI_METHOD) || 'simple';
+  const resolvedAdjustment = normalizeAdjustment(
+    dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT ?? 'raw'
+  );
 
   const requiredBars = Math.max(
     DEFAULT_LOOKBACK_BARS,
