@@ -223,19 +223,19 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment }) => {
   throw new Error(`No market data returned for ${symbol}.`);
 };
 
-const getCachedPrices = async ({ symbol, startDate, endDate }) => {
+const getCachedPrices = async ({ symbol, startDate, endDate, adjustment }) => {
   const uppercaseSymbol = symbol?.toUpperCase?.();
   if (!uppercaseSymbol) {
     throw new Error('Symbol is required.');
   }
   const { start, end } = normalizeDateRange(startDate, endDate);
-  const adjustment = normalizeAdjustment(process.env.ALPACA_DATA_ADJUSTMENT);
+  const resolvedAdjustment = normalizeAdjustment(adjustment ?? process.env.ALPACA_DATA_ADJUSTMENT);
 
   const baseQuery = { symbol: uppercaseSymbol, granularity: '1Day' };
   const cacheQuery =
-    adjustment === 'raw'
+    resolvedAdjustment === 'raw'
       ? { ...baseQuery, $or: [{ adjustment: 'raw' }, { adjustment: { $exists: false } }] }
-      : { ...baseQuery, adjustment };
+      : { ...baseQuery, adjustment: resolvedAdjustment };
 
   let cache = await PriceCache.findOne(cacheQuery);
   const isFresh =
@@ -249,7 +249,7 @@ const getCachedPrices = async ({ symbol, startDate, endDate }) => {
       symbol: uppercaseSymbol,
       start,
       end,
-      adjustment,
+      adjustment: resolvedAdjustment,
     });
     cache = await PriceCache.findOneAndUpdate(
       cacheQuery,
@@ -259,7 +259,7 @@ const getCachedPrices = async ({ symbol, startDate, endDate }) => {
         end: bars[bars.length - 1].t,
         bars,
         granularity: '1Day',
-        adjustment,
+        adjustment: resolvedAdjustment,
         refreshedAt: new Date(),
         dataSource,
       },
@@ -289,4 +289,5 @@ const getCachedPrices = async ({ symbol, startDate, endDate }) => {
 
 module.exports = {
   getCachedPrices,
+  normalizeAdjustment,
 };

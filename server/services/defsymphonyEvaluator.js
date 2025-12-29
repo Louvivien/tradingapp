@@ -6,7 +6,7 @@ const {
   describeSelectionNode,
   describeCondition,
 } = require('../utils/composerDslParser');
-const { getCachedPrices } = require('./priceCacheService');
+const { getCachedPrices, normalizeAdjustment } = require('./priceCacheService');
 
 const DEFAULT_LOOKBACK_BARS = 250;
 const MAX_CALENDAR_LOOKBACK_DAYS = 750;
@@ -325,6 +325,37 @@ const toISODate = (value) => {
 };
 
 const now = () => new Date();
+
+const normalizeAsOfDate = (value) => {
+  if (!value) {
+    return null;
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date;
+};
+
+const formatDateForLog = (value) => {
+  try {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return String(value);
+    }
+    return date.toISOString().split('T')[0];
+  } catch (error) {
+    return String(value);
+  }
+};
+
+const normalizeRsiMethod = (value) => {
+  if (value == null) {
+    return null;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  return normalized || null;
+};
 
 const isArray = Array.isArray;
 const isObj = (val) => val && typeof val === 'object' && !Array.isArray(val);
@@ -713,7 +744,8 @@ const evaluateExpression = (node, ctx) => {
         return null;
       }
       const closes = getSeriesValuesForContext(series, ctx);
-      return computeRSI(closes, window);
+      const method = ctx?.rsiMethod || getRsiMethod();
+      return computeRSI(closes, window, method);
     }
     case 'moving-average-price': {
       const symbolNode = node[1];
@@ -1182,13 +1214,19 @@ const normalizePositions = (positions = []) => {
   }));
 };
 
-const loadPriceData = async (symbols = [], calendarLookbackDays = DEFAULT_LOOKBACK_BARS) => {
+const loadPriceData = async (
+  symbols = [],
+  calendarLookbackDays = DEFAULT_LOOKBACK_BARS,
+  options = {}
+) => {
   const boundedLookback = Math.min(
     Math.max(1, Number(calendarLookbackDays) || DEFAULT_LOOKBACK_BARS),
     MAX_CALENDAR_LOOKBACK_DAYS
   );
-  const start = new Date(now().getTime() - boundedLookback * 24 * 60 * 60 * 1000);
-  const end = now();
+  const asOfDate = normalizeAsOfDate(options.asOfDate) || now();
+  const start = new Date(asOfDate.getTime() - boundedLookback * 24 * 60 * 60 * 1000);
+  const end = asOfDate;
+  const adjustment = options.dataAdjustment;
   const map = new Map();
   const missing = [];
   await Promise.all(
@@ -1199,6 +1237,7 @@ const loadPriceData = async (symbols = [], calendarLookbackDays = DEFAULT_LOOKBA
           symbol: upper,
           startDate: start,
           endDate: end,
+          adjustment,
         });
         const closes = (response.bars || []).map((bar) => Number(bar.c));
         if (!closes.length) {
@@ -1220,7 +1259,13 @@ const loadPriceData = async (symbols = [], calendarLookbackDays = DEFAULT_LOOKBA
   return { map, missing };
 };
 
-const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
+const evaluateDefsymphonyStrategy = async ({
+  strategyText,
+  budget = 1000,
+  asOfDate = null,
+  rsiMethod = null,
+  dataAdjustment = null,
+}) => {
   const ast = parseComposerScript(strategyText);
   if (!ast) {
     throw new Error('Failed to parse defsymphony script.');
@@ -1236,6 +1281,10 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
   const rsiWindow = Math.max(0, Number(astStats.maxRsiWindow) || 0);
   const rsiHistoryBuffer = rsiWindow ? 250 : 0;
 
+  const normalizedAsOfDate = normalizeAsOfDate(asOfDate);
+  const resolvedRsiMethod = normalizeRsiMethod(rsiMethod) || getRsiMethod();
+  const resolvedAdjustment = normalizeAdjustment(dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT);
+
   const requiredBars = Math.max(
     DEFAULT_LOOKBACK_BARS,
     Math.max(0, Number(astStats.maxWindow) || 0) + 5,
@@ -1246,19 +1295,30 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
     Math.ceil((requiredBars * CALENDAR_DAYS_PER_YEAR) / TRADING_DAYS_PER_YEAR) + 7
   );
 
-  const { map: priceData, missing: missingFromCache } = await loadPriceData(tickers, calendarLookbackDays);
+  const { map: priceData, missing: missingFromCache } = await loadPriceData(
+    tickers,
+    calendarLookbackDays,
+    {
+      asOfDate: normalizedAsOfDate,
+      dataAdjustment: resolvedAdjustment,
+    }
+  );
   const usableHistory = alignPriceHistory(priceData, requiredBars);
   if (!usableHistory) {
     throw new Error('Unable to align price history for the requested lookback window.');
   }
+  const asOfLabel = normalizedAsOfDate ? `, as of ${formatDateForLog(normalizedAsOfDate)}` : '';
   const context = {
     priceData,
     missingSymbols: new Map(),
     nodeIdMap,
     enableGroupMetrics: false,
     debugIndicators: ENABLE_INDICATOR_DEBUG,
+    rsiMethod: resolvedRsiMethod,
+    asOfDate: normalizedAsOfDate,
+    dataAdjustment: resolvedAdjustment,
     reasoning: [
-      `Step 1: Loaded ${priceData.size} of ${tickers.length} tickers from local Alpaca cache (calendar lookback ${calendarLookbackDays} days, usable ${usableHistory} bars).`,
+      `Step 1: Loaded ${priceData.size} of ${tickers.length} tickers from local Alpaca cache (calendar lookback ${calendarLookbackDays} days, usable ${usableHistory} bars${asOfLabel}).`,
     ],
   };
   if (missingFromCache.length) {
@@ -1364,6 +1424,9 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
     `Local defsymphony evaluation completed with ${withPricing.length} positions.`,
     `Budget allocated: $${budget.toFixed(2)}.`,
   ];
+  if (normalizedAsOfDate) {
+    summaryLines.push(`As-of date: ${formatDateForLog(normalizedAsOfDate)}.`);
+  }
   const missingCount = context.missingSymbols?.size || 0;
   if (missingCount) {
     summaryLines.push(
@@ -1391,6 +1454,9 @@ const evaluateDefsymphonyStrategy = async ({ strategyText, budget = 1000 }) => {
         historyLength: usableHistory,
         groupSimulation: Boolean(context.enableGroupMetrics),
         groupSeriesMeta: context.groupSeriesMeta || null,
+        asOfDate: normalizedAsOfDate ? normalizedAsOfDate.toISOString() : null,
+        rsiMethod: resolvedRsiMethod,
+        dataAdjustment: resolvedAdjustment,
         missingData: context.missingSymbols
           ? Array.from(context.missingSymbols.entries()).map(([symbol, reason]) => ({ symbol, reason }))
           : [],

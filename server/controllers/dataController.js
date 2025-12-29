@@ -283,7 +283,7 @@ exports.evaluateComposerStrategy = async (req, res) => {
 
 exports.evaluateComposerStrategyLocal = async (req, res) => {
   try {
-    const { strategyText, budget, clientRequestId } = req.body || {};
+    const { strategyText, budget, clientRequestId, asOfDate, rsiMethod, dataAdjustment } = req.body || {};
     if (!strategyText || typeof strategyText !== 'string' || !strategyText.trim()) {
       return res.status(400).json({
         status: 'fail',
@@ -304,11 +304,17 @@ exports.evaluateComposerStrategyLocal = async (req, res) => {
         hasGroup: summary.hasGroup,
         budget: parsedBudget,
         clientRequestId: clientRequestId || null,
+        asOfDate: asOfDate || null,
+        rsiMethod: rsiMethod || null,
+        dataAdjustment: dataAdjustment || null,
       },
       handler: () =>
         evaluateDefsymphonyStrategy({
           strategyText,
           budget: parsedBudget,
+          asOfDate,
+          rsiMethod,
+          dataAdjustment,
         }),
     });
 
