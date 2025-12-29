@@ -71,6 +71,35 @@ const portfolioSchema = new Schema({
     }],
     default: [],
   },
+  composerHoldings: {
+    type: [{
+      symbol: {
+        type: String,
+        required: true,
+      },
+      quantity: {
+        type: Number,
+        default: null,
+      },
+      value: {
+        type: Number,
+        default: null,
+      },
+      weight: {
+        type: Number,
+        default: null,
+      },
+    }],
+    default: [],
+  },
+  composerHoldingsUpdatedAt: {
+    type: Date,
+    default: null,
+  },
+  composerHoldingsSource: {
+    type: String,
+    default: null,
+  },
   stocks: {
     type: [{
       symbol: {

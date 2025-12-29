@@ -128,6 +128,17 @@ const formatPercentage = (value) => {
   return `${value.toFixed(1)}%`;
 };
 
+const formatQuantity = (value) => {
+  const num = toNumber(value, null);
+  if (!Number.isFinite(num)) {
+    return null;
+  }
+  if (isEffectivelyInteger(num)) {
+    return `${Math.round(num)}`;
+  }
+  return num.toFixed(FRACTIONAL_QTY_DECIMALS).replace(/\.?0+$/, '');
+};
+
 const formatDateTimeHuman = (value) => {
   if (!value) {
     return '—';
@@ -437,6 +448,7 @@ const buildRebalanceHumanSummary = ({
   holds = [],
   reasoning = [],
   tooling = null,
+  reconciliation = null,
 }) => {
   const lines = [];
   lines.push(`Rebalance completed for "${strategyName}".`);
@@ -566,7 +578,188 @@ const buildRebalanceHumanSummary = ({
     lines.push(`• Cash buffer now ${formatCurrency(cashBuffer)}.`);
   }
 
+  if (reconciliation?.summary) {
+    const { matched = 0, mismatched = 0, total = 0, tolerance } = reconciliation.summary;
+    lines.push('');
+    lines.push('Reconciliation:');
+    lines.push(`• Targets aligned within tolerance: ${matched}/${total} (tolerance ${formatQuantity(tolerance)} shares).`);
+    if (mismatched > 0) {
+      const preview = Array.isArray(reconciliation.mismatches)
+        ? reconciliation.mismatches.slice(0, 3)
+        : [];
+      if (preview.length) {
+        preview.forEach((entry) => {
+          const targetWeight = Number.isFinite(entry.targetWeight)
+            ? formatPercentage(entry.targetWeight * 100)
+            : null;
+          const actualWeight = Number.isFinite(entry.actualWeight)
+            ? formatPercentage(entry.actualWeight * 100)
+            : null;
+          const qtyDiff = formatQuantity(entry.qtyDiff);
+          const weightLabel = targetWeight || actualWeight
+            ? `target ${targetWeight || 'n/a'}, actual ${actualWeight || 'n/a'}`
+            : null;
+          const reasonText = Array.isArray(entry.reasons) && entry.reasons.length
+            ? ` — ${entry.reasons.join(' ')}`
+            : '';
+          lines.push(
+            `• ${entry.symbol}: ${weightLabel || 'allocation mismatch'}, qty diff ${qtyDiff || 'n/a'}${reasonText}`
+          );
+        });
+      }
+    }
+  }
+
   return lines.join('\n');
+};
+
+const buildOrderMap = (orders = []) => {
+  const map = new Map();
+  if (!Array.isArray(orders)) {
+    return map;
+  }
+  orders.forEach((order) => {
+    const symbol = sanitizeSymbol(order?.symbol);
+    if (!symbol) {
+      return;
+    }
+    const qty = Math.abs(toNumber(order?.qty, 0));
+    if (!qty) {
+      return;
+    }
+    const entry = map.get(symbol) || { qty: 0, count: 0 };
+    entry.qty += qty;
+    entry.count += 1;
+    map.set(symbol, entry);
+  });
+  return map;
+};
+
+const buildRebalanceReconciliation = ({
+  adjustments = [],
+  holdingsState,
+  priceCache = {},
+  budget = 0,
+  plannedBuys = [],
+  plannedSells = [],
+  executedBuys = [],
+  executedSells = [],
+  tolerance = TOLERANCE,
+} = {}) => {
+  const adjustmentsMap = new Map();
+  adjustments.forEach((adjustment) => {
+    const symbol = sanitizeSymbol(adjustment?.symbol);
+    if (!symbol) {
+      return;
+    }
+    adjustmentsMap.set(symbol, adjustment);
+  });
+
+  const holdingsMap = holdingsState instanceof Map ? holdingsState : buildHoldingsState(holdingsState || []);
+  const plannedBuyMap = buildOrderMap(plannedBuys);
+  const plannedSellMap = buildOrderMap(plannedSells);
+  const executedBuyMap = buildOrderMap(executedBuys);
+  const executedSellMap = buildOrderMap(executedSells);
+
+  const symbols = new Set([...adjustmentsMap.keys(), ...holdingsMap.keys()]);
+  const entries = [];
+
+  symbols.forEach((symbol) => {
+    const adjustment = adjustmentsMap.get(symbol) || null;
+    const holding = holdingsMap.get(symbol) || null;
+    const actualQty = Math.max(0, toNumber(holding?.quantity, 0));
+    const targetWeight = Number.isFinite(adjustment?.targetWeight) ? adjustment.targetWeight : 0;
+    const price =
+      toNumber(priceCache?.[symbol], null)
+      ?? toNumber(holding?.currentPrice, toNumber(holding?.avgCost, null))
+      ?? toNumber(adjustment?.currentPrice, null);
+    const desiredQtyRaw = Number.isFinite(price) && price > 0 && budget > 0
+      ? (targetWeight * budget) / price
+      : 0;
+    const desiredQty = Number.isFinite(adjustment?.desiredQty)
+      ? adjustment.desiredQty
+      : (ENABLE_FRACTIONAL_ORDERS ? desiredQtyRaw : Math.floor(desiredQtyRaw));
+    const desiredValue = Number.isFinite(price) && price > 0 ? desiredQty * price : null;
+    const actualValue = Number.isFinite(price) && price > 0 ? actualQty * price : null;
+    const actualWeight = budget > 0 && Number.isFinite(actualValue) ? actualValue / budget : null;
+    const qtyDiff = actualQty - desiredQty;
+    const reasons = [];
+
+    if (!Number.isFinite(price) || price <= 0) {
+      reasons.push('Missing price for sizing/valuation.');
+    }
+
+    if (!ENABLE_FRACTIONAL_ORDERS && Number.isFinite(desiredQtyRaw) && desiredQtyRaw > 0 && !isEffectivelyInteger(desiredQtyRaw)) {
+      reasons.push('Rounded down to whole shares.');
+    }
+
+    if (
+      ENABLE_FRACTIONAL_ORDERS &&
+      Number.isFinite(desiredQtyRaw) &&
+      desiredQtyRaw > 0 &&
+      Number.isFinite(price) &&
+      price > 0
+    ) {
+      const normalized = normalizeQtyForOrder(desiredQtyRaw);
+      const desiredNotional = desiredQtyRaw * price;
+      if (normalized.isFractional && desiredNotional < MIN_FRACTIONAL_NOTIONAL) {
+        reasons.push(`Below minimum fractional notional ${formatCurrency(MIN_FRACTIONAL_NOTIONAL)}.`);
+      }
+    }
+
+    const plannedBuyQty = plannedBuyMap.get(symbol)?.qty || 0;
+    const plannedSellQty = plannedSellMap.get(symbol)?.qty || 0;
+    const executedBuyQty = executedBuyMap.get(symbol)?.qty || 0;
+    const executedSellQty = executedSellMap.get(symbol)?.qty || 0;
+
+    if (targetWeight === 0 && actualQty > tolerance) {
+      reasons.push('Position not in target allocations.');
+    }
+
+    if (desiredQty - actualQty > tolerance) {
+      if (plannedBuyQty > 0 && executedBuyQty + tolerance < plannedBuyQty) {
+        reasons.push('Buy order not fully executed.');
+      } else if (plannedBuyQty === 0 && targetWeight > 0) {
+        reasons.push('No buy order was planned for this allocation.');
+      }
+    } else if (actualQty - desiredQty > tolerance) {
+      if (plannedSellQty > 0 && executedSellQty + tolerance < plannedSellQty) {
+        reasons.push('Sell order not fully executed.');
+      }
+    }
+
+    entries.push({
+      symbol,
+      targetWeight,
+      actualWeight,
+      desiredQty: roundToDecimals(desiredQty, FRACTIONAL_QTY_DECIMALS),
+      actualQty: roundToDecimals(actualQty, FRACTIONAL_QTY_DECIMALS),
+      qtyDiff: roundToDecimals(qtyDiff, FRACTIONAL_QTY_DECIMALS),
+      desiredValue: roundToTwo(desiredValue),
+      actualValue: roundToTwo(actualValue),
+      price: Number.isFinite(price) ? roundToTwo(price) : null,
+      reasons,
+    });
+  });
+
+  const mismatches = entries.filter((entry) => Math.abs(toNumber(entry.qtyDiff, 0)) > tolerance);
+  const matched = entries.filter((entry) => Math.abs(toNumber(entry.qtyDiff, 0)) <= tolerance);
+  const summary = {
+    total: entries.length,
+    matched: matched.length,
+    mismatched: mismatches.length,
+    tolerance,
+  };
+
+  const sortedMismatches = [...mismatches].sort(
+    (a, b) => Math.abs(toNumber(b.qtyDiff, 0)) - Math.abs(toNumber(a.qtyDiff, 0))
+  );
+
+  return {
+    summary,
+    mismatches: sortedMismatches,
+    entries,
+  };
 };
 
 const normalizeTargets = (targets = []) => {
@@ -1058,6 +1251,11 @@ const rebalancePortfolio = async (portfolio) => {
           blueprint: Array.isArray(localMeta.blueprint) ? localMeta.blueprint : [],
           tickers: Array.isArray(localMeta.tickers) ? localMeta.tickers : [],
           lookbackDays: localMeta.lookbackDays || null,
+          asOfDate: localMeta.asOfDate || null,
+          asOfMode: localMeta.asOfMode || null,
+          priceSource: localMeta.priceSource || null,
+          priceRefresh: localMeta.priceRefresh || null,
+          dataAdjustment: localMeta.dataAdjustment || null,
           fallbackReason: meta.fallbackReason || localMeta.fallbackReason || null,
           note: 'Composer strategy evaluated via local defsymphony interpreter.',
         },
@@ -1411,6 +1609,16 @@ const rebalancePortfolio = async (portfolio) => {
   }
 
   portfolio.stocks = serializeHoldingsState(holdingsState, priceCache);
+  const reconciliation = buildRebalanceReconciliation({
+    adjustments,
+    holdingsState,
+    priceCache,
+    budget,
+    plannedBuys: buys,
+    plannedSells: sells,
+    executedBuys,
+    executedSells,
+  });
   const { totalCostBasis, totalMarketValue } = computePortfolioPerformanceTotals(portfolio.stocks);
   const rawPnlValue = totalMarketValue - totalCostBasis;
   const rawPnlPercent = totalCostBasis > 0 ? (rawPnlValue / totalCostBasis) * 100 : 0;
@@ -1466,6 +1674,7 @@ const rebalancePortfolio = async (portfolio) => {
   const thoughtProcess = {
     ...baseThoughtProcess,
     adjustments: decisionTrace,
+    reconciliation,
     cashSummary: {
       startingCash: roundToTwo(accountCash),
       sellProceeds: roundToTwo(sellProceeds),
@@ -1497,6 +1706,7 @@ const rebalancePortfolio = async (portfolio) => {
     executedBuys,
     decisionTrace,
     holds: holdDecisions,
+    reconciliation,
     cashSummary: {
       startingCash: accountCash,
       sellProceeds,
@@ -1587,6 +1797,7 @@ const rebalancePortfolio = async (portfolio) => {
       remainingCash: roundToTwo(availableCash),
       cashBuffer: roundToTwo(portfolio.cashBuffer),
       accountCash: roundToTwo(accountCash),
+      reconciliation,
       thoughtProcess,
       humanSummary,
     },

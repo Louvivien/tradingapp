@@ -736,6 +736,42 @@ const getSeriesForMetric = (symbol, ctx, missingMessage) => {
   return resolveMetricSeries(finalSymbol, ctx);
 };
 
+const getMetricCacheForSeries = (ctx, series) => {
+  if (!ctx || !series || typeof series !== 'object') {
+    return null;
+  }
+  if (!ctx.metricCache) {
+    ctx.metricCache = new WeakMap();
+  }
+  const store = ctx.metricCache.get(series);
+  if (store) {
+    return store;
+  }
+  const nextStore = new Map();
+  ctx.metricCache.set(series, nextStore);
+  return nextStore;
+};
+
+const buildMetricCacheKey = (type, window, method, ctx) => {
+  const index = ctx?.priceIndex == null ? 'latest' : ctx.priceIndex;
+  const windowKey = window == null ? 'na' : window;
+  const methodKey = method ? String(method).trim().toLowerCase() : 'none';
+  return `${type}|${windowKey}|${methodKey}|${index}`;
+};
+
+const readCachedMetric = (ctx, series, key, compute) => {
+  const store = getMetricCacheForSeries(ctx, series);
+  if (!store) {
+    return compute();
+  }
+  if (store.has(key)) {
+    return store.get(key);
+  }
+  const value = compute();
+  store.set(key, value);
+  return value;
+};
+
 const evaluateCondition = (node, ctx) => {
   if (!isArray(node)) {
     return Boolean(node);
@@ -808,9 +844,12 @@ const evaluateExpression = (node, ctx) => {
       if (!series) {
         return null;
       }
-      const closes = getSeriesValuesForContext(series, ctx);
       const method = ctx?.rsiMethod || getRsiMethod();
-      return computeRSI(closes, window, method);
+      const cacheKey = buildMetricCacheKey('rsi', window, method, ctx);
+      return readCachedMetric(ctx, series, cacheKey, () => {
+        const closes = getSeriesValuesForContext(series, ctx);
+        return computeRSI(closes, window, method);
+      });
     }
     case 'moving-average-price': {
       const symbolNode = node[1];
@@ -832,8 +871,11 @@ const evaluateExpression = (node, ctx) => {
       if (!series) {
         return null;
       }
-      const closes = getSeriesValuesForContext(series, ctx);
-      return computeSMA(closes, window);
+      const cacheKey = buildMetricCacheKey('moving-average-price', window, null, ctx);
+      return readCachedMetric(ctx, series, cacheKey, () => {
+        const closes = getSeriesValuesForContext(series, ctx);
+        return computeSMA(closes, window);
+      });
     }
     case 'exponential-moving-average-price': {
       const symbolNode = node[1];
@@ -855,8 +897,11 @@ const evaluateExpression = (node, ctx) => {
       if (!series) {
         return null;
       }
-      const closes = getSeriesValuesForContext(series, ctx);
-      return computeEMA(closes, window);
+      const cacheKey = buildMetricCacheKey('exponential-moving-average-price', window, null, ctx);
+      return readCachedMetric(ctx, series, cacheKey, () => {
+        const closes = getSeriesValuesForContext(series, ctx);
+        return computeEMA(closes, window);
+      });
     }
     case 'current-price': {
       const symbolNode = node[1];
@@ -868,7 +913,8 @@ const evaluateExpression = (node, ctx) => {
       if (!series) {
         return null;
       }
-      return getLatestValueForContext(series, ctx);
+      const cacheKey = buildMetricCacheKey('current-price', null, null, ctx);
+      return readCachedMetric(ctx, series, cacheKey, () => getLatestValueForContext(series, ctx));
     }
     case 'moving-average-return': {
       const symbolNode = node[1];
@@ -890,8 +936,11 @@ const evaluateExpression = (node, ctx) => {
       if (!series) {
         return null;
       }
-      const closes = getSeriesValuesForContext(series, ctx);
-      return computeMovingAverageReturn(closes, window);
+      const cacheKey = buildMetricCacheKey('moving-average-return', window, null, ctx);
+      return readCachedMetric(ctx, series, cacheKey, () => {
+        const closes = getSeriesValuesForContext(series, ctx);
+        return computeMovingAverageReturn(closes, window);
+      });
     }
     case 'cumulative-return': {
       const symbolNode = node[1];
@@ -913,8 +962,11 @@ const evaluateExpression = (node, ctx) => {
       if (!series) {
         return null;
       }
-      const closes = getSeriesValuesForContext(series, ctx);
-      return computeCumulativeReturn(closes, window);
+      const cacheKey = buildMetricCacheKey('cumulative-return', window, null, ctx);
+      return readCachedMetric(ctx, series, cacheKey, () => {
+        const closes = getSeriesValuesForContext(series, ctx);
+        return computeCumulativeReturn(closes, window);
+      });
     }
     case 'stdev-return':
     case 'stdev-return%': {
@@ -937,8 +989,11 @@ const evaluateExpression = (node, ctx) => {
       if (!series) {
         return null;
       }
-      const closes = getSeriesValuesForContext(series, ctx);
-      return computeStdDevReturn(closes, window);
+      const cacheKey = buildMetricCacheKey(type, window, null, ctx);
+      return readCachedMetric(ctx, series, cacheKey, () => {
+        const closes = getSeriesValuesForContext(series, ctx);
+        return computeStdDevReturn(closes, window);
+      });
     }
     case 'max-drawdown': {
       const optionsNode = node[1];
@@ -962,8 +1017,11 @@ const evaluateExpression = (node, ctx) => {
       if (!series) {
         return null;
       }
-      const closes = getSeriesValuesForContext(series, ctx);
-      return computeMaxDrawdown(closes, window);
+      const cacheKey = buildMetricCacheKey('max-drawdown', window, null, ctx);
+      return readCachedMetric(ctx, series, cacheKey, () => {
+        const closes = getSeriesValuesForContext(series, ctx);
+        return computeMaxDrawdown(closes, window);
+      });
     }
     default:
       throw new Error(`Unsupported expression type ${type}`);
@@ -1488,7 +1546,7 @@ const evaluateDefsymphonyStrategy = async ({
 
   const resolvedAsOfDate = normalizeAsOfDate(asOfDate) || now();
   const resolvedRsiMethod =
-    normalizeRsiMethod(rsiMethod) || normalizeRsiMethod(process.env.RSI_METHOD) || 'simple';
+    normalizeRsiMethod(rsiMethod) || normalizeRsiMethod(process.env.RSI_METHOD) || 'wilder';
   const resolvedAdjustment = normalizeAdjustment(
     dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT ?? 'raw'
   );
@@ -1537,6 +1595,7 @@ const evaluateDefsymphonyStrategy = async ({
   const asOfLabel = `, as of ${formatDateForLog(effectiveAsOfDate)}`;
   const context = {
     priceData,
+    metricCache: new WeakMap(),
     missingSymbols: new Map(),
     nodeIdMap,
     enableGroupMetrics: false,

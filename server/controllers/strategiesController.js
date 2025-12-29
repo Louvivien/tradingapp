@@ -515,6 +515,63 @@ const normalizeQtyForOrder = (qty) => {
   return { qty: floored, isFractional: true };
 };
 
+const normalizeComposerHoldings = (holdings = []) => {
+  if (!Array.isArray(holdings)) {
+    return [];
+  }
+  return holdings
+    .map((entry) => {
+      const symbol = sanitizeSymbol(entry?.symbol || entry?.ticker);
+      if (!symbol) {
+        return null;
+      }
+      const quantity = toNumber(entry?.quantity ?? entry?.qty ?? entry?.shares, null);
+      const value = toNumber(entry?.value ?? entry?.marketValue, null);
+      const weightRaw = toNumber(entry?.weight ?? entry?.allocation ?? entry?.targetWeight, null);
+      let weight = weightRaw;
+      if (Number.isFinite(weightRaw) && weightRaw > 1.5) {
+        weight = weightRaw / 100;
+      }
+      return {
+        symbol,
+        quantity: Number.isFinite(quantity) ? quantity : null,
+        value: Number.isFinite(value) ? value : null,
+        weight: Number.isFinite(weight) ? weight : null,
+      };
+    })
+    .filter(Boolean);
+};
+
+const fetchLatestPrices = async (symbols, dataKeys) => {
+  const priceCache = {};
+  if (!dataKeys?.client || !dataKeys?.apiUrl) {
+    return priceCache;
+  }
+  const headers = {
+    'APCA-API-KEY-ID': dataKeys.keyId,
+    'APCA-API-SECRET-KEY': dataKeys.secretKey,
+  };
+  await Promise.all(
+    symbols.map(async (symbol) => {
+      if (!symbol || priceCache[symbol]) {
+        return;
+      }
+      try {
+        const { data } = await dataKeys.client.get(`${dataKeys.apiUrl}/v2/stocks/${symbol}/trades/latest`, {
+          headers,
+        });
+        const price = toNumber(data?.trade?.p, null);
+        if (price) {
+          priceCache[symbol] = price;
+        }
+      } catch (error) {
+        console.warn(`[ComposerHoldings] Failed to fetch latest price for ${symbol}: ${error.message}`);
+      }
+    })
+  );
+  return priceCache;
+};
+
 const shouldFallbackToWholeShares = (error) => {
   const status = Number(error?.response?.status);
   const message = String(error?.response?.data?.message || error?.message || '').toLowerCase();
@@ -2119,6 +2176,288 @@ exports.updateNextRebalanceDate = async (req, res) => {
   }
 };
 
+exports.updateComposerHoldings = async (req, res) => {
+  try {
+    const { userId, strategyId } = req.params;
+    const payload = req.body || {};
+
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const holdingsInput = Array.isArray(payload) ? payload : payload.holdings;
+    const normalizedHoldings = normalizeComposerHoldings(holdingsInput);
+
+    if (!normalizedHoldings.length) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Holdings list is empty or invalid.',
+      });
+    }
+
+    const portfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: String(userId) });
+    if (!portfolio) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Portfolio not found for this strategy.',
+      });
+    }
+
+    portfolio.composerHoldings = normalizedHoldings;
+    portfolio.composerHoldingsUpdatedAt = new Date();
+    portfolio.composerHoldingsSource = payload.source ? String(payload.source) : 'manual';
+    await portfolio.save();
+
+    return res.status(200).json({
+      status: 'success',
+      composerHoldings: normalizedHoldings,
+      updatedAt: portfolio.composerHoldingsUpdatedAt,
+      source: portfolio.composerHoldingsSource,
+    });
+  } catch (error) {
+    console.error('[ComposerHoldings] Failed to update composer holdings:', error.message);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Failed to update composer holdings.',
+    });
+  }
+};
+
+exports.getComposerHoldings = async (req, res) => {
+  try {
+    const { userId, strategyId } = req.params;
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const portfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: String(userId) }).lean();
+    if (!portfolio) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Portfolio not found for this strategy.',
+      });
+    }
+
+    const composerHoldings = normalizeComposerHoldings(portfolio.composerHoldings || []);
+    return res.status(200).json({
+      status: 'success',
+      composerHoldings,
+      updatedAt: portfolio.composerHoldingsUpdatedAt || null,
+      source: portfolio.composerHoldingsSource || null,
+    });
+  } catch (error) {
+    console.error('[ComposerHoldings] Failed to fetch composer holdings:', error.message);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Failed to fetch composer holdings.',
+    });
+  }
+};
+
+exports.compareComposerHoldings = async (req, res) => {
+  try {
+    const { userId, strategyId } = req.params;
+    const tolerance = Number(req.query?.tolerance ?? 0.01);
+
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const portfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: String(userId) }).lean();
+    if (!portfolio) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Portfolio not found for this strategy.',
+      });
+    }
+
+    const composerHoldings = normalizeComposerHoldings(portfolio.composerHoldings || []);
+    if (!composerHoldings.length) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'No composer holdings stored for this portfolio.',
+      });
+    }
+
+    const alpacaConfig = await getAlpacaConfig(userId);
+    if (!alpacaConfig?.hasValidKeys) {
+      return res.status(403).json({
+        status: 'fail',
+        message: alpacaConfig?.error || 'Invalid Alpaca credentials',
+      });
+    }
+
+    const tradingKeys = alpacaConfig.getTradingKeys();
+    const dataKeys = alpacaConfig.getDataKeys();
+
+    const positionsResponse = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
+      headers: {
+        'APCA-API-KEY-ID': tradingKeys.keyId,
+        'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+      },
+    });
+
+    const positions = Array.isArray(positionsResponse.data) ? positionsResponse.data : [];
+    const alpacaMap = new Map();
+    const priceCache = {};
+
+    positions.forEach((position) => {
+      const symbol = sanitizeSymbol(position.symbol);
+      if (!symbol) {
+        return;
+      }
+      const qty = toNumber(position.qty, 0);
+      const price = toNumber(position.current_price, toNumber(position.avg_entry_price, null));
+      alpacaMap.set(symbol, { symbol, quantity: qty, price });
+      if (Number.isFinite(price)) {
+        priceCache[symbol] = price;
+      }
+    });
+
+    const missingSymbols = composerHoldings
+      .map((entry) => entry.symbol)
+      .filter((symbol) => symbol && priceCache[symbol] == null);
+
+    if (missingSymbols.length) {
+      const fetchedPrices = await fetchLatestPrices(missingSymbols, dataKeys);
+      Object.assign(priceCache, fetchedPrices);
+    }
+
+    const composeValue = (entry, price) => {
+      if (Number.isFinite(entry.value)) {
+        return entry.value;
+      }
+      if (Number.isFinite(entry.quantity) && Number.isFinite(price)) {
+        return entry.quantity * price;
+      }
+      return null;
+    };
+
+    const deriveQty = (entry, price) => {
+      if (Number.isFinite(entry.quantity)) {
+        return entry.quantity;
+      }
+      if (Number.isFinite(entry.value) && Number.isFinite(price) && price > 0) {
+        return entry.value / price;
+      }
+      return null;
+    };
+
+    const composerEntries = composerHoldings.map((entry) => {
+      const price = Number.isFinite(priceCache[entry.symbol]) ? priceCache[entry.symbol] : null;
+      const quantity = deriveQty(entry, price);
+      const value = composeValue({ ...entry, quantity }, price);
+      return {
+        symbol: entry.symbol,
+        quantity,
+        value,
+        weight: Number.isFinite(entry.weight) ? entry.weight : null,
+        price,
+      };
+    });
+
+    const composerTotalValue = composerEntries.reduce((sum, entry) => {
+      return sum + (Number.isFinite(entry.value) ? entry.value : 0);
+    }, 0);
+
+    const alpacaEntries = Array.from(alpacaMap.values()).map((entry) => {
+      const price = Number.isFinite(entry.price) ? entry.price : null;
+      const value = Number.isFinite(price) ? entry.quantity * price : null;
+      return {
+        symbol: entry.symbol,
+        quantity: entry.quantity,
+        value,
+        price,
+      };
+    });
+
+    const alpacaTotalValue = alpacaEntries.reduce((sum, entry) => {
+      return sum + (Number.isFinite(entry.value) ? entry.value : 0);
+    }, 0);
+
+    const symbolSet = new Set([
+      ...composerEntries.map((entry) => entry.symbol),
+      ...alpacaEntries.map((entry) => entry.symbol),
+    ]);
+
+    const diffs = Array.from(symbolSet).map((symbol) => {
+      const composer = composerEntries.find((entry) => entry.symbol === symbol) || null;
+      const alpaca = alpacaEntries.find((entry) => entry.symbol === symbol) || null;
+      const composerValue = Number.isFinite(composer?.value) ? composer.value : null;
+      const alpacaValue = Number.isFinite(alpaca?.value) ? alpaca.value : null;
+      const composerWeight = Number.isFinite(composer?.weight)
+        ? composer.weight
+        : composerTotalValue > 0 && Number.isFinite(composerValue)
+          ? composerValue / composerTotalValue
+          : null;
+      const alpacaWeight = alpacaTotalValue > 0 && Number.isFinite(alpacaValue)
+        ? alpacaValue / alpacaTotalValue
+        : null;
+      const composerQty = Number.isFinite(composer?.quantity) ? composer.quantity : 0;
+      const alpacaQty = Number.isFinite(alpaca?.quantity) ? alpaca.quantity : 0;
+      const qtyDiff = alpacaQty - composerQty;
+      const reasons = [];
+
+      if (!composer) {
+        reasons.push('Missing in composer snapshot.');
+      }
+      if (!alpaca) {
+        reasons.push('Missing in Alpaca positions.');
+      }
+      if (!Number.isFinite(composer?.price) && !Number.isFinite(alpaca?.price)) {
+        reasons.push('Missing price data for comparison.');
+      }
+      if (!Number.isFinite(composer?.quantity) && Number.isFinite(composer?.weight)) {
+        reasons.push('Composer entry missing quantity (weight-only).');
+      }
+
+      return {
+        symbol,
+        composerQty: Number.isFinite(composer?.quantity) ? composer.quantity : null,
+        alpacaQty: Number.isFinite(alpaca?.quantity) ? alpaca.quantity : null,
+        qtyDiff: Number.isFinite(qtyDiff) ? qtyDiff : null,
+        composerWeight,
+        alpacaWeight,
+        composerValue,
+        alpacaValue,
+        reasons,
+      };
+    });
+
+    const mismatches = diffs.filter((entry) => Math.abs(toNumber(entry.qtyDiff, 0)) > tolerance);
+
+    return res.status(200).json({
+      status: 'success',
+      summary: {
+        total: diffs.length,
+        mismatched: mismatches.length,
+        tolerance,
+        composerTotalValue: composerTotalValue || null,
+        alpacaTotalValue: alpacaTotalValue || null,
+      },
+      differences: diffs,
+      mismatches,
+      composerHoldings: composerEntries,
+      alpacaHoldings: alpacaEntries,
+    });
+  } catch (error) {
+    console.error('[ComposerHoldings] Failed to compare composer holdings:', error.message);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Failed to compare composer holdings.',
+    });
+  }
+};
+
 
 
 exports.getPortfolios = async (req, res) => {
@@ -2330,6 +2669,9 @@ exports.getPortfolios = async (req, res) => {
         recurrence: portfolio.recurrence || 'daily',
         lastRebalancedAt: portfolio.lastRebalancedAt,
         nextRebalanceAt: portfolio.nextRebalanceAt,
+        composerHoldingsCount: Array.isArray(portfolio.composerHoldings) ? portfolio.composerHoldings.length : 0,
+        composerHoldingsUpdatedAt: portfolio.composerHoldingsUpdatedAt || null,
+        composerHoldingsSource: portfolio.composerHoldingsSource || null,
         cashBuffer: retainedCash,
         initialInvestment,
         currentValue: hasPendingHoldings ? null : totalCurrentValue,

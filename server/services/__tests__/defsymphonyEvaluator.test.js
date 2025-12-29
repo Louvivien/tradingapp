@@ -1,5 +1,6 @@
 jest.mock('../priceCacheService', () => ({
   getCachedPrices: jest.fn(),
+  normalizeAdjustment: (value) => value,
 }));
 
 const { evaluateDefsymphonyStrategy } = require('../defsymphonyEvaluator');

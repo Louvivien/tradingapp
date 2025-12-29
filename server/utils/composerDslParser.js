@@ -48,6 +48,174 @@ const restoreComparators = (node) => {
 const normalizeVectorSpacing = (script) =>
   script.replace(/\[\(/g, '[ (');
 
+const buildLineColumnFromIndex = (script, index) => {
+  const boundedIndex = Math.max(0, Math.min(Number(index) || 0, script.length));
+  let line = 1;
+  let column = 1;
+  for (let i = 0; i < boundedIndex; i += 1) {
+    if (script[i] === '\n') {
+      line += 1;
+      column = 1;
+    } else {
+      column += 1;
+    }
+  }
+  return { line, column };
+};
+
+const extractErrorLocation = (error, script) => {
+  if (!error) {
+    return null;
+  }
+  const directLine =
+    Number(error.line) ||
+    Number(error.lineNumber) ||
+    Number(error.row) ||
+    Number(error.lineno);
+  const directColumn =
+    Number(error.column) ||
+    Number(error.col) ||
+    Number(error.columnNumber) ||
+    Number(error.colno);
+  if (Number.isFinite(directLine) && Number.isFinite(directColumn)) {
+    return { line: directLine, column: directColumn };
+  }
+  const message = String(error.message || '');
+  let match = message.match(/line\s*(\d+)\D+column\s*(\d+)/i);
+  if (match) {
+    return { line: Number(match[1]), column: Number(match[2]) };
+  }
+  match = message.match(/column\s*(\d+)\D+line\s*(\d+)/i);
+  if (match) {
+    return { line: Number(match[2]), column: Number(match[1]) };
+  }
+  match = message.match(/pos(?:ition)?\s*(\d+)/i);
+  if (match) {
+    return buildLineColumnFromIndex(script, Number(match[1]));
+  }
+  return null;
+};
+
+const scanSyntaxIssue = (script) => {
+  const openerFor = {
+    ')': '(',
+    ']': '[',
+    '}': '{',
+  };
+  const closerFor = {
+    '(': ')',
+    '[': ']',
+    '{': '}',
+  };
+  const stack = [];
+  let line = 1;
+  let column = 0;
+  let inString = false;
+  let escape = false;
+  let stringStart = null;
+
+  for (let i = 0; i < script.length; i += 1) {
+    const char = script[i];
+    if (char === '\n') {
+      line += 1;
+      column = 0;
+    } else {
+      column += 1;
+    }
+
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (char === '\\') {
+        escape = true;
+        continue;
+      }
+      if (char === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (char === ';') {
+      while (i + 1 < script.length && script[i + 1] !== '\n') {
+        i += 1;
+        column += 1;
+      }
+      continue;
+    }
+
+    if (char === '"') {
+      inString = true;
+      stringStart = { line, column };
+      continue;
+    }
+
+    if (closerFor[char]) {
+      stack.push({ char, line, column });
+      continue;
+    }
+    if (openerFor[char]) {
+      const last = stack.pop();
+      if (!last) {
+        return {
+          line,
+          column,
+          reason: `Unexpected '${char}' token.`,
+        };
+      }
+      const expected = closerFor[last.char];
+      if (expected !== char) {
+        return {
+          line,
+          column,
+          reason: `Mismatched '${char}' token, expected '${expected}' for '${last.char}' opened at line ${last.line}, column ${last.column}.`,
+        };
+      }
+    }
+  }
+
+  if (inString && stringStart) {
+    return {
+      line: stringStart.line,
+      column: stringStart.column,
+      reason: 'Unterminated string literal.',
+    };
+  }
+  const unclosed = stack.pop();
+  if (unclosed) {
+    const expected = closerFor[unclosed.char];
+    return {
+      line: unclosed.line,
+      column: unclosed.column,
+      reason: `Missing closing '${expected}' for '${unclosed.char}' opened here.`,
+    };
+  }
+  return null;
+};
+
+const formatParseContext = (script, line, column) => {
+  const lines = script.split(/\r?\n/);
+  const text = lines[line - 1] || '';
+  const caret = `${' '.repeat(Math.max(0, column - 1))}^`;
+  return `${text}\n${caret}`;
+};
+
+const buildParseError = (script, error) => {
+  const diagnostic = scanSyntaxIssue(script);
+  const fromError = extractErrorLocation(error, script);
+  const line = diagnostic?.line || fromError?.line;
+  const column = diagnostic?.column || fromError?.column;
+  const reason = diagnostic?.reason || error?.message || 'Invalid defsymphony syntax.';
+
+  if (line && column) {
+    const context = formatParseContext(script, line, column);
+    return new Error(`Defsymphony parse error at line ${line}, column ${column}: ${reason}\n${context}`);
+  }
+  return new Error(`Defsymphony parse error: ${reason}`);
+};
+
 const parseComposerScript = (script) => {
   if (!script || typeof script !== 'string') {
     return null;
@@ -59,7 +227,7 @@ const parseComposerScript = (script) => {
     const jsValue = edn.toJS(parsed);
     return restoreComparators(jsValue);
   } catch (error) {
-    return null;
+    throw buildParseError(script, error);
   }
 };
 
