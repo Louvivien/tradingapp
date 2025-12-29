@@ -3,7 +3,7 @@ const { getAlpacaConfig } = require("../config/alpacaConfig");
 const { computeWorkflowIndicators } = require('../services/indicatorService');
 const { runComposerStrategy } = require("../utils/openaiComposerStrategy");
 const { getCachedPrices } = require('../services/priceCacheService');
-const { evaluateDefsymphonyStrategy } = require('../services/defsymphonyEvaluator');
+const { evaluateDefsymphonyStrategy, backtestDefsymphonyStrategy } = require('../services/defsymphonyEvaluator');
 const {
   runTrackedEvaluation,
   listActiveEvaluations,
@@ -371,6 +371,91 @@ exports.evaluateComposerStrategyLocal = async (req, res) => {
     return res.status(500).json({
       status: 'fail',
       message: error.message || 'Local Composer evaluation failed.',
+    });
+  }
+};
+
+exports.backtestComposerStrategyLocal = async (req, res) => {
+  try {
+    const {
+      strategyText,
+      startDate,
+      endDate,
+      initialCapital,
+      transactionCostBps,
+      benchmarkSymbol,
+      includeBenchmark,
+      rsiMethod,
+      dataAdjustment,
+      asOfMode,
+      priceSource,
+      priceRefresh,
+      clientRequestId,
+    } = req.body || {};
+
+    if (!strategyText || typeof strategyText !== 'string' || !strategyText.trim()) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'strategyText (Composer defsymphony script) is required.',
+      });
+    }
+
+    const summary = summarizeStrategy(strategyText);
+    const requester = (req.user && (req.user.id || req.user._id)) || req.ip || 'anonymous';
+
+    const { id: jobId, job, result } = await runTrackedEvaluation({
+      metadata: {
+        requester,
+        mode: 'backtest',
+        strategyName: summary.name,
+        hasGroup: summary.hasGroup,
+        clientRequestId: clientRequestId || null,
+        startDate: startDate || null,
+        endDate: endDate || null,
+        initialCapital: initialCapital ?? null,
+        transactionCostBps: transactionCostBps ?? null,
+        benchmarkSymbol: benchmarkSymbol || null,
+        includeBenchmark: includeBenchmark ?? null,
+        rsiMethod: rsiMethod || null,
+        dataAdjustment: dataAdjustment || null,
+        asOfMode: asOfMode || null,
+        priceSource: priceSource || null,
+        priceRefresh: priceRefresh ?? null,
+      },
+      handler: () =>
+        backtestDefsymphonyStrategy({
+          strategyText,
+          startDate,
+          endDate,
+          initialCapital,
+          transactionCostBps,
+          benchmarkSymbol,
+          includeBenchmark,
+          rsiMethod,
+          dataAdjustment,
+          asOfMode,
+          priceSource,
+          priceRefresh,
+        }),
+    });
+
+    return res.status(200).json({
+      status: 'success',
+      data: result,
+      job: {
+        id: jobId,
+        status: job?.status || 'completed',
+        mode: 'backtest',
+        hasGroup: summary.hasGroup,
+        submittedAt: job?.submittedAt?.toISOString?.() || job?.submittedAt || null,
+        clientRequestId: clientRequestId || null,
+      },
+    });
+  } catch (error) {
+    console.error('[ComposerBacktest]', error);
+    return res.status(500).json({
+      status: 'fail',
+      message: error.message || 'Local Composer backtest failed.',
     });
   }
 };

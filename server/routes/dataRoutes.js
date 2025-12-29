@@ -10,6 +10,7 @@ const {
   evaluateComposerStrategy,
   getCachedHistoricalPrices,
   evaluateComposerStrategyLocal,
+  backtestComposerStrategyLocal,
   listComposerEvaluations,
 } = require("../controllers/dataController");
 
@@ -21,6 +22,7 @@ router.route("/analytics/:ticker").get(getWorkflowIndicators);
 router.route("/composer/evaluate").post(evaluateComposerStrategy);
 router.route("/cache/prices/:symbol").get(getCachedHistoricalPrices);
 router.route("/composer/evaluate-local").post(evaluateComposerStrategyLocal);
+router.route("/composer/backtest-local").post(backtestComposerStrategyLocal);
 router.route("/composer/evaluations").get(listComposerEvaluations);
 
 console.log('[Routes] Data routes registered:', router.stack.map((layer) => layer.route?.path).filter(Boolean));

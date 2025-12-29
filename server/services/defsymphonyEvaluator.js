@@ -1570,7 +1570,7 @@ const loadPriceData = async (
     }
   });
 
-  return { map, missing, asOfDate: asOfDateUsed, asOfMode };
+  return { map, missing, asOfDate: asOfDateUsed, asOfMode, appendLivePrice };
 };
 
 const evaluateDefsymphonyStrategy = async ({
@@ -1631,6 +1631,7 @@ const evaluateDefsymphonyStrategy = async ({
     missing: missingFromCache,
     asOfDate: dataAsOfDate,
     asOfMode: resolvedDataAsOfMode,
+    appendLivePrice,
   } = await loadPriceData(
     tickers,
     calendarLookbackDays,
@@ -1809,6 +1810,409 @@ const evaluateDefsymphonyStrategy = async ({
   };
 };
 
+const BACKTEST_MAX_DAYS = Math.max(30, Math.min(10000, Number(process.env.COMPOSER_BACKTEST_MAX_DAYS) || 2500));
+
+const findFirstIndex = (items, predicate) => {
+  for (let idx = 0; idx < items.length; idx += 1) {
+    if (predicate(items[idx], idx)) {
+      return idx;
+    }
+  }
+  return -1;
+};
+
+const findLastIndex = (items, predicate) => {
+  for (let idx = items.length - 1; idx >= 0; idx -= 1) {
+    if (predicate(items[idx], idx)) {
+      return idx;
+    }
+  }
+  return -1;
+};
+
+const normalizeBacktestDate = (value, label) => {
+  if (!value) {
+    throw new Error(`${label} is required (YYYY-MM-DD).`);
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`${label} is invalid; expected YYYY-MM-DD.`);
+  }
+  return date;
+};
+
+const normalizeBps = (value, fallback = 0) => {
+  if (value == null || value === '') {
+    return fallback;
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num)) {
+    return fallback;
+  }
+  return Math.max(0, Math.min(1000, num));
+};
+
+const buildBarsByDateKey = (bars = []) => {
+  const map = new Map();
+  if (!Array.isArray(bars)) {
+    return map;
+  }
+  bars.forEach((bar) => {
+    const dateKey = bar?.t ? toISODateKey(bar.t) : null;
+    const close = Number(bar?.c);
+    if (!dateKey || !Number.isFinite(close)) {
+      return;
+    }
+    map.set(dateKey, { close, timestamp: bar.t });
+  });
+  return map;
+};
+
+const intersectDateKeys = (mapsBySymbol) => {
+  const entries = Array.from(mapsBySymbol.entries())
+    .map(([symbol, map]) => ({ symbol, map, size: map.size }))
+    .sort((a, b) => a.size - b.size);
+  if (!entries.length) {
+    return [];
+  }
+  const common = new Set(entries[0].map.keys());
+  for (let idx = 1; idx < entries.length; idx += 1) {
+    const current = entries[idx].map;
+    Array.from(common).forEach((key) => {
+      if (!current.has(key)) {
+        common.delete(key);
+      }
+    });
+    if (!common.size) {
+      break;
+    }
+  }
+  return Array.from(common).sort();
+};
+
+const computeTurnover = (prevWeights, nextWeights) => {
+  if (!prevWeights) {
+    return 0;
+  }
+  const union = new Set([...prevWeights.keys(), ...nextWeights.keys()]);
+  let sumAbs = 0;
+  union.forEach((symbol) => {
+    sumAbs += Math.abs((nextWeights.get(symbol) || 0) - (prevWeights.get(symbol) || 0));
+  });
+  return sumAbs / 2;
+};
+
+const computeBacktestMetrics = ({ navSeries, dailyReturns, turnoverSeries }) => {
+  const totalDays = dailyReturns.length;
+  const endingNav = navSeries.length ? navSeries[navSeries.length - 1] : 1;
+  const totalReturn = endingNav - 1;
+  const avgDailyReturn =
+    totalDays > 0 ? dailyReturns.reduce((sum, value) => sum + value, 0) / totalDays : 0;
+  const volatility =
+    totalDays > 1
+      ? (() => {
+          const mean = avgDailyReturn;
+          const variance =
+            dailyReturns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (totalDays - 1);
+          return Math.sqrt(variance) * Math.sqrt(TRADING_DAYS_PER_YEAR);
+        })()
+      : 0;
+  const cagr = totalDays > 0 ? (endingNav ** (TRADING_DAYS_PER_YEAR / totalDays) - 1) : 0;
+
+  let peak = 1;
+  let maxDrawdown = 0;
+  navSeries.forEach((nav) => {
+    if (nav > peak) {
+      peak = nav;
+    }
+    const dd = (nav - peak) / peak;
+    if (dd < maxDrawdown) {
+      maxDrawdown = dd;
+    }
+  });
+  const sharpe = volatility > 0 ? cagr / volatility : 0;
+  const calmar = maxDrawdown < 0 ? cagr / Math.abs(maxDrawdown) : 0;
+  const winRate = totalDays > 0 ? dailyReturns.filter((value) => value > 0).length / totalDays : 0;
+  const avgTurnover =
+    turnoverSeries.length > 0 ? turnoverSeries.reduce((sum, value) => sum + value, 0) / turnoverSeries.length : 0;
+
+  return {
+    totalDays,
+    totalReturn,
+    cagr,
+    volatility,
+    sharpe,
+    maxDrawdown,
+    calmar,
+    winRate,
+    avgDailyReturn,
+    avgTurnover,
+  };
+};
+
+const backtestDefsymphonyStrategy = async ({
+  strategyText,
+  startDate,
+  endDate,
+  initialCapital = 10000,
+  transactionCostBps = 0,
+  rsiMethod = null,
+  dataAdjustment = null,
+  asOfMode = 'previous-close',
+  priceSource = null,
+  priceRefresh = null,
+  benchmarkSymbol = 'SPY',
+  includeBenchmark = true,
+}) => {
+  const ast = parseComposerScript(strategyText);
+  if (!ast) {
+    throw new Error('Failed to parse defsymphony script.');
+  }
+  const astStats = collectAstStats(ast);
+  const tickers = Array.from(collectTickersFromAst(ast)).sort();
+  if (!tickers.length) {
+    throw new Error('No tickers found in defsymphony script.');
+  }
+
+  const resolvedStart = normalizeBacktestDate(startDate, 'startDate');
+  const resolvedEnd = normalizeBacktestDate(endDate, 'endDate');
+  if (resolvedStart >= resolvedEnd) {
+    throw new Error('startDate must be before endDate.');
+  }
+
+  const resolvedCapital = Number.isFinite(Number(initialCapital)) && Number(initialCapital) > 0 ? Number(initialCapital) : 10000;
+  const resolvedCostBps = normalizeBps(transactionCostBps, 0);
+
+  const rsiWindow = Math.max(0, Number(astStats.maxRsiWindow) || 0);
+  const rsiHistoryBuffer = rsiWindow ? 250 : 0;
+  const requiredBars = Math.max(
+    Math.max(0, Number(astStats.maxWindow) || 0) + 5,
+    rsiWindow + rsiHistoryBuffer,
+    10
+  );
+  const warmupCalendarDays = Math.ceil((requiredBars * CALENDAR_DAYS_PER_YEAR) / TRADING_DAYS_PER_YEAR) + 14;
+  const dataStart = new Date(resolvedStart.getTime() - warmupCalendarDays * 24 * 60 * 60 * 1000);
+
+  const resolvedRsiMethod =
+    normalizeRsiMethod(rsiMethod) || normalizeRsiMethod(process.env.RSI_METHOD) || 'wilder';
+  const resolvedAdjustment = normalizeAdjustment(
+    dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT ?? 'raw'
+  );
+  const resolvedPriceSource =
+    normalizePriceSource(priceSource) || normalizePriceSource(process.env.PRICE_DATA_SOURCE) || 'yahoo';
+  const resolvedPriceRefresh =
+    normalizePriceRefresh(priceRefresh) ??
+    normalizePriceRefresh(process.env.PRICE_DATA_FORCE_REFRESH) ??
+    resolvedPriceSource === 'yahoo';
+  const resolvedAsOfMode = normalizeAsOfMode(asOfMode) || 'previous-close';
+
+  const priceBarsBySymbol = new Map();
+  const fetchSymbol = async (symbol) => {
+    const response = await getCachedPrices({
+      symbol,
+      startDate: dataStart,
+      endDate: resolvedEnd,
+      adjustment: resolvedAdjustment,
+      source: resolvedPriceSource,
+      forceRefresh: resolvedPriceRefresh,
+    });
+    const bars = response.bars || [];
+    priceBarsBySymbol.set(symbol, buildBarsByDateKey(bars));
+  };
+
+  if (resolvedPriceSource === 'yahoo') {
+    await runWithConcurrency(tickers, 4, async (ticker) => fetchSymbol(ticker.toUpperCase()));
+  } else {
+    await Promise.all(tickers.map((ticker) => fetchSymbol(ticker.toUpperCase())));
+  }
+
+  const commonDates = intersectDateKeys(priceBarsBySymbol);
+  if (commonDates.length < requiredBars + 2) {
+    throw new Error(
+      `Not enough common trading days across symbols to backtest (need at least ${requiredBars + 2}, have ${commonDates.length}).`
+    );
+  }
+
+  const startKey = toISODateKey(resolvedStart);
+  const endKey = toISODateKey(resolvedEnd);
+  const requestedStartIdx = findFirstIndex(commonDates, (key) => key >= startKey);
+  const requestedEndIdx = findLastIndex(commonDates, (key) => key <= endKey);
+  if (requestedStartIdx === -1 || requestedEndIdx === -1 || requestedEndIdx <= 0) {
+    throw new Error('No overlapping trading days found for the requested date range.');
+  }
+
+  const minExecutionIndex = Math.max(1, requiredBars + 1);
+  const executionStartIdx = Math.max(requestedStartIdx, minExecutionIndex);
+  if (executionStartIdx > requestedEndIdx) {
+    throw new Error('Requested range is too early; not enough warmup history for indicators.');
+  }
+
+  const backtestDays = requestedEndIdx - executionStartIdx + 1;
+  if (backtestDays > BACKTEST_MAX_DAYS) {
+    throw new Error(
+      `Backtest range too large (${backtestDays} trading days). Limit is ${BACKTEST_MAX_DAYS} (COMPOSER_BACKTEST_MAX_DAYS).`
+    );
+  }
+
+  const priceData = new Map();
+  tickers.forEach((ticker) => {
+    const map = priceBarsBySymbol.get(ticker);
+    const closes = commonDates.map((dateKey) => map.get(dateKey).close);
+    const bars = commonDates.map((dateKey) => ({ t: `${dateKey}T00:00:00.000Z`, c: map.get(dateKey).close }));
+    priceData.set(ticker, {
+      closes,
+      latest: closes[closes.length - 1],
+      bars,
+    });
+  });
+
+  const blueprint = buildEvaluationBlueprint(ast) || [];
+  const nodeIdMap = assignNodeIds(ast);
+
+  const baseCtx = {
+    priceData,
+    missingSymbols: new Map(),
+    nodeIdMap,
+    nodeSeries: new Map(),
+    enableGroupMetrics: Boolean(astStats.hasGroupFilter),
+    groupSeriesMeta: Boolean(astStats.hasGroupFilter)
+      ? { startIndex: 1, priceLength: commonDates.length }
+      : null,
+    debugIndicators: false,
+    rsiMethod: resolvedRsiMethod,
+  };
+
+  const navSeries = [];
+  const dailyReturns = [];
+  const turnoverSeries = [];
+  let nav = 1;
+  let prevWeights = null;
+
+  for (let idx = executionStartIdx; idx <= requestedEndIdx; idx += 1) {
+    const decisionIndex = idx - 1;
+    const ctx = {
+      ...baseCtx,
+      priceIndex: decisionIndex,
+      metricCache: new WeakMap(),
+      reasoning: null,
+      previewStack: null,
+    };
+
+    let positions = [];
+    try {
+      const raw = evaluateNode(ast, 1, ctx);
+      positions = safeNormalizePositions(raw);
+    } catch (error) {
+      positions = [];
+    }
+
+    const weightMap = new Map();
+    positions.forEach((pos) => {
+      if (pos?.symbol) {
+        weightMap.set(pos.symbol, Number(pos.weight) || 0);
+      }
+    });
+
+    const turnover = computeTurnover(prevWeights, weightMap);
+    const grossReturn = positions.length ? computePortfolioReturn(positions, priceData, idx) : 0;
+    const costs = resolvedCostBps ? turnover * (resolvedCostBps / 10000) : 0;
+    const netReturn = grossReturn - costs;
+
+    nav *= 1 + netReturn;
+    navSeries.push(nav);
+    dailyReturns.push(netReturn);
+    turnoverSeries.push(turnover);
+    prevWeights = weightMap;
+  }
+
+  const metrics = computeBacktestMetrics({ navSeries, dailyReturns, turnoverSeries });
+  const series = navSeries.map((navValue, offset) => {
+    const idx = executionStartIdx + offset;
+    const dateKey = commonDates[idx];
+    return {
+      date: dateKey,
+      nav: navValue,
+      value: navValue * resolvedCapital,
+      dailyReturn: dailyReturns[offset],
+      turnover: turnoverSeries[offset],
+    };
+  });
+
+  let benchmark = null;
+  if (includeBenchmark && benchmarkSymbol) {
+    try {
+      const benchResp = await getCachedPrices({
+        symbol: String(benchmarkSymbol).trim().toUpperCase(),
+        startDate: dataStart,
+        endDate: resolvedEnd,
+        adjustment: resolvedAdjustment,
+        source: resolvedPriceSource,
+        forceRefresh: resolvedPriceRefresh,
+      });
+      const benchMap = buildBarsByDateKey(benchResp.bars || []);
+      const benchNavSeries = [];
+      const benchReturns = [];
+      let benchNav = 1;
+      for (let idx = executionStartIdx; idx <= requestedEndIdx; idx += 1) {
+        const dateKey = commonDates[idx];
+        const prevKey = commonDates[idx - 1];
+        const curr = benchMap.get(dateKey)?.close;
+        const prev = benchMap.get(prevKey)?.close;
+        if (!Number.isFinite(curr) || !Number.isFinite(prev) || prev <= 0) {
+          benchNavSeries.push(benchNav);
+          benchReturns.push(0);
+          continue;
+        }
+        const daily = (curr - prev) / prev;
+        benchNav *= 1 + daily;
+        benchNavSeries.push(benchNav);
+        benchReturns.push(daily);
+      }
+      benchmark = {
+        symbol: String(benchmarkSymbol).trim().toUpperCase(),
+        series: benchNavSeries.map((navValue, offset) => ({
+          date: commonDates[executionStartIdx + offset],
+          nav: navValue,
+          value: navValue * resolvedCapital,
+          dailyReturn: benchReturns[offset],
+        })),
+        metrics: computeBacktestMetrics({
+          navSeries: benchNavSeries,
+          dailyReturns: benchReturns,
+          turnoverSeries: Array.from({ length: benchReturns.length }, () => 0),
+        }),
+      };
+    } catch (error) {
+      benchmark = null;
+    }
+  }
+
+  return {
+    summary: `Backtest completed for ${series.length} trading days from ${series[0]?.date} to ${series[series.length - 1]?.date}.`,
+    meta: {
+      engine: 'local',
+      tickers,
+      blueprint,
+      requiredBars,
+      warmupCalendarDays,
+      executionStart: series[0]?.date || null,
+      executionEnd: series[series.length - 1]?.date || null,
+      initialCapital: resolvedCapital,
+      transactionCostBps: resolvedCostBps,
+      priceSource: resolvedPriceSource,
+      priceRefresh: resolvedPriceRefresh,
+      dataAdjustment: resolvedAdjustment,
+      asOfMode: resolvedAsOfMode,
+      rsiMethod: resolvedRsiMethod,
+      groupSimulation: Boolean(astStats.hasGroupFilter),
+    },
+    metrics,
+    series,
+    benchmark,
+  };
+};
+
 module.exports = {
   evaluateDefsymphonyStrategy,
+  backtestDefsymphonyStrategy,
 };

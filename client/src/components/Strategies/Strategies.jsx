@@ -15,12 +15,19 @@ import {
   Tab,
   Tabs,
   MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  CircularProgress,
+  Divider,
 } from "@mui/material";
 import { styled } from "@mui/system";
 import Skeleton from "@mui/lab/Skeleton";
 import Axios from "axios";
 import config from "../../config/Config";
 import Title from "../Template/Title.jsx";
+import LineChartPort from "../Template/LineChartPort.jsx";
 import styles from "./Strategies.module.css";
 
 
@@ -80,6 +87,37 @@ const Strategies = () => {
   const [evaluationError, setEvaluationError] = useState(null);
   const progressSourceRef = useRef(null);
   const evaluationPollRef = useRef(null);
+  const [backtestOpen, setBacktestOpen] = useState(false);
+  const [backtestStartDate, setBacktestStartDate] = useState("");
+  const [backtestEndDate, setBacktestEndDate] = useState("");
+  const [backtestCostBps, setBacktestCostBps] = useState("0");
+  const [backtestLoading, setBacktestLoading] = useState(false);
+  const [backtestResult, setBacktestResult] = useState(null);
+  const [backtestError, setBacktestError] = useState(null);
+
+  const toISODateInput = (value) => {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return "";
+    }
+    return date.toISOString().slice(0, 10);
+  };
+
+  const formatPct = (value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      return "—";
+    }
+    return `${(num * 100).toFixed(1)}%`;
+  };
+
+  const formatNumber = (value) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) {
+      return "—";
+    }
+    return num.toFixed(3);
+  };
 
   const fetchStrategies = useCallback(async () => {
     if (!authToken || !userId) {
@@ -292,6 +330,59 @@ const Strategies = () => {
       setEvaluationError(err.response?.data?.message || err.message || "Local evaluation failed.");
     } finally {
       setLocalEvalLoading(false);
+    }
+  };
+
+  const openBacktestDialog = () => {
+    setBacktestError(null);
+    setBacktestResult(null);
+    const today = new Date();
+    const oneYearAgo = new Date(today.getTime() - 365 * 24 * 60 * 60 * 1000);
+    setBacktestStartDate(toISODateInput(oneYearAgo));
+    setBacktestEndDate(toISODateInput(today));
+    setBacktestOpen(true);
+  };
+
+  const closeBacktestDialog = () => {
+    setBacktestOpen(false);
+  };
+
+  const runBacktest = async () => {
+    if (!collaborative || !collaborative.trim()) {
+      setBacktestError("Please paste a strategy before running a backtest.");
+      return;
+    }
+    if (!backtestStartDate || !backtestEndDate) {
+      setBacktestError("Please select a start and end date.");
+      return;
+    }
+    setBacktestLoading(true);
+    setBacktestError(null);
+    setBacktestResult(null);
+    const headers = {};
+    if (authToken) {
+      headers["x-auth-token"] = authToken;
+    }
+    const payload = {
+      strategyText: collaborative,
+      startDate: backtestStartDate,
+      endDate: backtestEndDate,
+      initialCapital: Number(collaborativeCashLimit) > 0 ? Number(collaborativeCashLimit) : 10000,
+      transactionCostBps: Number(backtestCostBps) || 0,
+      includeBenchmark: true,
+      benchmarkSymbol: "SPY",
+    };
+    try {
+      const response = await Axios.post(`${config.base_url}/api/data/composer/backtest-local`, payload, { headers });
+      if (response.status === 200 && response.data?.status === "success") {
+        setBacktestResult(response.data.data);
+      } else {
+        setBacktestError(response.data?.message || "Backtest failed.");
+      }
+    } catch (err) {
+      setBacktestError(err.response?.data?.message || err.message || "Backtest failed.");
+    } finally {
+      setBacktestLoading(false);
     }
   };
 
@@ -823,6 +914,13 @@ return (
               >
                 {localEvalLoading ? "Running local simulation…" : "Simulate locally"}
               </Button>
+              <Button
+                variant="outlined"
+                onClick={openBacktestDialog}
+                disabled={!collaborative || !collaborative.trim()}
+              >
+                Backtest
+              </Button>
               {evaluationError && (
                 <Typography variant="body2" color="error">
                   {evaluationError}
@@ -854,6 +952,99 @@ return (
                 )}
               </Box>
             )}
+
+            <Dialog open={backtestOpen} onClose={closeBacktestDialog} fullWidth maxWidth="md">
+              <DialogTitle>Backtest strategy</DialogTitle>
+              <DialogContent>
+                <Box display="flex" gap={2} flexWrap="wrap" mt={1}>
+                  <TextField
+                    label="Start date"
+                    type="date"
+                    value={backtestStartDate}
+                    onChange={(e) => setBacktestStartDate(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                  <TextField
+                    label="End date"
+                    type="date"
+                    value={backtestEndDate}
+                    onChange={(e) => setBacktestEndDate(e.target.value)}
+                    InputLabelProps={{ shrink: true }}
+                  />
+                  <TextField
+                    label="Transaction cost (bps)"
+                    type="number"
+                    value={backtestCostBps}
+                    onChange={(e) => setBacktestCostBps(e.target.value)}
+                    inputProps={{ min: 0, step: 1 }}
+                  />
+                </Box>
+
+                {backtestError && (
+                  <Typography variant="body2" color="error" sx={{ mt: 2 }}>
+                    {backtestError}
+                  </Typography>
+                )}
+
+                <Box sx={{ mt: 2, minHeight: 260, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {backtestLoading ? (
+                    <CircularProgress size={22} />
+                  ) : backtestResult?.series?.length ? (
+                    <Box sx={{ width: "100%" }}>
+                      <LineChartPort
+                        pastDataPeriod={{
+                          history: backtestResult.series.map((point) => ({
+                            timestamp: `${point.date}T00:00:00.000Z`,
+                            equity: point.value,
+                          })),
+                        }}
+                        duration="backtest"
+                      />
+                    </Box>
+                  ) : (
+                    <Typography variant="body2" color="textSecondary">
+                      Run a backtest to see the equity curve.
+                    </Typography>
+                  )}
+                </Box>
+
+                {backtestResult?.metrics && (
+                  <>
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant="subtitle2">Key metrics</Typography>
+                    <Typography variant="body2">CAGR: {formatPct(backtestResult.metrics.cagr)}</Typography>
+                    <Typography variant="body2">Total return: {formatPct(backtestResult.metrics.totalReturn)}</Typography>
+                    <Typography variant="body2">Max drawdown: {formatPct(backtestResult.metrics.maxDrawdown)}</Typography>
+                    <Typography variant="body2">Volatility: {formatNumber(backtestResult.metrics.volatility)}</Typography>
+                    <Typography variant="body2">Sharpe: {formatNumber(backtestResult.metrics.sharpe)}</Typography>
+                    <Typography variant="body2">Avg turnover: {formatPct(backtestResult.metrics.avgTurnover)}</Typography>
+                    {backtestResult.benchmark?.metrics && (
+                      <>
+                        <Divider sx={{ my: 2 }} />
+                        <Typography variant="subtitle2">Benchmark ({backtestResult.benchmark.symbol})</Typography>
+                        <Typography variant="body2">
+                          CAGR: {formatPct(backtestResult.benchmark.metrics.cagr)}
+                        </Typography>
+                        <Typography variant="body2">
+                          Total return: {formatPct(backtestResult.benchmark.metrics.totalReturn)}
+                        </Typography>
+                        <Typography variant="body2">
+                          Max drawdown: {formatPct(backtestResult.benchmark.metrics.maxDrawdown)}
+                        </Typography>
+                      </>
+                    )}
+                  </>
+                )}
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={closeBacktestDialog} disabled={backtestLoading}>
+                  Close
+                </Button>
+                <Button onClick={runBacktest} variant="contained" disabled={backtestLoading}>
+                  Run backtest
+                </Button>
+              </DialogActions>
+            </Dialog>
 
             <Box mb={3} p={2} sx={{ border: '1px dashed #bdbdbd', borderRadius: 1 }}>
               <Typography variant="subtitle2">Active local simulations</Typography>
