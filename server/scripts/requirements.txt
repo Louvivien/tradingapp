@@ -1,7 +1,5 @@
 anthropic
 python-dotenv
-argparse
-logging
 yfinance
 requests
 GoogleNews
