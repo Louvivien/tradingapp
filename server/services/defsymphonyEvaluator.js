@@ -1194,6 +1194,111 @@ function evaluateNode(node, parentWeight, ctx) {
       );
       return mergePositions(positions);
     }
+    case 'weight-inverse-volatility': {
+      const maybeWindow = Number(node[1]);
+      const hasWindow = Number.isFinite(maybeWindow) && maybeWindow > 0;
+      const window = hasWindow ? maybeWindow : METRIC_DEFAULT_WINDOWS['stdev-return'];
+      const children = flattenChildren(node, hasWindow ? 2 : 1);
+      if (!children.length) {
+        return [];
+      }
+      pushReasoning(
+        ctx,
+        `Applying weight-inverse-volatility (window=${window}) across ${children.length} child nodes.`
+      );
+
+      const candidates = children
+        .map((child) => {
+          if (isAssetNode(child)) {
+            const symbol = extractSymbolFromAssetNode(child);
+            return symbol ? { type: 'asset', symbol, node: child } : null;
+          }
+          const childType = getNodeType(child);
+          if (childType === 'group' && (ctx.enableGroupMetrics || ctx.groupSeriesMeta)) {
+            const nodeId = ctx.nodeIdMap?.get(child);
+            if (!nodeId) {
+              return null;
+            }
+            const nodeSeries =
+              ctx.nodeSeries?.get(nodeId) || ensureGroupSeriesForNode(child, ctx);
+            if (!nodeSeries) {
+              return null;
+            }
+            const label = typeof child[1] === 'string' ? String(child[1]) : `group-${nodeId}`;
+            return { type: 'node', node: child, nodeId, label };
+          }
+          const previewPositions = previewNodePositions(child, ctx);
+          const representative = selectRepresentativeSymbol(previewPositions);
+          if (!representative) {
+            return null;
+          }
+          return { type: 'asset', symbol: representative, node: child };
+        })
+        .filter(Boolean);
+
+      if (!candidates.length) {
+        return [];
+      }
+
+      const metricNode = ['stdev-return', { window }];
+      const scored = candidates
+        .map((entry) => {
+          const value = evaluateMetricForCandidate(metricNode, entry, ctx);
+          if (!Number.isFinite(value) || value <= 0) {
+            return null;
+          }
+          return { ...entry, value };
+        })
+        .filter(Boolean);
+
+      if (!scored.length) {
+        pushReasoning(
+          ctx,
+          `Inverse-volatility metrics unavailable; falling back to equal-weight across ${children.length} child nodes.`
+        );
+        const fallbackWeight = parentWeight / children.length;
+        const fallbackPositions = children.flatMap((child) =>
+          evaluateNode(child, fallbackWeight, ctx)
+        );
+        return mergePositions(fallbackPositions);
+      }
+
+      if (scored.length < candidates.length) {
+        pushReasoning(
+          ctx,
+          `Inverse-volatility metrics available for ${scored.length}/${candidates.length} child nodes; weighting only those with data.`
+        );
+      }
+
+      const inverseValues = scored.map((entry) => 1 / entry.value);
+      const inverseTotal = inverseValues.reduce((sum, value) => sum + value, 0);
+      if (!Number.isFinite(inverseTotal) || inverseTotal <= 0) {
+        pushReasoning(
+          ctx,
+          `Inverse-volatility sum invalid; falling back to equal-weight across ${children.length} child nodes.`
+        );
+        const fallbackWeight = parentWeight / children.length;
+        const fallbackPositions = children.flatMap((child) =>
+          evaluateNode(child, fallbackWeight, ctx)
+        );
+        return mergePositions(fallbackPositions);
+      }
+
+      const positions = scored.flatMap((entry, index) => {
+        const weightShare = parentWeight * (inverseValues[index] / inverseTotal);
+        if (entry.type === 'asset') {
+          return [
+            {
+              symbol: entry.symbol,
+              weight: weightShare,
+              rationale: `Inverse-volatility (${window}d)`,
+            },
+          ];
+        }
+        return evaluateNode(entry.node, weightShare, ctx);
+      });
+      return mergePositions(positions);
+    }
     case 'weight-specified': {
       const clones = node.slice(1);
       const positions = [];
