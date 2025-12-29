@@ -15,6 +15,7 @@ const runComposerStrategy = async ({
   rsiMethod = null,
   dataAdjustment = null,
   debugIndicators = null,
+  asOfMode = null,
 }) => {
   const cleanedScript = String(strategyText || '').trim();
   if (!cleanedScript) {
@@ -41,6 +42,7 @@ const runComposerStrategy = async ({
     rsiMethod,
     dataAdjustment,
     debugIndicators,
+    asOfMode,
   });
 
   if (fallbackReason) {

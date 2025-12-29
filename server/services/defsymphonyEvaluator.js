@@ -374,6 +374,20 @@ const normalizeBoolean = (value) => {
   return null;
 };
 
+const normalizeAsOfMode = (value) => {
+  if (!value) {
+    return null;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (['previous-close', 'prev', 'previous', 'prior', 'prior-close', 'last-close'].includes(normalized)) {
+    return 'previous-close';
+  }
+  if (['current', 'latest', 'now', 'intraday', 'live'].includes(normalized)) {
+    return 'current';
+  }
+  return null;
+};
+
 const isArray = Array.isArray;
 const isObj = (val) => val && typeof val === 'object' && !Array.isArray(val);
 
@@ -1244,6 +1258,7 @@ const loadPriceData = async (
   const start = new Date(asOfDate.getTime() - boundedLookback * 24 * 60 * 60 * 1000);
   const end = asOfDate;
   const adjustment = options.dataAdjustment;
+  const asOfMode = normalizeAsOfMode(options.asOfMode) || 'previous-close';
   const map = new Map();
   const missing = [];
   await Promise.all(
@@ -1256,14 +1271,18 @@ const loadPriceData = async (
           endDate: end,
           adjustment,
         });
-        const closes = (response.bars || []).map((bar) => Number(bar.c));
+        let bars = response.bars || [];
+        if (asOfMode === 'previous-close' && bars.length > 1) {
+          bars = bars.slice(0, -1);
+        }
+        const closes = bars.map((bar) => Number(bar.c));
         if (!closes.length) {
           throw new Error('No close prices returned.');
         }
         map.set(upper, {
           closes,
           latest: closes[closes.length - 1],
-          bars: response.bars,
+          bars,
         });
       } catch (error) {
         missing.push({
@@ -1273,7 +1292,25 @@ const loadPriceData = async (
       }
     })
   );
-  return { map, missing };
+  let asOfDateUsed = null;
+  map.forEach((series) => {
+    const lastBar = Array.isArray(series.bars) && series.bars.length
+      ? series.bars[series.bars.length - 1]
+      : null;
+    const timestamp = lastBar?.t;
+    if (!timestamp) {
+      return;
+    }
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) {
+      return;
+    }
+    if (!asOfDateUsed || date < asOfDateUsed) {
+      asOfDateUsed = date;
+    }
+  });
+
+  return { map, missing, asOfDate: asOfDateUsed, asOfMode };
 };
 
 const evaluateDefsymphonyStrategy = async ({
@@ -1283,6 +1320,7 @@ const evaluateDefsymphonyStrategy = async ({
   rsiMethod = null,
   dataAdjustment = null,
   debugIndicators = null,
+  asOfMode = null,
 }) => {
   const ast = parseComposerScript(strategyText);
   if (!ast) {
@@ -1305,6 +1343,8 @@ const evaluateDefsymphonyStrategy = async ({
   const resolvedAdjustment = normalizeAdjustment(
     dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT ?? 'raw'
   );
+  const resolvedAsOfMode =
+    normalizeAsOfMode(asOfMode) || normalizeAsOfMode(process.env.COMPOSER_ASOF_MODE) || 'previous-close';
   const resolvedDebugIndicators =
     normalizeBoolean(debugIndicators) ?? ENABLE_INDICATOR_DEBUG;
 
@@ -1318,19 +1358,26 @@ const evaluateDefsymphonyStrategy = async ({
     Math.ceil((requiredBars * CALENDAR_DAYS_PER_YEAR) / TRADING_DAYS_PER_YEAR) + 7
   );
 
-  const { map: priceData, missing: missingFromCache } = await loadPriceData(
+  const {
+    map: priceData,
+    missing: missingFromCache,
+    asOfDate: dataAsOfDate,
+    asOfMode: resolvedDataAsOfMode,
+  } = await loadPriceData(
     tickers,
     calendarLookbackDays,
     {
       asOfDate: resolvedAsOfDate,
       dataAdjustment: resolvedAdjustment,
+      asOfMode: resolvedAsOfMode,
     }
   );
+  const effectiveAsOfDate = dataAsOfDate || resolvedAsOfDate;
   const usableHistory = alignPriceHistory(priceData, requiredBars);
   if (!usableHistory) {
     throw new Error('Unable to align price history for the requested lookback window.');
   }
-  const asOfLabel = `, as of ${formatDateForLog(resolvedAsOfDate)}`;
+  const asOfLabel = `, as of ${formatDateForLog(effectiveAsOfDate)}`;
   const context = {
     priceData,
     missingSymbols: new Map(),
@@ -1338,7 +1385,7 @@ const evaluateDefsymphonyStrategy = async ({
     enableGroupMetrics: false,
     debugIndicators: resolvedDebugIndicators,
     rsiMethod: resolvedRsiMethod,
-    asOfDate: resolvedAsOfDate,
+    asOfDate: effectiveAsOfDate,
     dataAdjustment: resolvedAdjustment,
     reasoning: [
       `Step 1: Loaded ${priceData.size} of ${tickers.length} tickers from local Alpaca cache (calendar lookback ${calendarLookbackDays} days, usable ${usableHistory} bars${asOfLabel}).`,
@@ -1447,7 +1494,7 @@ const evaluateDefsymphonyStrategy = async ({
     `Local defsymphony evaluation completed with ${withPricing.length} positions.`,
     `Budget allocated: $${budget.toFixed(2)}.`,
   ];
-  summaryLines.push(`As-of date: ${formatDateForLog(resolvedAsOfDate)}.`);
+  summaryLines.push(`As-of date: ${formatDateForLog(effectiveAsOfDate)}.`);
   const missingCount = context.missingSymbols?.size || 0;
   if (missingCount) {
     summaryLines.push(
@@ -1475,10 +1522,11 @@ const evaluateDefsymphonyStrategy = async ({
         historyLength: usableHistory,
         groupSimulation: Boolean(context.enableGroupMetrics),
         groupSeriesMeta: context.groupSeriesMeta || null,
-        asOfDate: resolvedAsOfDate.toISOString(),
+        asOfDate: effectiveAsOfDate.toISOString(),
         rsiMethod: resolvedRsiMethod,
         dataAdjustment: resolvedAdjustment,
         debugIndicators: resolvedDebugIndicators,
+        asOfMode: resolvedDataAsOfMode || resolvedAsOfMode,
         missingData: context.missingSymbols
           ? Array.from(context.missingSymbols.entries()).map(([symbol, reason]) => ({ symbol, reason }))
           : [],

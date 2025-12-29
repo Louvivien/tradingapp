@@ -245,7 +245,15 @@ exports.getWorkflowIndicators = async (req, res) => {
 
 exports.evaluateComposerStrategy = async (req, res) => {
   try {
-    const { strategyText, budget, asOfDate, rsiMethod, dataAdjustment, debugIndicators } = req.body || {};
+    const {
+      strategyText,
+      budget,
+      asOfDate,
+      rsiMethod,
+      dataAdjustment,
+      debugIndicators,
+      asOfMode,
+    } = req.body || {};
     if (!strategyText || typeof strategyText !== 'string' || !strategyText.trim()) {
       return res.status(400).json({
         status: 'fail',
@@ -262,6 +270,7 @@ exports.evaluateComposerStrategy = async (req, res) => {
       rsiMethod,
       dataAdjustment,
       debugIndicators,
+      asOfMode,
     });
 
     if (!composerResult || !Array.isArray(composerResult.positions) || !composerResult.positions.length) {
@@ -295,6 +304,7 @@ exports.evaluateComposerStrategyLocal = async (req, res) => {
       rsiMethod,
       dataAdjustment,
       debugIndicators,
+      asOfMode,
     } = req.body || {};
     if (!strategyText || typeof strategyText !== 'string' || !strategyText.trim()) {
       return res.status(400).json({
@@ -320,6 +330,7 @@ exports.evaluateComposerStrategyLocal = async (req, res) => {
         rsiMethod: rsiMethod || null,
         dataAdjustment: dataAdjustment || null,
         debugIndicators: debugIndicators ?? null,
+        asOfMode: asOfMode || null,
       },
       handler: () =>
         evaluateDefsymphonyStrategy({
@@ -329,6 +340,7 @@ exports.evaluateComposerStrategyLocal = async (req, res) => {
           rsiMethod,
           dataAdjustment,
           debugIndicators,
+          asOfMode,
         }),
     });
 
