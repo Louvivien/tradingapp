@@ -20,7 +20,8 @@ fi
 
 # install node modules
 echo "Installing Node.js dependencies..."
-yarn install
+export YARN_CACHE_FOLDER="${YARN_CACHE_FOLDER:-/opt/render/project/.cache/yarn}"
+yarn install --frozen-lockfile --production --prefer-offline
 
 # navigate to scripts directory
 cd scripts
@@ -28,13 +29,11 @@ cd scripts
 # Check Python version
 python3 --version 
 
-# upgrade pip in the virtual environment
-echo "Upgrading pip in the virtual environment..."
-/opt/render/project/src/.venv/bin/python -m pip install --upgrade pip
-
 # install python packages
 echo "Installing Python dependencies..."
-pip3 install -r requirements.txt
+export PIP_CACHE_DIR="${PIP_CACHE_DIR:-/opt/render/project/.cache/pip}"
+export PIP_DISABLE_PIP_VERSION_CHECK=1
+pip3 install -r requirements.txt --upgrade-strategy only-if-needed
 
 # navigate back to server directory
 cd ..
