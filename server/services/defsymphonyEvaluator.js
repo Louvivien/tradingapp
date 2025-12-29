@@ -233,17 +233,96 @@ const computePortfolioReturn = (positions = [], priceData, priceIndex) => {
     if (!series || !Array.isArray(series.closes)) {
       return;
     }
-    if (priceIndex >= series.closes.length) {
+    const offset = Number(series.offset) || 0;
+    const relIdx = priceIndex - offset;
+    const prevRelIdx = relIdx - 1;
+    if (prevRelIdx < 0) {
       return;
     }
-    const prev = series.closes[priceIndex - 1];
-    const curr = series.closes[priceIndex];
+    if (!series.closes.length) {
+      return;
+    }
+    const prev = series.closes[Math.min(prevRelIdx, series.closes.length - 1)];
+    const curr = series.closes[Math.min(Math.max(relIdx, 0), series.closes.length - 1)];
     if (!Number.isFinite(prev) || !Number.isFinite(curr) || !prev) {
       return;
     }
     total += pos.weight * ((curr - prev) / prev);
   });
   return total;
+};
+
+const pickDateAxis = (mapsBySymbol, preferredSymbol) => {
+  if (!mapsBySymbol || typeof mapsBySymbol.get !== 'function') {
+    return [];
+  }
+  const preferred = preferredSymbol?.toUpperCase?.();
+  const preferredMap = preferred ? mapsBySymbol.get(preferred) : null;
+  if (preferredMap && preferredMap.size) {
+    return Array.from(preferredMap.keys()).sort();
+  }
+
+  let best = null;
+  mapsBySymbol.forEach((map, symbol) => {
+    if (!map?.size) {
+      return;
+    }
+    if (!best || map.size > best.map.size) {
+      best = { symbol, map };
+    }
+  });
+  return best ? Array.from(best.map.keys()).sort() : [];
+};
+
+const buildAlignedSeriesForAxis = (symbol, barMap, axisKeys) => {
+  if (!barMap?.size || !Array.isArray(axisKeys) || !axisKeys.length) {
+    return null;
+  }
+  const keys = Array.from(barMap.keys()).sort();
+  const firstKey = keys[0];
+  const offset = axisKeys.findIndex((key) => key >= firstKey);
+  if (offset < 0) {
+    return null;
+  }
+
+  let pointer = 0;
+  let lastClose = null;
+  const seedKey = axisKeys[offset];
+  while (pointer < keys.length && keys[pointer] <= seedKey) {
+    const entry = barMap.get(keys[pointer]);
+    const close = Number(entry?.close);
+    if (Number.isFinite(close)) {
+      lastClose = close;
+    }
+    pointer += 1;
+  }
+  if (!Number.isFinite(lastClose)) {
+    return null;
+  }
+
+  const closes = [];
+  const bars = [];
+  for (let idx = offset; idx < axisKeys.length; idx += 1) {
+    const dateKey = axisKeys[idx];
+    while (pointer < keys.length && keys[pointer] <= dateKey) {
+      const entry = barMap.get(keys[pointer]);
+      const close = Number(entry?.close);
+      if (Number.isFinite(close)) {
+        lastClose = close;
+      }
+      pointer += 1;
+    }
+    closes.push(lastClose);
+    bars.push({ t: `${dateKey}T00:00:00.000Z`, c: lastClose });
+  }
+
+  return {
+    symbol: symbol.toUpperCase(),
+    offset,
+    closes,
+    latest: closes.length ? closes[closes.length - 1] : null,
+    bars,
+  };
 };
 
 const simulateNodeSeries = (node, ctx, options) => {
@@ -401,7 +480,7 @@ const normalizePriceSource = (value) => {
     return null;
   }
   const normalized = String(value).trim().toLowerCase();
-  if (normalized === 'yahoo' || normalized === 'alpaca') {
+  if (normalized === 'yahoo' || normalized === 'alpaca' || normalized === 'tiingo') {
     return normalized;
   }
   return null;
@@ -2006,6 +2085,12 @@ const backtestDefsymphonyStrategy = async ({
     resolvedPriceSource === 'yahoo';
   const resolvedAsOfMode = normalizeAsOfMode(asOfMode) || 'previous-close';
 
+  const calendarSymbol = String(
+    includeBenchmark && benchmarkSymbol ? benchmarkSymbol : tickers[0]
+  )
+    .trim()
+    .toUpperCase();
+
   const priceBarsBySymbol = new Map();
   const fetchSymbol = async (symbol) => {
     const response = await getCachedPrices({
@@ -2020,28 +2105,44 @@ const backtestDefsymphonyStrategy = async ({
     priceBarsBySymbol.set(symbol, buildBarsByDateKey(bars));
   };
 
+  const symbolsToFetch = Array.from(new Set([...tickers.map((t) => t.toUpperCase()), calendarSymbol]));
   if (resolvedPriceSource === 'yahoo') {
-    await runWithConcurrency(tickers, 4, async (ticker) => fetchSymbol(ticker.toUpperCase()));
+    await runWithConcurrency(symbolsToFetch, 4, async (ticker) => fetchSymbol(ticker.toUpperCase()));
   } else {
-    await Promise.all(tickers.map((ticker) => fetchSymbol(ticker.toUpperCase())));
+    await Promise.all(symbolsToFetch.map((ticker) => fetchSymbol(ticker.toUpperCase())));
   }
 
-  const commonDates = intersectDateKeys(priceBarsBySymbol);
-  if (commonDates.length < requiredBars + 2) {
+  const axisDates = pickDateAxis(priceBarsBySymbol, calendarSymbol);
+  if (axisDates.length < requiredBars + 2) {
     throw new Error(
-      `Not enough common trading days across symbols to backtest (need at least ${requiredBars + 2}, have ${commonDates.length}).`
+      `Not enough trading days available to backtest (need at least ${requiredBars + 2}, have ${axisDates.length}).`
     );
   }
 
   const startKey = toISODateKey(resolvedStart);
   const endKey = toISODateKey(resolvedEnd);
-  const requestedStartIdx = findFirstIndex(commonDates, (key) => key >= startKey);
-  const requestedEndIdx = findLastIndex(commonDates, (key) => key <= endKey);
+  const requestedStartIdx = findFirstIndex(axisDates, (key) => key >= startKey);
+  const requestedEndIdx = findLastIndex(axisDates, (key) => key <= endKey);
   if (requestedStartIdx === -1 || requestedEndIdx === -1 || requestedEndIdx <= 0) {
     throw new Error('No overlapping trading days found for the requested date range.');
   }
 
-  const minExecutionIndex = Math.max(1, requiredBars + 1);
+  const alignedSeries = new Map();
+  tickers.forEach((ticker) => {
+    const map = priceBarsBySymbol.get(ticker);
+    const series = buildAlignedSeriesForAxis(ticker, map, axisDates);
+    if (series) {
+      alignedSeries.set(ticker, series);
+    }
+  });
+
+  const missingAligned = tickers.filter((ticker) => !alignedSeries.has(ticker));
+  if (missingAligned.length) {
+    throw new Error(`Unable to align price history for: ${missingAligned.join(', ')}`);
+  }
+
+  const offsets = tickers.map((ticker) => Number(alignedSeries.get(ticker)?.offset) || 0);
+  const minExecutionIndex = Math.max(1, ...offsets.map((offset) => offset + requiredBars + 1));
   const executionStartIdx = Math.max(requestedStartIdx, minExecutionIndex);
   if (executionStartIdx > requestedEndIdx) {
     throw new Error('Requested range is too early; not enough warmup history for indicators.');
@@ -2056,13 +2157,14 @@ const backtestDefsymphonyStrategy = async ({
 
   const priceData = new Map();
   tickers.forEach((ticker) => {
-    const map = priceBarsBySymbol.get(ticker);
-    const closes = commonDates.map((dateKey) => map.get(dateKey).close);
-    const bars = commonDates.map((dateKey) => ({ t: `${dateKey}T00:00:00.000Z`, c: map.get(dateKey).close }));
+    const series = alignedSeries.get(ticker);
+    const closes = series?.closes || [];
+    const bars = series?.bars || [];
     priceData.set(ticker, {
       closes,
-      latest: closes[closes.length - 1],
+      latest: closes.length ? closes[closes.length - 1] : null,
       bars,
+      offset: series?.offset || 0,
     });
   });
 
@@ -2076,7 +2178,7 @@ const backtestDefsymphonyStrategy = async ({
     nodeSeries: new Map(),
     enableGroupMetrics: Boolean(astStats.hasGroupFilter),
     groupSeriesMeta: Boolean(astStats.hasGroupFilter)
-      ? { startIndex: 1, priceLength: commonDates.length }
+      ? { startIndex: 1, priceLength: axisDates.length }
       : null,
     debugIndicators: false,
     rsiMethod: resolvedRsiMethod,
@@ -2128,7 +2230,7 @@ const backtestDefsymphonyStrategy = async ({
   const metrics = computeBacktestMetrics({ navSeries, dailyReturns, turnoverSeries });
   const series = navSeries.map((navValue, offset) => {
     const idx = executionStartIdx + offset;
-    const dateKey = commonDates[idx];
+    const dateKey = axisDates[idx];
     return {
       date: dateKey,
       nav: navValue,
@@ -2141,23 +2243,37 @@ const backtestDefsymphonyStrategy = async ({
   let benchmark = null;
   if (includeBenchmark && benchmarkSymbol) {
     try {
-      const benchResp = await getCachedPrices({
-        symbol: String(benchmarkSymbol).trim().toUpperCase(),
-        startDate: dataStart,
-        endDate: resolvedEnd,
-        adjustment: resolvedAdjustment,
-        source: resolvedPriceSource,
-        forceRefresh: resolvedPriceRefresh,
-      });
-      const benchMap = buildBarsByDateKey(benchResp.bars || []);
+      const normalizedBenchmark = String(benchmarkSymbol).trim().toUpperCase();
+      let benchMap = priceBarsBySymbol.get(normalizedBenchmark);
+      if (!benchMap?.size) {
+        const benchResp = await getCachedPrices({
+          symbol: normalizedBenchmark,
+          startDate: dataStart,
+          endDate: resolvedEnd,
+          adjustment: resolvedAdjustment,
+          source: resolvedPriceSource,
+          forceRefresh: resolvedPriceRefresh,
+        });
+        benchMap = buildBarsByDateKey(benchResp.bars || []);
+      }
+
+      const benchSeries = buildAlignedSeriesForAxis(normalizedBenchmark, benchMap, axisDates);
+      if (!benchSeries) {
+        throw new Error('Unable to align benchmark history.');
+      }
       const benchNavSeries = [];
       const benchReturns = [];
       let benchNav = 1;
       for (let idx = executionStartIdx; idx <= requestedEndIdx; idx += 1) {
-        const dateKey = commonDates[idx];
-        const prevKey = commonDates[idx - 1];
-        const curr = benchMap.get(dateKey)?.close;
-        const prev = benchMap.get(prevKey)?.close;
+        const relIdx = idx - benchSeries.offset;
+        const prevRelIdx = relIdx - 1;
+        if (prevRelIdx < 0) {
+          benchNavSeries.push(benchNav);
+          benchReturns.push(0);
+          continue;
+        }
+        const prev = benchSeries.closes[Math.min(prevRelIdx, benchSeries.closes.length - 1)];
+        const curr = benchSeries.closes[Math.min(Math.max(relIdx, 0), benchSeries.closes.length - 1)];
         if (!Number.isFinite(curr) || !Number.isFinite(prev) || prev <= 0) {
           benchNavSeries.push(benchNav);
           benchReturns.push(0);
@@ -2169,9 +2285,9 @@ const backtestDefsymphonyStrategy = async ({
         benchReturns.push(daily);
       }
       benchmark = {
-        symbol: String(benchmarkSymbol).trim().toUpperCase(),
+        symbol: normalizedBenchmark,
         series: benchNavSeries.map((navValue, offset) => ({
-          date: commonDates[executionStartIdx + offset],
+          date: axisDates[executionStartIdx + offset],
           nav: navValue,
           value: navValue * resolvedCapital,
           dailyReturn: benchReturns[offset],

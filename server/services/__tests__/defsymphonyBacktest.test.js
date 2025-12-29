@@ -32,6 +32,14 @@ const installPriceMapMock = (priceMap) => {
   });
 };
 
+const dropBarForDate = (priceResponse, dateKey) => {
+  const bars = (priceResponse?.bars || []).filter((bar) => {
+    const key = new Date(bar.t).toISOString().slice(0, 10);
+    return key !== dateKey;
+  });
+  return { ...priceResponse, bars };
+};
+
 describe('backtestDefsymphonyStrategy', () => {
   beforeEach(() => {
     getCachedPrices.mockReset();
@@ -66,6 +74,42 @@ describe('backtestDefsymphonyStrategy', () => {
     expect(result.series[result.series.length - 1].date).toBe('2020-02-09');
     expect(result.metrics.totalReturn).toBeGreaterThan(0);
     expect(result.benchmark?.symbol).toBe('SPY');
+  });
+
+  it('keeps the requested date range even if a symbol misses an intermediate bar', async () => {
+    const aaa = buildPriceResponseFromSeries(Array.from({ length: 45 }, (_, i) => 100 + i));
+    const bbb = dropBarForDate(
+      buildPriceResponseFromSeries(Array.from({ length: 45 }, (_, i) => 200 + i)),
+      '2020-01-20'
+    );
+    const spy = buildPriceResponseFromSeries(Array.from({ length: 45 }, (_, i) => 300 + i));
+
+    installPriceMapMock({
+      AAA: aaa,
+      BBB: bbb,
+      SPY: spy,
+    });
+
+    const strategy = `
+      (defsymphony "Equal Weight Missing Day" {}
+        (weight-equal
+          [
+            (asset "AAA")
+            (asset "BBB")
+          ]))
+    `;
+
+    const result = await backtestDefsymphonyStrategy({
+      strategyText: strategy,
+      startDate: '2020-01-15',
+      endDate: '2020-02-09',
+      initialCapital: 10000,
+      includeBenchmark: true,
+    });
+
+    const expectedDays = Math.floor((new Date('2020-02-09').getTime() - new Date('2020-01-15').getTime()) / (24 * 60 * 60 * 1000)) + 1;
+    expect(result.series.length).toBe(expectedDays);
+    expect(result.series.some((point) => point.date === '2020-01-20')).toBe(true);
   });
 
   it('applies transaction costs based on turnover for switching strategies', async () => {

@@ -2,8 +2,14 @@ const Axios = require('axios');
 const PriceCache = require('../models/priceCacheModel');
 const { getAlpacaConfig } = require('../config/alpacaConfig');
 
-const MAX_LOOKBACK_DAYS = 750; // roughly 3 years
+const DEFAULT_MAX_LOOKBACK_DAYS = 5000; // ~20 years (calendar days)
+const MAX_LOOKBACK_DAYS = (() => {
+  const parsed = Number(process.env.PRICE_MAX_LOOKBACK_DAYS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_LOOKBACK_DAYS;
+})();
 const CACHE_TTL_HOURS = 24;
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const normalizeAdjustment = (value) => {
   const normalized = String(value ?? '').trim().toLowerCase();
@@ -54,6 +60,123 @@ const barsCoverRange = (bars = [], start, end) => {
   const first = bars[0].t;
   const last = bars[bars.length - 1].t;
   return first <= start && last >= end;
+};
+
+const toISODateKey = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date.toISOString().slice(0, 10);
+};
+
+const getTiingoTokens = () => {
+  const tokens = [];
+  const fromList = String(process.env.TIINGO_API_KEYS ?? process.env.TIINGO_TOKEN ?? '')
+    .split(/[,\s]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  tokens.push(...fromList);
+
+  for (let idx = 1; idx <= 10; idx += 1) {
+    const value = process.env[`TIINGO_API_KEY${idx}`];
+    if (value) {
+      tokens.push(String(value).trim());
+    }
+  }
+
+  return Array.from(new Set(tokens.filter(Boolean)));
+};
+
+const fetchBarsFromTiingo = async ({ symbol, start, end, adjustment }) => {
+  const tokens = getTiingoTokens();
+  if (!tokens.length) {
+    throw new Error('Missing Tiingo token (set TIINGO_API_KEYS or TIINGO_API_KEY1...).');
+  }
+
+  const startKey = toISODateKey(start);
+  const endKey = toISODateKey(end);
+  if (!startKey || !endKey) {
+    throw new Error('Invalid date range for Tiingo request.');
+  }
+
+  const resolvedAdjustment = normalizeAdjustment(adjustment);
+  const useAdjusted = resolvedAdjustment !== 'raw';
+
+  let lastError = null;
+  for (let attempt = 0; attempt < tokens.length; attempt += 1) {
+    const token = tokens[attempt];
+    const url = `https://api.tiingo.com/tiingo/daily/${encodeURIComponent(symbol)}/prices`;
+    try {
+      const { data } = await Axios.get(url, {
+        params: {
+          startDate: startKey,
+          endDate: endKey,
+          token,
+        },
+      });
+
+      const rows = Array.isArray(data) ? data : [];
+      const bars = rows
+        .map((row) => {
+          const close = Number(row?.close);
+          const adjClose = Number(row?.adjClose);
+          const open = Number(row?.open);
+          const high = Number(row?.high);
+          const low = Number(row?.low);
+          const volume = Number(row?.volume ?? row?.adjVolume ?? 0);
+          const timestamp = row?.date;
+          const date = timestamp ? new Date(timestamp) : null;
+          if (!date || Number.isNaN(date.getTime())) {
+            return null;
+          }
+
+          const hasAdj = Number.isFinite(adjClose) && Number.isFinite(close) && close > 0;
+          const ratio = useAdjusted && hasAdj ? adjClose / close : 1;
+          const effectiveClose = useAdjusted && Number.isFinite(adjClose) ? adjClose : close;
+          const effectiveOpen = Number.isFinite(open) ? open * ratio : effectiveClose;
+          const effectiveHigh = Number.isFinite(high) ? high * ratio : effectiveClose;
+          const effectiveLow = Number.isFinite(low) ? low * ratio : effectiveClose;
+          if (
+            !Number.isFinite(effectiveClose) ||
+            !Number.isFinite(effectiveOpen) ||
+            !Number.isFinite(effectiveHigh) ||
+            !Number.isFinite(effectiveLow)
+          ) {
+            return null;
+          }
+
+          return {
+            t: date.toISOString(),
+            o: effectiveOpen,
+            h: effectiveHigh,
+            l: effectiveLow,
+            c: effectiveClose,
+            v: Number.isFinite(volume) ? volume : 0,
+          };
+        })
+        .filter(Boolean);
+
+      bars.sort((a, b) => new Date(a.t) - new Date(b.t));
+      if (bars.length) {
+        return bars;
+      }
+    } catch (error) {
+      lastError = error;
+      const status = Number(error?.response?.status);
+      const shouldRotate = status === 429 || status === 403;
+      if (!shouldRotate) {
+        throw error;
+      }
+      const backoffMs = 500 + attempt * 250;
+      await sleep(backoffMs);
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+  return [];
 };
 
 const fetchBarsFromAlpaca = async ({ symbol, start, end, adjustment }) => {
@@ -301,6 +424,10 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source })
     const alpacaBars = await fetchBarsFromAlpaca({ symbol, start, end, adjustment });
     return { bars: alpacaBars, dataSource: 'alpaca' };
   }
+  if (normalizedSource === 'tiingo') {
+    const tiingoBars = await fetchBarsFromTiingo({ symbol, start, end, adjustment });
+    return { bars: tiingoBars, dataSource: 'tiingo' };
+  }
   try {
     const alpacaBars = await fetchBarsFromAlpaca({ symbol, start, end, adjustment });
     if (alpacaBars.length) {
@@ -308,6 +435,15 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source })
     }
   } catch (error) {
     console.warn(`[PriceCache] Alpaca data fetch failed for ${symbol}: ${error.message}`);
+  }
+
+  try {
+    const tiingoBars = await fetchBarsFromTiingo({ symbol, start, end, adjustment });
+    if (tiingoBars.length) {
+      return { bars: tiingoBars, dataSource: 'tiingo' };
+    }
+  } catch (error) {
+    console.warn(`[PriceCache] Tiingo fallback failed for ${symbol}: ${error.message}`);
   }
 
   try {
@@ -342,7 +478,7 @@ const getCachedPrices = async ({
 
   const baseQuery = { symbol: uppercaseSymbol, granularity: '1Day' };
   const sourceQuery =
-    resolvedSource === 'yahoo' || resolvedSource === 'alpaca'
+    resolvedSource === 'yahoo' || resolvedSource === 'alpaca' || resolvedSource === 'tiingo'
       ? { dataSource: resolvedSource }
       : {};
   const cacheQuery =
