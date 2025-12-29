@@ -16,6 +16,23 @@ const normalizeAdjustment = (value) => {
   return 'split';
 };
 
+const normalizeBoolean = (value) => {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (['true', '1', 'yes', 'y'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'n'].includes(normalized)) {
+    return false;
+  }
+  return null;
+};
+
 const toISO = (value) => {
   const date = value instanceof Date ? value : new Date(value);
   return date.toISOString();
@@ -232,7 +249,14 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source })
   throw new Error(`No market data returned for ${symbol}.`);
 };
 
-const getCachedPrices = async ({ symbol, startDate, endDate, adjustment, source }) => {
+const getCachedPrices = async ({
+  symbol,
+  startDate,
+  endDate,
+  adjustment,
+  source,
+  forceRefresh,
+}) => {
   const uppercaseSymbol = symbol?.toUpperCase?.();
   if (!uppercaseSymbol) {
     throw new Error('Symbol is required.');
@@ -240,6 +264,8 @@ const getCachedPrices = async ({ symbol, startDate, endDate, adjustment, source 
   const { start, end } = normalizeDateRange(startDate, endDate);
   const resolvedAdjustment = normalizeAdjustment(adjustment ?? process.env.ALPACA_DATA_ADJUSTMENT);
   const resolvedSource = String(source ?? process.env.PRICE_DATA_SOURCE ?? '').trim().toLowerCase();
+  const resolvedForceRefresh =
+    normalizeBoolean(forceRefresh) ?? normalizeBoolean(process.env.PRICE_DATA_FORCE_REFRESH) ?? false;
 
   const baseQuery = { symbol: uppercaseSymbol, granularity: '1Day' };
   const sourceQuery =
@@ -253,6 +279,7 @@ const getCachedPrices = async ({ symbol, startDate, endDate, adjustment, source 
 
   let cache = await PriceCache.findOne(cacheQuery);
   const isFresh =
+    !resolvedForceRefresh &&
     cache &&
     cache.refreshedAt &&
     (Date.now() - new Date(cache.refreshedAt).getTime()) / (1000 * 60 * 60) < CACHE_TTL_HOURS &&
