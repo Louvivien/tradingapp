@@ -16,7 +16,7 @@ const ENABLE_FRACTIONAL_ORDERS =
   String(process.env.ALPACA_ENABLE_FRACTIONAL ?? 'true').toLowerCase() !== 'false';
 const FRACTIONAL_QTY_DECIMALS = 6;
 const ENABLE_INDICATOR_DEBUG =
-  String(process.env.COMPOSER_DEBUG_INDICATORS ?? 'false').toLowerCase() === 'true';
+  String(process.env.COMPOSER_DEBUG_INDICATORS ?? 'true').toLowerCase() === 'true';
 
 const METRIC_DEFAULT_WINDOWS = {
   rsi: 14,
@@ -355,6 +355,23 @@ const normalizeRsiMethod = (value) => {
   }
   const normalized = String(value).trim().toLowerCase();
   return normalized || null;
+};
+
+const normalizeBoolean = (value) => {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (['true', '1', 'yes', 'y'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'n'].includes(normalized)) {
+    return false;
+  }
+  return null;
 };
 
 const isArray = Array.isArray;
@@ -1265,6 +1282,7 @@ const evaluateDefsymphonyStrategy = async ({
   asOfDate = null,
   rsiMethod = null,
   dataAdjustment = null,
+  debugIndicators = null,
 }) => {
   const ast = parseComposerScript(strategyText);
   if (!ast) {
@@ -1287,6 +1305,8 @@ const evaluateDefsymphonyStrategy = async ({
   const resolvedAdjustment = normalizeAdjustment(
     dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT ?? 'raw'
   );
+  const resolvedDebugIndicators =
+    normalizeBoolean(debugIndicators) ?? ENABLE_INDICATOR_DEBUG;
 
   const requiredBars = Math.max(
     DEFAULT_LOOKBACK_BARS,
@@ -1316,7 +1336,7 @@ const evaluateDefsymphonyStrategy = async ({
     missingSymbols: new Map(),
     nodeIdMap,
     enableGroupMetrics: false,
-    debugIndicators: ENABLE_INDICATOR_DEBUG,
+    debugIndicators: resolvedDebugIndicators,
     rsiMethod: resolvedRsiMethod,
     asOfDate: resolvedAsOfDate,
     dataAdjustment: resolvedAdjustment,
@@ -1458,6 +1478,7 @@ const evaluateDefsymphonyStrategy = async ({
         asOfDate: resolvedAsOfDate.toISOString(),
         rsiMethod: resolvedRsiMethod,
         dataAdjustment: resolvedAdjustment,
+        debugIndicators: resolvedDebugIndicators,
         missingData: context.missingSymbols
           ? Array.from(context.missingSymbols.entries()).map(([symbol, reason]) => ({ symbol, reason }))
           : [],

@@ -7,7 +7,15 @@ const normalizeEnginePreference = (value) => {
   return String(value).trim().toLowerCase();
 };
 
-const runComposerStrategy = async ({ strategyText, budget = 1000, engine = null }) => {
+const runComposerStrategy = async ({
+  strategyText,
+  budget = 1000,
+  engine = null,
+  asOfDate = null,
+  rsiMethod = null,
+  dataAdjustment = null,
+  debugIndicators = null,
+}) => {
   const cleanedScript = String(strategyText || '').trim();
   if (!cleanedScript) {
     throw new Error('Strategy text is required');
@@ -29,6 +37,10 @@ const runComposerStrategy = async ({ strategyText, budget = 1000, engine = null 
   const result = await evaluateDefsymphonyStrategy({
     strategyText: cleanedScript,
     budget: numericBudget,
+    asOfDate,
+    rsiMethod,
+    dataAdjustment,
+    debugIndicators,
   });
 
   if (fallbackReason) {
