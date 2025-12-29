@@ -245,7 +245,7 @@ exports.getWorkflowIndicators = async (req, res) => {
 
 exports.evaluateComposerStrategy = async (req, res) => {
   try {
-    const { strategyText, budget } = req.body || {};
+    const { strategyText, budget, asOfDate, rsiMethod, dataAdjustment, debugIndicators } = req.body || {};
     if (!strategyText || typeof strategyText !== 'string' || !strategyText.trim()) {
       return res.status(400).json({
         status: 'fail',
@@ -258,6 +258,10 @@ exports.evaluateComposerStrategy = async (req, res) => {
     const composerResult = await runComposerStrategy({
       strategyText,
       budget: parsedBudget,
+      asOfDate,
+      rsiMethod,
+      dataAdjustment,
+      debugIndicators,
     });
 
     if (!composerResult || !Array.isArray(composerResult.positions) || !composerResult.positions.length) {
@@ -283,7 +287,15 @@ exports.evaluateComposerStrategy = async (req, res) => {
 
 exports.evaluateComposerStrategyLocal = async (req, res) => {
   try {
-    const { strategyText, budget, clientRequestId, asOfDate, rsiMethod, dataAdjustment } = req.body || {};
+    const {
+      strategyText,
+      budget,
+      clientRequestId,
+      asOfDate,
+      rsiMethod,
+      dataAdjustment,
+      debugIndicators,
+    } = req.body || {};
     if (!strategyText || typeof strategyText !== 'string' || !strategyText.trim()) {
       return res.status(400).json({
         status: 'fail',
@@ -307,6 +319,7 @@ exports.evaluateComposerStrategyLocal = async (req, res) => {
         asOfDate: asOfDate || null,
         rsiMethod: rsiMethod || null,
         dataAdjustment: dataAdjustment || null,
+        debugIndicators: debugIndicators ?? null,
       },
       handler: () =>
         evaluateDefsymphonyStrategy({
@@ -315,6 +328,7 @@ exports.evaluateComposerStrategyLocal = async (req, res) => {
           asOfDate,
           rsiMethod,
           dataAdjustment,
+          debugIndicators,
         }),
     });
 
