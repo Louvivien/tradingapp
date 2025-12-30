@@ -58,6 +58,7 @@ const Strategies = () => {
   const [aifundbudget, setAiFundBudget] = useState("");
 
   const [strategyName, setstrategyName] = useState("");
+  const [symphonyUrl, setSymphonyUrl] = useState("");
   const [collaborativeCashLimit, setCollaborativeCashLimit] = useState("");
   const [responseReceived, setResponseReceived] = useState(false);
   const { userData, setUserData } = useContext(UserContext);
@@ -417,6 +418,7 @@ const Strategies = () => {
     }
     setcollaborative(selectedLibraryStrategy.strategy || "");
     setstrategyName(selectedLibraryStrategy.name || "");
+    setSymphonyUrl(selectedLibraryStrategy.symphonyUrl || "");
     if (selectedLibraryStrategy.recurrence) {
       setCollaborativeRecurrence(selectedLibraryStrategy.recurrence);
     }
@@ -565,6 +567,7 @@ const Strategies = () => {
         collaborative,
         userID: userId,
         strategyName,
+        symphonyUrl,
         recurrence: collaborativeRecurrence,
         cashLimit: collaborativeCashLimit,
         jobId,
@@ -803,6 +806,18 @@ return (
                     <Typography variant="body2">
                       <strong>Last updated:</strong> {formatDateTime(selectedLibraryStrategy.updatedAt)}
                     </Typography>
+                    {selectedLibraryStrategy.symphonyUrl && (
+                      <Typography variant="body2">
+                        <strong>Symphony:</strong>{" "}
+                        <Link
+                          href={selectedLibraryStrategy.symphonyUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          Open
+                        </Link>
+                      </Typography>
+                    )}
                     {selectedLibraryStrategy.summary && (
                       <Box mt={1}>
                         <Typography variant="body2" fontWeight={600}>Summary</Typography>
@@ -875,6 +890,18 @@ return (
               value={strategyName}
               onChange={(e) => setstrategyName(e.target.value)}
               fullWidth
+            />
+            <br />
+            <TextField
+              variant="outlined"
+              id="symphonyUrl"
+              label="Symphony link (optional)"
+              name="symphonyUrl"
+              value={symphonyUrl}
+              onChange={(e) => setSymphonyUrl(e.target.value)}
+              fullWidth
+              margin="normal"
+              placeholder="https://app.composer.trade/symphony/..."
             />
             <br />
             <TextField

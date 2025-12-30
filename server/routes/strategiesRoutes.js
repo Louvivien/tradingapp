@@ -16,6 +16,7 @@ const {
   getEquityBackfillStatus,
   triggerEquityBackfill,
   updateStrategyRecurrence,
+  updateStrategyMetadata,
   streamStrategyProgress,
   resendCollaborativeOrders,
   updateNextRebalanceDate,
@@ -41,6 +42,7 @@ router.route("/equity/:userId/:strategyId").get(auth, getStrategyEquityHistory);
 router.route("/equity/backfill-status/:userId").get(auth, getEquityBackfillStatus);
 router.route("/equity/backfill/:userId").post(auth, triggerEquityBackfill);
 router.route("/recurrence/:userId/:strategyId").patch(auth, updateStrategyRecurrence);
+router.route("/metadata/:userId/:strategyId").patch(auth, updateStrategyMetadata);
 router.route("/rebalance-date/:userId/:strategyId").patch(auth, updateNextRebalanceDate);
 router.route("/composer-holdings/:userId/:strategyId").get(auth, getComposerHoldings).patch(auth, updateComposerHoldings);
 router.route("/composer-holdings/compare/:userId/:strategyId").get(auth, compareComposerHoldings);

@@ -42,6 +42,26 @@ const RECURRENCE_LABELS = {
 
 const VALID_RECURRENCES = new Set(['every_minute','every_5_minutes','every_15_minutes','hourly','daily','weekly','monthly']);
 
+const parseOptionalHttpUrl = (value) => {
+  if (value === undefined) {
+    return undefined;
+  }
+  const trimmed = String(value || '').trim();
+  if (!trimmed) {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = new URL(trimmed);
+  } catch (error) {
+    throw new Error('Please provide a valid Symphony URL (including https://).');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new Error('Please provide a valid Symphony URL (http or https).');
+  }
+  return parsed.toString();
+};
+
 const formatCurrency = (value) => {
   const num = toNumber(value, null);
   if (!Number.isFinite(num)) {
@@ -170,6 +190,7 @@ const upsertStrategyTemplate = async ({
   summary,
   decisions,
   recurrence,
+  symphonyUrl = null,
   strategyId = null,
 }) => {
   try {
@@ -177,6 +198,13 @@ const upsertStrategyTemplate = async ({
       return null;
     }
     const normalizedRecurrence = normalizeRecurrence(recurrence);
+    const normalizedSymphonyUrl = (() => {
+      try {
+        return parseOptionalHttpUrl(symphonyUrl) ?? null;
+      } catch (error) {
+        return null;
+      }
+    })();
     return await StrategyTemplate.findOneAndUpdate(
       { userId: String(userId), name },
       {
@@ -187,6 +215,7 @@ const upsertStrategyTemplate = async ({
         decisions: Array.isArray(decisions) ? decisions : [],
         recurrence: normalizedRecurrence,
         strategyId: strategyId || null,
+        symphonyUrl: normalizedSymphonyUrl,
         lastUsedAt: new Date(),
       },
       {
@@ -771,6 +800,13 @@ exports.createCollaborative = async (req, res) => {
     }
     const strategyName = rawStrategyName;
 
+    let symphonyUrl = null;
+    try {
+      symphonyUrl = parseOptionalHttpUrl(req.body.symphonyUrl) ?? null;
+    } catch (error) {
+      return progressFail(400, error.message || 'Invalid Symphony URL.', 'validation');
+    }
+
     if (/Below is a trading[\s\S]*strategy does\?/.test(input)) {
       input = input.replace(/Below is a trading[\s\S]*strategy does\?/, "");
     }
@@ -1250,6 +1286,7 @@ exports.createCollaborative = async (req, res) => {
         reasoning: composerReasoning,
         orderPlan: finalizedPlan,
         composerMeta,
+        symphonyUrl,
       }
     );
 
@@ -1268,6 +1305,7 @@ exports.createCollaborative = async (req, res) => {
       summary: workingSummary,
       decisions: workingDecisions,
       recurrence,
+      symphonyUrl,
       strategyId: portfolioRecord?.strategy_id || null,
     });
 
@@ -2185,6 +2223,110 @@ exports.updateNextRebalanceDate = async (req, res) => {
   }
 };
 
+exports.updateStrategyMetadata = async (req, res) => {
+  try {
+    const { userId, strategyId } = req.params;
+    const userKey = String(userId || '');
+
+    if (!userKey || req.user !== userKey) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const payload = req.body || {};
+    const updates = {};
+
+    if (payload.name !== undefined) {
+      const nextName = String(payload.name || '').trim();
+      if (!nextName) {
+        return res.status(400).json({
+          status: 'fail',
+          message: 'Strategy name cannot be empty.',
+        });
+      }
+      updates.name = nextName;
+    }
+
+    if (payload.symphonyUrl !== undefined) {
+      try {
+        updates.symphonyUrl = parseOptionalHttpUrl(payload.symphonyUrl);
+      } catch (error) {
+        return res.status(400).json({
+          status: 'fail',
+          message: error.message || 'Invalid Symphony URL.',
+        });
+      }
+    }
+
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'No metadata updates provided.',
+      });
+    }
+
+    const existing = await Strategy.findOne({ strategy_id: strategyId, userId: userKey });
+    if (!existing) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Strategy not found.',
+      });
+    }
+
+    if (updates.name && updates.name !== existing.name) {
+      const conflict = await Strategy.findOne({
+        userId: userKey,
+        name: updates.name,
+        strategy_id: { $ne: strategyId },
+      }).lean();
+      if (conflict) {
+        return res.status(409).json({
+          status: 'fail',
+          message: `A strategy named "${updates.name}" already exists. Please choose another name.`,
+        });
+      }
+    }
+
+    const updated = await Strategy.findOneAndUpdate(
+      { strategy_id: strategyId, userId: userKey },
+      { $set: updates },
+      { new: true }
+    ).lean();
+
+    if (updates.name) {
+      await Portfolio.updateOne(
+        { strategy_id: strategyId, userId: userKey },
+        { $set: { name: updates.name } }
+      );
+    }
+
+    await recordStrategyLog({
+      strategyId,
+      userId: userKey,
+      strategyName: updated?.name || existing.name,
+      message: 'Strategy metadata updated',
+      details: updates,
+    });
+
+    return res.status(200).json({
+      status: 'success',
+      strategy: {
+        id: updated?.strategy_id || strategyId,
+        name: updated?.name || existing.name,
+        symphonyUrl: updated?.symphonyUrl || null,
+      },
+    });
+  } catch (error) {
+    console.error('Error updating strategy metadata:', error.message);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Failed to update strategy metadata.',
+    });
+  }
+};
+
 exports.updateComposerHoldings = async (req, res) => {
   try {
     const { userId, strategyId } = req.params;
@@ -2472,6 +2614,7 @@ exports.compareComposerHoldings = async (req, res) => {
 exports.getPortfolios = async (req, res) => {
   try {
     const { userId } = req.params;
+    const userKey = String(userId || '');
 
     if (!userId) {
       return res.status(400).json({
@@ -2583,6 +2726,39 @@ exports.getPortfolios = async (req, res) => {
     }
 
     const now = new Date();
+    const symphonyUrlByStrategyId = new Map();
+    const strategyIds = Array.from(
+      new Set(
+        rawPortfolios
+          .map((portfolio) => String(portfolio.strategy_id || '').trim())
+          .filter(Boolean)
+      )
+    );
+    if (strategyIds.length) {
+      const rows = await Strategy.find({
+        strategy_id: { $in: strategyIds },
+        $or: [
+          { userId: userKey },
+          { userId: null },
+          { userId: '' },
+          { userId: { $exists: false } },
+        ],
+      })
+        .select('strategy_id symphonyUrl userId')
+        .lean()
+        .catch(() => []);
+
+      rows.forEach((row) => {
+        const id = row?.strategy_id ? String(row.strategy_id) : '';
+        if (!id) {
+          return;
+        }
+        const shouldOverride = !symphonyUrlByStrategyId.has(id) || String(row.userId || '') === userKey;
+        if (shouldOverride) {
+          symphonyUrlByStrategyId.set(id, row?.symphonyUrl || null);
+        }
+      });
+    }
     const enhancedPortfolios = rawPortfolios.map((portfolio) => {
       let normalizedTargets = normalizeTargetPositions(portfolio.targetPositions || []);
       if (!normalizedTargets.length) {
@@ -2675,6 +2851,7 @@ exports.getPortfolios = async (req, res) => {
       return {
         name: portfolio.name,
         strategy_id: portfolio.strategy_id,
+        symphonyUrl: symphonyUrlByStrategyId.get(String(portfolio.strategy_id || '')) || null,
         recurrence: portfolio.recurrence || 'daily',
         lastRebalancedAt: portfolio.lastRebalancedAt,
         nextRebalanceAt: portfolio.nextRebalanceAt,
@@ -2741,6 +2918,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
     reasoning = [],
     orderPlan = null,
     composerMeta = null,
+    symphonyUrl = null,
   } = options || {};
   const limitValue = toNumber(cashLimit, null) ?? toNumber(budget, null);
   const finalizedPlan = Array.isArray(orderPlan) ? orderPlan : [];
@@ -2773,6 +2951,13 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
       recurrence: normalizedRecurrence,
       summary: typeof summary === 'string' ? summary : '',
       decisions: Array.isArray(decisions) ? decisions : [],
+      symphonyUrl: (() => {
+        try {
+          return parseOptionalHttpUrl(symphonyUrl) ?? null;
+        } catch (error) {
+          return null;
+        }
+      })(),
     });
 
     await strategy.save();
@@ -3256,6 +3441,7 @@ exports.getStrategies = async (req, res) => {
       strategies: strategies.map((strategy) => ({
         id: strategy.strategy_id,
         name: strategy.name,
+        symphonyUrl: strategy.symphonyUrl || null,
         recurrence: strategy.recurrence,
         strategy: strategy.strategy,
         summary: strategy.summary || '',
@@ -3294,6 +3480,7 @@ exports.getStrategyTemplates = async (req, res) => {
       templates: templates.map((template) => ({
         id: String(template._id),
         name: template.name,
+        symphonyUrl: template.symphonyUrl || null,
         strategy: template.strategy,
         summary: template.summary || '',
         decisions: Array.isArray(template.decisions) ? template.decisions : [],

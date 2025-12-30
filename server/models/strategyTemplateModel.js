@@ -33,6 +33,11 @@ const strategyTemplateSchema = new Schema(
       type: String,
       default: null,
     },
+    symphonyUrl: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     lastUsedAt: {
       type: Date,
       default: Date.now,

@@ -9,6 +9,7 @@ import Title from "../Template/Title.jsx";
 import SaleModal from "./SaleModal.jsx";
 import styles from "./Dashboard.module.css";
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
+import EditIcon from '@mui/icons-material/Edit';
 import Axios from "axios";
 import config from "../../config/Config";
 import UserContext from "../../context/UserContext";
@@ -48,6 +49,14 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
   const [backtestLoading, setBacktestLoading] = useState(false);
   const [backtestResult, setBacktestResult] = useState(null);
   const [backtestError, setBacktestError] = useState(null);
+  const [metadataEditor, setMetadataEditor] = useState({
+    open: false,
+    portfolio: null,
+    name: "",
+    symphonyUrl: "",
+    saving: false,
+    error: null,
+  });
 
 
 
@@ -210,10 +219,86 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
     setOpenStrategies(!openStrategies);
   };
 
-const handlePortfolioClick = (name) => {
-    setOpenPortfolio(prevState => ({ ...prevState, [name]: !prevState[name] }));
+const handlePortfolioClick = (strategyId) => {
+    setOpenPortfolio(prevState => ({ ...prevState, [strategyId]: !prevState[strategyId] }));
   };
 
+  const openMetadataEditor = (portfolio, event) => {
+    if (event?.stopPropagation) {
+      event.stopPropagation();
+    }
+    if (!portfolio) {
+      return;
+    }
+    setMetadataEditor({
+      open: true,
+      portfolio,
+      name: portfolio.name || "",
+      symphonyUrl: portfolio.symphonyUrl || "",
+      saving: false,
+      error: null,
+    });
+  };
+
+  const closeMetadataEditor = () => {
+    if (metadataEditor.saving) {
+      return;
+    }
+    setMetadataEditor({
+      open: false,
+      portfolio: null,
+      name: "",
+      symphonyUrl: "",
+      saving: false,
+      error: null,
+    });
+  };
+
+  const saveMetadataEditor = async () => {
+    if (metadataEditor.saving) {
+      return;
+    }
+    const { portfolio } = metadataEditor;
+    if (!portfolio?.strategy_id) {
+      setMetadataEditor((prev) => ({ ...prev, error: "Missing strategy id." }));
+      return;
+    }
+    const nextName = String(metadataEditor.name || "").trim();
+    if (!nextName) {
+      setMetadataEditor((prev) => ({ ...prev, error: "Strategy name cannot be empty." }));
+      return;
+    }
+    if (!userData?.user?.id || !userData?.token) {
+      setMetadataEditor((prev) => ({ ...prev, error: "Please sign in again." }));
+      return;
+    }
+
+    setMetadataEditor((prev) => ({ ...prev, saving: true, error: null }));
+    try {
+      const url = `${config.base_url}/api/strategies/metadata/${userData.user.id}/${portfolio.strategy_id}`;
+      const headers = { "x-auth-token": userData.token };
+      const payload = {
+        name: nextName,
+        symphonyUrl: metadataEditor.symphonyUrl,
+      };
+      const response = await Axios.patch(url, payload, { headers });
+      if (response.status === 200 && response.data?.status === "success") {
+        closeMetadataEditor();
+        if (typeof refreshPortfolios === "function") {
+          await refreshPortfolios();
+        }
+      } else {
+        setMetadataEditor((prev) => ({ ...prev, error: response.data?.message || "Failed to update strategy." }));
+      }
+    } catch (error) {
+      setMetadataEditor((prev) => ({
+        ...prev,
+        error: error?.response?.data?.message || error.message || "Failed to update strategy.",
+      }));
+    } finally {
+      setMetadataEditor((prev) => ({ ...prev, saving: false }));
+    }
+  };
 
 
   const openDeleteModal = (strategyId) => {
@@ -513,17 +598,42 @@ const deleteStrategy = async (strategyId) => {
 
 
           return (
-            <div style={{ minHeight: "2px", margin: "2px 0" }} key={portfolio.name}>
+            <div style={{ minHeight: "2px", margin: "2px 0" }} key={portfolio.strategy_id || portfolio.name}>
 
               <div style={{ color: theme.palette.info.light }}>
                 <IconButton
-                  onClick={() => handlePortfolioClick(portfolio.name)}
-                  aria-expanded={openPortfolio[portfolio.name]}
+                  onClick={() => handlePortfolioClick(portfolio.strategy_id)}
+                  aria-expanded={openPortfolio[portfolio.strategy_id]}
                   aria-label="show more"
                 >
                   <ExpandMoreIcon />
                 </IconButton>
-                {portfolio.name}
+                {portfolio.symphonyUrl ? (
+                  <Link
+                    href={portfolio.symphonyUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    underline="hover"
+                    sx={{ color: 'inherit' }}
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {portfolio.name}
+                  </Link>
+                ) : (
+                  <Box
+                    component="span"
+                    sx={{ color: 'inherit', cursor: 'pointer' }}
+                    onClick={(event) => openMetadataEditor(portfolio, event)}
+                  >
+                    {portfolio.name}
+                  </Box>
+                )}
+
+                <Tooltip title="Edit strategy title & symphony link" arrow>
+                  <IconButton size="small" onClick={(event) => openMetadataEditor(portfolio, event)}>
+                    <EditIcon fontSize="inherit" />
+                  </IconButton>
+                </Tooltip>
 
                 <IconButton color="error" onClick={() => openDeleteModal(portfolio.strategy_id)}>
                   <HighlightOffIcon fontSize="small"/>
@@ -717,7 +827,7 @@ const deleteStrategy = async (strategyId) => {
 
 
 
-              <Collapse in={openPortfolio[portfolio.name]}>
+              <Collapse in={openPortfolio[portfolio.strategy_id]}>
                 <Table size="small">
                   <TableHead>
                     <TableRow>
@@ -892,6 +1002,68 @@ const deleteStrategy = async (strategyId) => {
               disabled={scheduleEditor.saving}
             >
               {scheduleEditor.saving ? 'Saving…' : 'Save'}
+            </Button>
+          </Box>
+        </Box>
+      </Modal>
+
+      <Modal
+        open={metadataEditor.open}
+        onClose={metadataEditor.saving ? undefined : closeMetadataEditor}
+        aria-labelledby="edit-strategy-metadata-title"
+        aria-describedby="edit-strategy-metadata-description"
+      >
+        <Box
+          sx={{
+            p: 3,
+            backgroundColor: 'background.paper',
+            width: '90%',
+            maxWidth: 480,
+            mx: 'auto',
+            mt: '15%',
+            borderRadius: 2,
+            boxShadow: 24,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          <Typography id="edit-strategy-metadata-title" variant="h6">
+            Edit strategy
+          </Typography>
+          <Typography id="edit-strategy-metadata-description" variant="body2" color="textSecondary">
+            Update the title and optional Symphony link.
+          </Typography>
+          <TextField
+            label="Strategy title"
+            value={metadataEditor.name}
+            onChange={(event) => setMetadataEditor((prev) => ({ ...prev, name: event.target.value }))}
+            disabled={metadataEditor.saving}
+            fullWidth
+          />
+          <TextField
+            label="Symphony link (optional)"
+            value={metadataEditor.symphonyUrl}
+            onChange={(event) => setMetadataEditor((prev) => ({ ...prev, symphonyUrl: event.target.value }))}
+            disabled={metadataEditor.saving}
+            fullWidth
+            placeholder="https://app.composer.trade/symphony/..."
+          />
+          {metadataEditor.error && (
+            <Typography variant="body2" color="error">
+              {metadataEditor.error}
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+            <Button onClick={closeMetadataEditor} disabled={metadataEditor.saving}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              onClick={saveMetadataEditor}
+              disabled={metadataEditor.saving}
+            >
+              {metadataEditor.saving ? 'Saving…' : 'Save'}
             </Button>
           </Box>
         </Box>

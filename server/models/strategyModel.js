@@ -44,6 +44,11 @@ const strategySchema = new Schema(
       ],
       default: 'daily',
     },
+    symphonyUrl: {
+      type: String,
+      default: null,
+      trim: true,
+    },
   },
   {
     timestamps: true,
