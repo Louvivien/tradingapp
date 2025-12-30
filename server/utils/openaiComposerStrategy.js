@@ -7,6 +7,14 @@ const normalizeEnginePreference = (value) => {
   return String(value).trim().toLowerCase();
 };
 
+const hasTiingoToken = () =>
+  Boolean(
+    process.env.TIINGO_API_KEYS ||
+      process.env.TIINGO_TOKEN ||
+      process.env.TIINGO_API_KEY ||
+      process.env.TIINGO_API_KEY1
+  );
+
 const runComposerStrategy = async ({
   strategyText,
   budget = 1000,
@@ -32,10 +40,12 @@ const runComposerStrategy = async ({
 
   const resolvedDefaults = {
     rsiMethod: String(process.env.COMPOSER_RSI_METHOD || 'wilder').trim(),
-    dataAdjustment: String(process.env.COMPOSER_DATA_ADJUSTMENT || 'split').trim(),
+    dataAdjustment: String(process.env.COMPOSER_DATA_ADJUSTMENT || 'all').trim(),
     asOfMode: String(process.env.COMPOSER_ASOF_MODE || 'previous-close').trim(),
-    priceSource: String(process.env.COMPOSER_PRICE_SOURCE || 'yahoo').trim(),
-    priceRefresh: process.env.COMPOSER_PRICE_REFRESH ?? 'false',
+    priceSource: String(
+      process.env.COMPOSER_PRICE_SOURCE || (hasTiingoToken() ? 'tiingo' : 'yahoo')
+    ).trim(),
+    priceRefresh: process.env.COMPOSER_PRICE_REFRESH ?? null,
   };
 
   const resolvedRsiMethod = rsiMethod ?? resolvedDefaults.rsiMethod;
@@ -72,8 +82,8 @@ const runComposerStrategy = async ({
   if (normalizedRsi && normalizedRsi !== 'wilder') {
     warnings.push(`Non-standard RSI method "${resolvedRsiMethod}" (Composer uses Wilder RSI).`);
   }
-  if (normalizedAdjustment && normalizedAdjustment !== 'split') {
-    warnings.push(`Non-standard adjustment "${resolvedAdjustment}" (recommended "split").`);
+  if (normalizedAdjustment && normalizedAdjustment !== 'all') {
+    warnings.push(`Non-standard adjustment "${resolvedAdjustment}" (recommended "all").`);
   }
   if (normalizedSource && !['yahoo', 'tiingo'].includes(normalizedSource)) {
     warnings.push(`Non-standard price source "${resolvedPriceSource}" (recommended Yahoo or Tiingo).`);

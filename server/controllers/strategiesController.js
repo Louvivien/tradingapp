@@ -890,12 +890,6 @@ exports.createCollaborative = async (req, res) => {
       workingSummary = composerResult.summary || '';
       composerReasoning = Array.isArray(composerResult.reasoning) ? composerResult.reasoning : [];
       composerMeta = composerResult.meta || composerMeta;
-      if (Array.isArray(composerResult.reasoning) && composerResult.reasoning.length) {
-        workingDecisions = composerResult.reasoning.map((text, index) => ({
-          symbol: composerResult.positions[index]?.symbol || `STEP_${index + 1}`,
-          Rationale: text,
-        }));
-      }
 
       workingPositions = composerResult.positions
         .map((pos) => {
@@ -916,11 +910,19 @@ exports.createCollaborative = async (req, res) => {
         })
         .filter(Boolean);
 
-      if (!workingDecisions.length && Array.isArray(composerResult.positions)) {
-        workingDecisions = composerResult.positions.map((pos) => ({
-          symbol: sanitizeSymbol(pos.symbol),
-          Rationale: pos.rationale || 'Selected by Composer evaluation.',
-        }));
+      if (Array.isArray(composerResult.positions)) {
+        workingDecisions = composerResult.positions
+          .map((pos) => {
+            const symbol = sanitizeSymbol(pos.symbol);
+            if (!symbol) {
+              return null;
+            }
+            return {
+              symbol,
+              Rationale: pos.rationale || 'Selected by local defsymphony evaluation.',
+            };
+          })
+          .filter(Boolean);
       }
       publishProgress(jobId, {
         step: 'composer_evaluation',

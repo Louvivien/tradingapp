@@ -96,6 +96,8 @@ const collectAstStats = (
     hasGroup: false,
     hasGroupFilter: false,
     groupFilterMaxWindow: 0,
+    needsNodeSeries: false,
+    nodeMetricMaxWindow: 0,
     maxWindow: 0,
     maxRsiWindow: 0,
   }
@@ -111,14 +113,46 @@ const collectAstStats = (
       }
       if (head === 'filter') {
         const assets = node[3] || [];
+        const hasNonAssetCandidate =
+          Array.isArray(assets) &&
+          assets.some((child) => Array.isArray(child) && String(child[0]) !== 'asset');
         const hasGroupCandidate =
           Array.isArray(assets) && assets.some((child) => Array.isArray(child) && child[0] === 'group');
+        if (hasNonAssetCandidate) {
+          stats.needsNodeSeries = true;
+          const metricWindow = inferMetricWindow(node[1]);
+          if (Number.isFinite(metricWindow) && metricWindow > stats.nodeMetricMaxWindow) {
+            stats.nodeMetricMaxWindow = metricWindow;
+          }
+        }
         if (hasGroupCandidate) {
           stats.hasGroupFilter = true;
           const metricWindow = inferMetricWindow(node[1]);
           if (Number.isFinite(metricWindow) && metricWindow > stats.groupFilterMaxWindow) {
             stats.groupFilterMaxWindow = metricWindow;
           }
+        }
+      }
+      if (head === 'weight-inverse-volatility') {
+        const maybeWindow = Number(node[1]);
+        const hasWindow = Number.isFinite(maybeWindow) && maybeWindow > 0;
+        const window = hasWindow ? maybeWindow : METRIC_DEFAULT_WINDOWS['stdev-return'];
+        const childStart = hasWindow ? 2 : 1;
+        const children =
+          node.length === childStart + 1 && Array.isArray(node[childStart])
+            ? node[childStart]
+            : node.slice(childStart);
+        const hasNonAssetChild =
+          Array.isArray(children) &&
+          children.some((child) => Array.isArray(child) && String(child[0]) !== 'asset');
+        if (hasNonAssetChild) {
+          stats.needsNodeSeries = true;
+          if (Number.isFinite(window) && window > stats.nodeMetricMaxWindow) {
+            stats.nodeMetricMaxWindow = window;
+          }
+        }
+        if (Number.isFinite(window) && window > stats.maxWindow) {
+          stats.maxWindow = window;
         }
       }
       if (
@@ -420,7 +454,7 @@ const computeGroupSeriesMeta = (stats, priceLength) => {
   if (usableHistory < 2) {
     throw new Error('Not enough synchronized history to evaluate group metrics.');
   }
-  const requiredWindow = Math.max(stats?.groupFilterMaxWindow || 1, 1);
+  const requiredWindow = Math.max(stats?.nodeMetricMaxWindow || stats?.groupFilterMaxWindow || 1, 1);
   const padding = 5;
   const requiredNavPoints = Math.max(requiredWindow + 1 + padding, 2);
   const startIndex = Math.max(1, usableHistory - requiredNavPoints);
@@ -611,6 +645,14 @@ const normalizePriceSource = (value) => {
   }
   return null;
 };
+
+const hasTiingoToken = () =>
+  Boolean(
+    process.env.TIINGO_API_KEYS ||
+      process.env.TIINGO_TOKEN ||
+      process.env.TIINGO_API_KEY ||
+      process.env.TIINGO_API_KEY1
+  );
 
 const normalizePriceRefresh = (value) => {
   const normalized = normalizeBoolean(value);
@@ -1359,18 +1401,15 @@ function evaluateFilterNode(node, parentWeight, ctx) {
         return symbol ? { type: 'asset', symbol, node: child } : null;
       }
       const childType = getNodeType(child);
-      if (childType === 'group' && (ctx.enableGroupMetrics || ctx.groupSeriesMeta)) {
+      if (ctx.enableGroupMetrics || ctx.groupSeriesMeta) {
         const nodeId = ctx.nodeIdMap?.get(child);
-        if (!nodeId) {
-          return null;
+        if (nodeId) {
+          const label =
+            childType === 'group' && typeof child[1] === 'string'
+              ? String(child[1])
+              : `${childType || 'node'}-${nodeId}`;
+          return { type: 'node', node: child, nodeId, label };
         }
-        const nodeSeries =
-          ctx.nodeSeries?.get(nodeId) || ensureGroupSeriesForNode(child, ctx);
-        if (!nodeSeries) {
-          return null;
-        }
-        const label = typeof child[1] === 'string' ? String(child[1]) : `group-${nodeId}`;
-        return { type: 'node', node: child, nodeId, label };
       }
       const previewPositions = previewNodePositions(child, ctx);
       const representative = selectRepresentativeSymbol(previewPositions);
@@ -1489,18 +1528,15 @@ function evaluateNode(node, parentWeight, ctx) {
             return symbol ? { type: 'asset', symbol, node: child } : null;
           }
           const childType = getNodeType(child);
-          if (childType === 'group' && (ctx.enableGroupMetrics || ctx.groupSeriesMeta)) {
+          if (ctx.enableGroupMetrics || ctx.groupSeriesMeta) {
             const nodeId = ctx.nodeIdMap?.get(child);
-            if (!nodeId) {
-              return null;
+            if (nodeId) {
+              const label =
+                childType === 'group' && typeof child[1] === 'string'
+                  ? String(child[1])
+                  : `${childType || 'node'}-${nodeId}`;
+              return { type: 'node', node: child, nodeId, label };
             }
-            const nodeSeries =
-              ctx.nodeSeries?.get(nodeId) || ensureGroupSeriesForNode(child, ctx);
-            if (!nodeSeries) {
-              return null;
-            }
-            const label = typeof child[1] === 'string' ? String(child[1]) : `group-${nodeId}`;
-            return { type: 'node', node: child, nodeId, label };
           }
           const previewPositions = previewNodePositions(child, ctx);
           const representative = selectRepresentativeSymbol(previewPositions);
@@ -1833,12 +1869,18 @@ const evaluateDefsymphonyStrategy = async ({
   const resolvedRsiMethod =
     normalizeRsiMethod(rsiMethod) || normalizeRsiMethod(process.env.RSI_METHOD) || 'wilder';
   const resolvedAdjustment = normalizeAdjustment(
-    dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT ?? 'split'
+    dataAdjustment ??
+      process.env.COMPOSER_DATA_ADJUSTMENT ??
+      process.env.ALPACA_DATA_ADJUSTMENT ??
+      'all'
   );
   const resolvedAsOfMode =
     normalizeAsOfMode(asOfMode) || normalizeAsOfMode(process.env.COMPOSER_ASOF_MODE) || 'previous-close';
   const resolvedPriceSource =
-    normalizePriceSource(priceSource) || normalizePriceSource(process.env.PRICE_DATA_SOURCE) || 'yahoo';
+    normalizePriceSource(priceSource) ||
+    normalizePriceSource(process.env.COMPOSER_PRICE_SOURCE) ||
+    normalizePriceSource(process.env.PRICE_DATA_SOURCE) ||
+    (hasTiingoToken() ? 'tiingo' : 'yahoo');
   const resolvedPriceRefresh =
     normalizePriceRefresh(priceRefresh) ??
     normalizePriceRefresh(process.env.PRICE_DATA_FORCE_REFRESH) ??
@@ -1938,13 +1980,13 @@ const evaluateDefsymphonyStrategy = async ({
     });
   }
 
-  if (astStats.hasGroupFilter) {
+  if (astStats.needsNodeSeries) {
     const meta = buildGroupSeriesCache(ast, context, astStats, usableHistory);
     if (!meta) {
-      throw new Error('Unable to simulate group equity series for the provided strategy.');
+      throw new Error('Unable to simulate portfolio NAV series for the provided strategy.');
     }
     context.reasoning.push(
-      `Step 1b: Enabled group-metric evaluation (group NAV series simulated on-demand for filter candidates).`
+      `Step 1b: Enabled node-metric evaluation (portfolio NAV series simulated on-demand for non-asset candidates).`
     );
   }
 
@@ -2425,10 +2467,16 @@ const backtestDefsymphonyStrategy = async ({
   const resolvedRsiMethod =
     normalizeRsiMethod(rsiMethod) || normalizeRsiMethod(process.env.RSI_METHOD) || 'wilder';
   const resolvedAdjustment = normalizeAdjustment(
-    dataAdjustment ?? process.env.ALPACA_DATA_ADJUSTMENT ?? 'split'
+    dataAdjustment ??
+      process.env.COMPOSER_DATA_ADJUSTMENT ??
+      process.env.ALPACA_DATA_ADJUSTMENT ??
+      'all'
   );
   const resolvedPriceSource =
-    normalizePriceSource(priceSource) || normalizePriceSource(process.env.PRICE_DATA_SOURCE) || null;
+    normalizePriceSource(priceSource) ||
+    normalizePriceSource(process.env.COMPOSER_PRICE_SOURCE) ||
+    normalizePriceSource(process.env.PRICE_DATA_SOURCE) ||
+    (hasTiingoToken() ? 'tiingo' : null);
   const resolvedPriceRefresh =
     normalizePriceRefresh(priceRefresh) ??
     normalizePriceRefresh(process.env.PRICE_DATA_FORCE_REFRESH) ??

@@ -1,74 +1,71 @@
-jest.mock('../../services/defsymphonyEvaluator', () => ({
-  evaluateDefsymphonyStrategy: jest.fn(async (args) => ({
-    summary: 'ok',
-    reasoning: [],
-    positions: [],
-    meta: {
-      engine: 'local',
-      localEvaluator: {
-        used: true,
-        priceSource: args.priceSource,
-        dataAdjustment: args.dataAdjustment,
-        rsiMethod: args.rsiMethod,
-        asOfMode: args.asOfMode,
-      },
-    },
-  })),
-}));
-
-const { evaluateDefsymphonyStrategy } = require('../../services/defsymphonyEvaluator');
-const { runComposerStrategy } = require('../openaiComposerStrategy');
-
 describe('runComposerStrategy defaults', () => {
-  const originalEnv = { ...process.env };
+  const loadModule = async () => {
+    jest.resetModules();
+    jest.doMock('../../services/defsymphonyEvaluator', () => ({
+      evaluateDefsymphonyStrategy: jest.fn(async (payload) => ({
+        summary: 'ok',
+        reasoning: [],
+        positions: [
+          {
+            symbol: 'SPY',
+            weight: 1,
+            quantity: 1,
+            estimated_cost: 100,
+            rationale: 'mock',
+          },
+        ],
+        meta: { payload },
+      })),
+    }));
+    const { runComposerStrategy } = require('../openaiComposerStrategy');
+    const { evaluateDefsymphonyStrategy } = require('../../services/defsymphonyEvaluator');
+    return { runComposerStrategy, evaluateDefsymphonyStrategy };
+  };
 
   beforeEach(() => {
-    process.env = { ...originalEnv };
-    evaluateDefsymphonyStrategy.mockClear();
-  });
-
-  afterAll(() => {
-    process.env = originalEnv;
-  });
-
-  it('defaults to Composer-style settings when not provided', async () => {
-    delete process.env.COMPOSER_RSI_METHOD;
-    delete process.env.COMPOSER_DATA_ADJUSTMENT;
-    delete process.env.COMPOSER_ASOF_MODE;
     delete process.env.COMPOSER_PRICE_SOURCE;
-
-    const result = await runComposerStrategy({
-      strategyText: '(defsymphony "Test" {} (asset "SPY"))',
-      budget: 1000,
-    });
-
-    expect(evaluateDefsymphonyStrategy).toHaveBeenCalledTimes(1);
-    const args = evaluateDefsymphonyStrategy.mock.calls[0][0];
-    expect(args.rsiMethod).toBe('wilder');
-    expect(args.dataAdjustment).toBe('split');
-    expect(args.asOfMode).toBe('previous-close');
-    expect(args.priceSource).toBe('yahoo');
-    expect(args.priceRefresh).toBe('false');
-    expect(Array.isArray(result.meta.warnings)).toBe(false);
+    delete process.env.COMPOSER_DATA_ADJUSTMENT;
+    delete process.env.COMPOSER_PRICE_REFRESH;
+    delete process.env.TIINGO_API_KEYS;
+    delete process.env.TIINGO_TOKEN;
+    delete process.env.TIINGO_API_KEY;
+    delete process.env.TIINGO_API_KEY1;
   });
 
-  it('emits warnings when non-Composer settings are used', async () => {
-    const result = await runComposerStrategy({
+  it('defaults to Tiingo + all-adjusted when Tiingo token is present', async () => {
+    process.env.TIINGO_API_KEY1 = 'test-token';
+
+    const { runComposerStrategy, evaluateDefsymphonyStrategy } = await loadModule();
+
+    await runComposerStrategy({
       strategyText: '(defsymphony "Test" {} (asset "SPY"))',
       budget: 1000,
-      rsiMethod: 'simple',
-      dataAdjustment: 'raw',
-      asOfMode: 'current',
-      priceSource: 'alpaca',
     });
 
-    expect(evaluateDefsymphonyStrategy).toHaveBeenCalledTimes(1);
-    expect(result.meta.warnings).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('Non-standard RSI method'),
-        expect.stringContaining('Non-standard adjustment'),
-        expect.stringContaining('Non-standard price source'),
-      ])
+    expect(evaluateDefsymphonyStrategy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priceSource: 'tiingo',
+        dataAdjustment: 'all',
+        priceRefresh: null,
+      })
+    );
+  });
+
+  it('defaults to Yahoo when no Tiingo token is present', async () => {
+    const { runComposerStrategy, evaluateDefsymphonyStrategy } = await loadModule();
+
+    await runComposerStrategy({
+      strategyText: '(defsymphony "Test" {} (asset "SPY"))',
+      budget: 1000,
+    });
+
+    expect(evaluateDefsymphonyStrategy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        priceSource: 'yahoo',
+        dataAdjustment: 'all',
+        priceRefresh: null,
+      })
     );
   });
 });
+

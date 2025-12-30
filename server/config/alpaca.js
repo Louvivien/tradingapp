@@ -2,6 +2,9 @@ const CryptoJS = require('crypto-js');
 const User = require("../models/userModel");
 const Axios = require('axios');
 
+const ENABLE_ALPACA_HTTP_DEBUG =
+  String(process.env.ALPACA_HTTP_DEBUG ?? '').trim().toLowerCase() === 'true';
+
 // Create a custom Axios instance for Alpaca API calls
 const createAlpacaClient = (config) => {
   const client = Axios.create({
@@ -9,62 +12,51 @@ const createAlpacaClient = (config) => {
     timeout: 5000,
   });
 
-  // Add request interceptor for detailed logging
-  client.interceptors.request.use(
-    config => {
-      console.log('[API Request]', {
-        method: config.method.toUpperCase(),
-        url: config.url,
-        headers: {
-          'APCA-API-KEY-ID': config.headers['APCA-API-KEY-ID']?.substring(0, 5) + '...',
-          'APCA-API-SECRET-KEY': config.headers['APCA-API-SECRET-KEY']?.substring(0, 5) + '...'
-        }
-      });
-      return config;
-    },
-    error => {
-      console.error('[API Request Error]', error);
-      return Promise.reject(error);
-    }
-  );
-
-  // Add response interceptor for detailed error logging
-  client.interceptors.response.use(
-    response => {
-      console.log('[API Response]', {
-        status: response.status,
-        statusText: response.statusText,
-        headers: response.headers
-      });
-      return response;
-    },
-    error => {
-      if (error.response) {
-        console.error('[API Error Response]', {
-          status: error.response.status,
-          statusText: error.response.statusText,
-          data: error.response.data,
-          headers: error.response.headers
+  if (ENABLE_ALPACA_HTTP_DEBUG) {
+    // Add request interceptor for detailed logging (never log secrets/keys).
+    client.interceptors.request.use(
+      (reqConfig) => {
+        console.log('[Alpaca HTTP] Request', {
+          method: String(reqConfig.method || '').toUpperCase(),
+          url: reqConfig.url,
         });
-      } else if (error.request) {
-        console.error('[API Error Request]', {
-          message: error.message,
-          code: error.code,
-          config: {
+        return reqConfig;
+      },
+      (error) => {
+        console.error('[Alpaca HTTP] Request Error', error?.message || error);
+        return Promise.reject(error);
+      }
+    );
+
+    // Add response interceptor for detailed error logging.
+    client.interceptors.response.use(
+      (response) => {
+        console.log('[Alpaca HTTP] Response', {
+          status: response.status,
+          statusText: response.statusText,
+        });
+        return response;
+      },
+      (error) => {
+        if (error.response) {
+          console.error('[Alpaca HTTP] Error Response', {
+            status: error.response.status,
+            statusText: error.response.statusText,
+          });
+        } else if (error.request) {
+          console.error('[Alpaca HTTP] Error Request', {
+            message: error.message,
+            code: error.code,
             url: error.config?.url,
             method: error.config?.method,
-            headers: {
-              'APCA-API-KEY-ID': error.config?.headers?.['APCA-API-KEY-ID']?.substring(0, 5) + '...',
-              'APCA-API-SECRET-KEY': error.config?.headers?.['APCA-API-SECRET-KEY']?.substring(0, 5) + '...'
-            }
-          }
-        });
-      } else {
-        console.error('[API Error]', error.message);
+          });
+        } else {
+          console.error('[Alpaca HTTP] Error', error.message);
+        }
+        return Promise.reject(error);
       }
-      return Promise.reject(error);
-    }
-  );
+    );
+  }
 
   return client;
 };

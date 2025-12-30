@@ -1,0 +1,128 @@
+(defsymphony
+  "[Test] Sorts and Inverse Volatility"
+  {:asset-class "EQUITIES", :rebalance-frequency :daily}
+  (weight-equal
+    [
+      (group
+        "Standard Deviation of Return"
+        [
+          (weight-equal
+            [
+              (filter
+                (stdev-return {:window 10})
+                (select-top 1)
+                [
+                  (asset "SOXS")
+                  (asset "TECS")
+                ])
+              (filter
+                (stdev-return {:window 80})
+                (select-bottom 1)
+                [
+                  (asset "UPRO")
+                  (asset "SPXL")
+                ])
+            ])
+        ])
+      (group
+        "Moving Average of Return"
+        [
+          (weight-equal
+            [
+              (filter
+                (moving-average-return {:window 20})
+                (select-top 1)
+                [
+                  (asset "QLD")
+                  (asset "TECL")
+                ])
+              (filter
+                (moving-average-return {:window 60})
+                (select-bottom 1)
+                [
+                  (asset "SPY")
+                  (asset "GLD")
+                ])
+            ])
+        ])
+      (group
+        "Cumulative Return"
+        [
+          (weight-equal
+            [
+              (filter
+                (cumulative-return {:window 120})
+                (select-top 1)
+                [
+                  (asset "SOXL")
+                  (asset "VIXY")
+                ])
+              (filter
+                (cumulative-return {:window 20})
+                (select-bottom 1)
+                [
+                  (asset "UVXY")
+                  (asset "SVXY")
+                ])
+            ])
+        ])
+      (group
+        "RSI Test"
+        [
+          (weight-equal
+            [
+              (filter
+                (rsi {:window 100})
+                (select-top 1)
+                [
+                  (asset "UVIX")
+                  (asset "QQQE")
+                ])
+              (filter
+                (rsi {:window 10})
+                (select-bottom 1)
+                [
+                  (asset "SHNY")
+                  (asset "DULL")
+                ])
+            ])
+        ])
+      (group
+        "Max Drawdown"
+        [
+          (weight-equal
+            [
+              (filter
+                (max-drawdown {:window 20})
+                (select-top 1)
+                [
+                  (asset "TQQQ")
+                  (asset "VIXM")
+                ])
+              (filter
+                (max-drawdown {:window 5})
+                (select-bottom 1)
+                [
+                  (asset "SQQQ")
+                  (asset "TQQQ")
+                ])
+            ])
+        ])
+      (group
+        "Inverse Volatility"
+        [
+          (weight-inverse-volatility
+            20
+            [
+              (asset "TLT")
+              (asset "PSQ")
+              (weight-inverse-volatility
+                60
+                [
+                  (asset "TLT")
+                  (asset "PSQ")
+                ])
+            ])
+        ])
+    ]))
+
