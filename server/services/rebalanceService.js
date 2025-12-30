@@ -121,6 +121,18 @@ const formatSharePrice = (value) => {
   return `$${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
 
+const formatDateForLog = (value) => {
+  try {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date?.getTime())) {
+      return String(value);
+    }
+    return date.toISOString().split('T')[0];
+  } catch (error) {
+    return String(value);
+  }
+};
+
 const formatPercentage = (value) => {
   if (!Number.isFinite(value)) {
     return null;
@@ -482,10 +494,32 @@ const buildRebalanceHumanSummary = ({
   if (localTool?.used) {
     lines.push('');
     lines.push('Tooling:');
-    lines.push('• Local defsymphony evaluator computed allocations using cached Alpaca prices.');
+    const priceSourceLabel = localTool.priceSource || 'alpaca';
+    const refreshLabel = localTool.priceRefresh ? 'forced refresh' : 'cached';
+    lines.push(`• Local defsymphony evaluator computed allocations using ${refreshLabel} ${priceSourceLabel} prices.`);
     const tickers = Array.isArray(localTool.tickers) ? localTool.tickers.filter(Boolean) : [];
     if (tickers.length) {
       lines.push(`• Cached instrument universe: ${tickers.join(', ')}.`);
+    }
+    if (localTool.asOfMode || localTool.asOfDate) {
+      const modeLabel = localTool.asOfMode ? String(localTool.asOfMode) : null;
+      const dateLabel = localTool.asOfDate ? formatDateForLog(localTool.asOfDate) : null;
+      const segments = [
+        modeLabel ? `as-of mode ${modeLabel}` : null,
+        dateLabel ? `effective as-of date ${dateLabel}` : null,
+      ].filter(Boolean);
+      if (segments.length) {
+        lines.push(`• Data timing: ${segments.join(', ')}.`);
+      }
+    }
+    if (localTool.dataAdjustment || localTool.rsiMethod) {
+      const segments = [
+        localTool.dataAdjustment ? `adjustment ${localTool.dataAdjustment}` : null,
+        localTool.rsiMethod ? `RSI method ${localTool.rsiMethod}` : null,
+      ].filter(Boolean);
+      if (segments.length) {
+        lines.push(`• Indicator settings: ${segments.join(', ')}.`);
+      }
     }
     const blueprint = Array.isArray(localTool.blueprint) ? localTool.blueprint.filter(Boolean) : [];
     if (blueprint.length) {
@@ -496,6 +530,23 @@ const buildRebalanceHumanSummary = ({
     }
     if (localTool.fallbackReason) {
       lines.push(`• Reason for local evaluation: ${localTool.fallbackReason}.`);
+    }
+
+    const warnings = [];
+    const rsiMethod = String(localTool.rsiMethod || '').trim().toLowerCase();
+    if (rsiMethod && rsiMethod !== 'wilder') {
+      warnings.push(`RSI method "${localTool.rsiMethod}" (Composer uses Wilder RSI).`);
+    }
+    const priceSourceNormalized = String(localTool.priceSource || '').trim().toLowerCase();
+    if (priceSourceNormalized && !['yahoo', 'tiingo'].includes(priceSourceNormalized)) {
+      warnings.push(`Price source "${localTool.priceSource}" (recommended Yahoo or Tiingo).`);
+    }
+    const adjustment = String(localTool.dataAdjustment || '').trim().toLowerCase();
+    if (adjustment && adjustment !== 'split') {
+      warnings.push(`Price adjustment "${localTool.dataAdjustment}" (recommended "split").`);
+    }
+    if (warnings.length) {
+      lines.push('• WARNING: ' + warnings.join(' '));
     }
   }
 
@@ -1905,44 +1956,72 @@ const rebalancePortfolio = async (portfolio) => {
 
 let rebalanceInProgress = false;
 
-const runDueRebalances = async () => {
+const withRebalanceLock = async (handler) => {
   if (rebalanceInProgress) {
-    console.log('[Rebalance] Skipping run; previous cycle still in progress.');
-    return;
+    throw new Error('Rebalance already in progress');
   }
   rebalanceInProgress = true;
   try {
-    const now = new Date();
-    const duePortfolios = await Portfolio.find({
-      recurrence: { $exists: true },
-      $or: [
-        { nextRebalanceAt: null },
-        { nextRebalanceAt: { $lte: now } },
-      ],
-    });
-
-    for (const portfolio of duePortfolios) {
-      try {
-        await rebalancePortfolio(portfolio);
-      } catch (error) {
-        console.error(`[Rebalance] Failed for portfolio ${portfolio._id}:`, error.message);
-        await recordStrategyLog({
-          strategyId: portfolio.strategy_id,
-          userId: portfolio.userId,
-          strategyName: portfolio.name,
-          level: 'error',
-          message: 'Portfolio rebalance failed',
-          details: { error: error.message },
-        });
-      }
-    }
+    return await handler();
   } finally {
     rebalanceInProgress = false;
   }
 };
 
+const runDueRebalances = async () => {
+  try {
+    return await withRebalanceLock(async () => {
+      const now = new Date();
+      const duePortfolios = await Portfolio.find({
+        recurrence: { $exists: true },
+        $or: [
+          { nextRebalanceAt: null },
+          { nextRebalanceAt: { $lte: now } },
+        ],
+      });
+
+      for (const portfolio of duePortfolios) {
+        try {
+          await rebalancePortfolio(portfolio);
+        } catch (error) {
+          console.error(`[Rebalance] Failed for portfolio ${portfolio._id}:`, error.message);
+          await recordStrategyLog({
+            strategyId: portfolio.strategy_id,
+            userId: portfolio.userId,
+            strategyName: portfolio.name,
+            level: 'error',
+            message: 'Portfolio rebalance failed',
+            details: { error: error.message },
+          });
+        }
+      }
+    });
+  } catch (error) {
+    if (String(error?.message || '').includes('Rebalance already in progress')) {
+      console.log('[Rebalance] Skipping run; previous cycle still in progress.');
+      return;
+    }
+    throw error;
+  }
+};
+
+const rebalanceNow = async ({ strategyId, userId }) => withRebalanceLock(async () => {
+  if (!strategyId || !userId) {
+    throw new Error('strategyId and userId are required');
+  }
+  const portfolio = await Portfolio.findOne({ strategy_id: String(strategyId), userId: String(userId) });
+  if (!portfolio) {
+    throw new Error('Portfolio not found');
+  }
+  await rebalancePortfolio(portfolio);
+});
+
+const isRebalanceLocked = () => rebalanceInProgress;
+
 module.exports = {
   runDueRebalances,
   rebalancePortfolio,
+  rebalanceNow,
+  isRebalanceLocked,
   buildAdjustments,
 };

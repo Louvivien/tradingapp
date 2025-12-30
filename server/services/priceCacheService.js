@@ -416,46 +416,55 @@ const fetchBarsFromYahoo = async ({ symbol, start, end, adjustment }) => {
 
 const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source }) => {
   const normalizedSource = String(source ?? '').trim().toLowerCase();
-  if (normalizedSource === 'yahoo') {
-    const yahooBars = await fetchBarsFromYahoo({ symbol, start, end, adjustment });
-    return { bars: yahooBars, dataSource: 'yahoo' };
-  }
-  if (normalizedSource === 'alpaca') {
-    const alpacaBars = await fetchBarsFromAlpaca({ symbol, start, end, adjustment });
-    return { bars: alpacaBars, dataSource: 'alpaca' };
-  }
-  if (normalizedSource === 'tiingo') {
-    const tiingoBars = await fetchBarsFromTiingo({ symbol, start, end, adjustment });
-    return { bars: tiingoBars, dataSource: 'tiingo' };
-  }
-  try {
-    const alpacaBars = await fetchBarsFromAlpaca({ symbol, start, end, adjustment });
-    if (alpacaBars.length) {
-      return { bars: alpacaBars, dataSource: 'alpaca' };
+  const preferred =
+    normalizedSource === 'yahoo' || normalizedSource === 'alpaca' || normalizedSource === 'tiingo'
+      ? normalizedSource
+      : null;
+  const attemptOrder = (() => {
+    if (preferred === 'yahoo') {
+      return ['yahoo', 'tiingo', 'alpaca'];
     }
-  } catch (error) {
-    console.warn(`[PriceCache] Alpaca data fetch failed for ${symbol}: ${error.message}`);
+    if (preferred === 'tiingo') {
+      return ['tiingo', 'yahoo', 'alpaca'];
+    }
+    if (preferred === 'alpaca') {
+      return ['alpaca', 'tiingo', 'yahoo'];
+    }
+    return ['yahoo', 'tiingo', 'alpaca'];
+  })();
+
+  const attempt = async (candidate) => {
+    switch (candidate) {
+      case 'yahoo': {
+        const bars = await fetchBarsFromYahoo({ symbol, start, end, adjustment });
+        return { bars, dataSource: 'yahoo' };
+      }
+      case 'tiingo': {
+        const bars = await fetchBarsFromTiingo({ symbol, start, end, adjustment });
+        return { bars, dataSource: 'tiingo' };
+      }
+      default: {
+        const bars = await fetchBarsFromAlpaca({ symbol, start, end, adjustment });
+        return { bars, dataSource: 'alpaca' };
+      }
+    }
+  };
+
+  let lastError = null;
+  for (const candidate of attemptOrder) {
+    try {
+      const result = await attempt(candidate);
+      if (Array.isArray(result.bars) && result.bars.length) {
+        return result;
+      }
+    } catch (error) {
+      lastError = error;
+      const label = candidate === 'alpaca' ? 'Alpaca' : candidate === 'tiingo' ? 'Tiingo' : 'Yahoo';
+      console.warn(`[PriceCache] ${label} data fetch failed for ${symbol}: ${error.message}`);
+    }
   }
 
-  try {
-    const tiingoBars = await fetchBarsFromTiingo({ symbol, start, end, adjustment });
-    if (tiingoBars.length) {
-      return { bars: tiingoBars, dataSource: 'tiingo' };
-    }
-  } catch (error) {
-    console.warn(`[PriceCache] Tiingo fallback failed for ${symbol}: ${error.message}`);
-  }
-
-  try {
-    const yahooBars = await fetchBarsFromYahoo({ symbol, start, end, adjustment });
-    if (yahooBars.length) {
-      return { bars: yahooBars, dataSource: 'yahoo' };
-    }
-  } catch (error) {
-    console.warn(`[PriceCache] Yahoo fallback failed for ${symbol}: ${error.message}`);
-  }
-
-  throw new Error(`No market data returned for ${symbol}.`);
+  throw lastError || new Error(`No market data returned for ${symbol}.`);
 };
 
 const getCachedPrices = async ({
@@ -465,6 +474,8 @@ const getCachedPrices = async ({
   adjustment,
   source,
   forceRefresh,
+  minBars,
+  cacheOnly,
 }) => {
   const uppercaseSymbol = symbol?.toUpperCase?.();
   if (!uppercaseSymbol) {
@@ -475,6 +486,8 @@ const getCachedPrices = async ({
   const resolvedSource = String(source ?? process.env.PRICE_DATA_SOURCE ?? '').trim().toLowerCase();
   const resolvedForceRefresh =
     normalizeBoolean(forceRefresh) ?? normalizeBoolean(process.env.PRICE_DATA_FORCE_REFRESH) ?? false;
+  const minBarsNeeded = Number.isFinite(Number(minBars)) ? Math.max(0, Math.floor(Number(minBars))) : 0;
+  const resolvedCacheOnly = normalizeBoolean(cacheOnly) ?? false;
 
   const baseQuery = { symbol: uppercaseSymbol, granularity: '1Day' };
   const sourceQuery =
@@ -487,14 +500,24 @@ const getCachedPrices = async ({
       : { ...baseQuery, ...sourceQuery, adjustment: resolvedAdjustment };
 
   let cache = await PriceCache.findOne(cacheQuery);
+  const relaxedCoverageOk = (bars = []) => {
+    if (!minBarsNeeded) {
+      return false;
+    }
+    if (!Array.isArray(bars) || bars.length < minBarsNeeded) {
+      return false;
+    }
+    const last = bars[bars.length - 1]?.t;
+    return last instanceof Date && last >= end;
+  };
   const isFresh =
     !resolvedForceRefresh &&
     cache &&
     cache.refreshedAt &&
     (Date.now() - new Date(cache.refreshedAt).getTime()) / (1000 * 60 * 60) < CACHE_TTL_HOURS &&
-    barsCoverRange(cache.bars, start, end);
+    (barsCoverRange(cache.bars, start, end) || relaxedCoverageOk(cache.bars));
 
-  if (!isFresh) {
+  if (!isFresh && !(resolvedCacheOnly && cache && Array.isArray(cache.bars) && cache.bars.length)) {
     const { bars, dataSource } = await fetchBarsWithFallback({
       symbol: uppercaseSymbol,
       start,

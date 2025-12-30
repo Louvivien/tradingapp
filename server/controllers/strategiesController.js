@@ -21,7 +21,7 @@ const Axios = require("axios");
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('../services/strategyLogger');
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
-const { rebalancePortfolio } = require('../services/rebalanceService');
+const { rebalanceNow, isRebalanceLocked } = require('../services/rebalanceService');
 const { runEquityBackfill, TASK_NAME: EQUITY_BACKFILL_TASK } = require('../services/equityBackfillService');
 const {
   addSubscriber,
@@ -2609,7 +2609,266 @@ exports.compareComposerHoldings = async (req, res) => {
   }
 };
 
+const pickEvaluatorDebugLines = (reasoning = []) =>
+  (Array.isArray(reasoning) ? reasoning : [])
+    .filter((line) =>
+      typeof line === 'string' &&
+      (line.startsWith('Step 1: Loaded') ||
+        line.startsWith('Indicator debug:') ||
+        line.startsWith('Conditional evaluation:') ||
+        line.startsWith('Filter evaluation:'))
+    )
+    .slice(0, 80);
 
+exports.diagnoseAllocationMismatch = async (req, res) => {
+  try {
+    const { userId, strategyId } = req.params;
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const portfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: String(userId) }).lean();
+    if (!portfolio) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Portfolio not found for this strategy.',
+      });
+    }
+
+    const strategy = await Strategy.findOne({ strategy_id: strategyId, userId: String(userId) }).lean();
+    if (!strategy?.strategy) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Strategy definition not found for this portfolio.',
+      });
+    }
+
+    const latestRebalanceLog = await StrategyLog.findOne({
+      strategy_id: strategyId,
+      userId: String(userId),
+      message: 'Portfolio rebalanced',
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const requestedAsOf = req.query?.asOfDate ?? req.query?.asOf ?? null;
+    const requestedAsOfMode = req.query?.asOfMode ?? req.query?.mode ?? null;
+    const requestedBudget = toNumber(req.query?.budget, null);
+
+    const defaultAsOf = latestRebalanceLog?.createdAt
+      ? new Date(latestRebalanceLog.createdAt).toISOString().slice(0, 10)
+      : null;
+
+    const budget =
+      requestedBudget ??
+      toNumber(portfolio.cashLimit, null) ??
+      toNumber(portfolio.budget, null) ??
+      toNumber(latestRebalanceLog?.details?.budget, null) ??
+      1000;
+
+    const asOfDate = requestedAsOf || defaultAsOf || null;
+    const asOfMode = requestedAsOfMode || 'previous-close';
+
+    const base = {
+      strategyText: strategy.strategy,
+      budget,
+      asOfDate,
+      asOfMode,
+      debugIndicators: true,
+      priceRefresh: false,
+    };
+
+    const runs = [
+      {
+        name: 'alpaca_raw_simple',
+        params: { ...base, priceSource: 'alpaca', dataAdjustment: 'raw', rsiMethod: 'simple' },
+      },
+      {
+        name: 'alpaca_raw_wilder',
+        params: { ...base, priceSource: 'alpaca', dataAdjustment: 'raw', rsiMethod: 'wilder' },
+      },
+      {
+        name: 'alpaca_split_wilder',
+        params: { ...base, priceSource: 'alpaca', dataAdjustment: 'split', rsiMethod: 'wilder' },
+      },
+      {
+        name: 'tiingo_split_wilder',
+        params: { ...base, priceSource: 'tiingo', dataAdjustment: 'split', rsiMethod: 'wilder' },
+      },
+      {
+        name: 'yahoo_split_wilder',
+        params: { ...base, priceSource: 'yahoo', dataAdjustment: 'split', rsiMethod: 'wilder' },
+      },
+    ];
+
+    const evaluations = [];
+    for (const run of runs) {
+      try {
+        const evaluation = await runComposerStrategy(run.params);
+        evaluations.push({
+          name: run.name,
+          request: {
+            budget: run.params.budget,
+            asOfDate: run.params.asOfDate || null,
+            asOfMode: run.params.asOfMode || null,
+            priceSource: run.params.priceSource || null,
+            dataAdjustment: run.params.dataAdjustment || null,
+            rsiMethod: run.params.rsiMethod || null,
+          },
+          positions: (evaluation?.positions || []).map((pos) => ({
+            symbol: pos.symbol,
+            weight: toNumber(pos.weight, null),
+            quantity: toNumber(pos.quantity, null),
+            estimated_cost: toNumber(pos.estimated_cost, null),
+          })),
+          meta: evaluation?.meta?.localEvaluator || evaluation?.meta || null,
+          indicatorTrace: pickEvaluatorDebugLines(evaluation?.reasoning),
+        });
+      } catch (error) {
+        evaluations.push({
+          name: run.name,
+          request: {
+            budget: run.params.budget,
+            asOfDate: run.params.asOfDate || null,
+            asOfMode: run.params.asOfMode || null,
+            priceSource: run.params.priceSource || null,
+            dataAdjustment: run.params.dataAdjustment || null,
+            rsiMethod: run.params.rsiMethod || null,
+          },
+          error: error.message,
+        });
+      }
+    }
+
+    let brokerSnapshot = null;
+    const includeBroker = String(req.query?.includeBroker ?? '').trim().toLowerCase();
+    const wantBroker = ['1', 'true', 'yes', 'y'].includes(includeBroker);
+    if (wantBroker) {
+      try {
+        const alpacaConfig = await getAlpacaConfig(userId);
+        if (alpacaConfig?.hasValidKeys) {
+          const tradingKeys = alpacaConfig.getTradingKeys();
+          const headers = {
+            'APCA-API-KEY-ID': tradingKeys.keyId,
+            'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+          };
+          const [accountResponse, positionsResponse] = await Promise.all([
+            tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/account`, { headers }),
+            tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, { headers }),
+          ]);
+          const positions = Array.isArray(positionsResponse.data) ? positionsResponse.data : [];
+          brokerSnapshot = {
+            apiUrl: tradingKeys.apiUrl,
+            account: {
+              cash: toNumber(accountResponse?.data?.cash, null),
+              equity: toNumber(accountResponse?.data?.equity, null),
+              portfolio_value: toNumber(accountResponse?.data?.portfolio_value, null),
+              buying_power: toNumber(accountResponse?.data?.buying_power, null),
+            },
+            positions: positions
+              .map((pos) => ({
+                symbol: sanitizeSymbol(pos.symbol),
+                qty: toNumber(pos.qty, null),
+                market_value: toNumber(pos.market_value, null),
+              }))
+              .filter((entry) => entry.symbol),
+          };
+        } else {
+          brokerSnapshot = { error: alpacaConfig?.error || 'Invalid Alpaca credentials' };
+        }
+      } catch (snapshotError) {
+        brokerSnapshot = { error: snapshotError.message };
+      }
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      portfolio: {
+        id: String(portfolio._id),
+        name: portfolio.name,
+        cashLimit: toNumber(portfolio.cashLimit, null),
+        budget: toNumber(portfolio.budget, null),
+        initialInvestment: toNumber(portfolio.initialInvestment, null),
+        cashBuffer: toNumber(portfolio.cashBuffer, null),
+        retainedCash: toNumber(portfolio.retainedCash, null),
+        trackedStocks: (portfolio.stocks || []).map((entry) => ({
+          symbol: sanitizeSymbol(entry.symbol),
+          quantity: toNumber(entry.quantity, null),
+          avgCost: toNumber(entry.avgCost, null),
+        })),
+        composerHoldingsCount: Array.isArray(portfolio.composerHoldings) ? portfolio.composerHoldings.length : 0,
+        composerHoldingsUpdatedAt: portfolio.composerHoldingsUpdatedAt || null,
+        composerHoldingsSource: portfolio.composerHoldingsSource || null,
+      },
+      latestRebalance: latestRebalanceLog
+        ? {
+          createdAt: latestRebalanceLog.createdAt || null,
+          budget: toNumber(latestRebalanceLog?.details?.budget, null),
+          accountCash: toNumber(latestRebalanceLog?.details?.accountCash, null),
+          cashBuffer: toNumber(latestRebalanceLog?.details?.cashBuffer, null),
+          indicatorTrace: pickEvaluatorDebugLines(
+            latestRebalanceLog?.details?.thoughtProcess?.reasoning || []
+          ),
+        }
+        : null,
+      brokerSnapshot,
+      evaluations,
+      hint:
+        'If Composer and TradingApp disagree, compare (1) portfolio cashLimit/budget, (2) as-of mode/date (requested vs effective), (3) price source & adjustment, and (4) RSI method. The runs above show how those settings change the decision path.',
+    });
+  } catch (error) {
+    console.error('[Diagnostics] diagnoseAllocationMismatch failed:', error.message);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Failed to generate allocation mismatch diagnostics.',
+    });
+  }
+};
+
+exports.rebalanceNow = async (req, res) => {
+  try {
+    const { userId, strategyId } = req.params;
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    if (isRebalanceLocked()) {
+      return res.status(409).json({
+        status: 'fail',
+        message: 'A rebalance is already in progress. Try again in a moment.',
+      });
+    }
+
+    await rebalanceNow({ strategyId, userId });
+
+    const latestLog = await StrategyLog.findOne({
+      strategy_id: String(strategyId),
+      userId: String(userId),
+      message: 'Portfolio rebalanced',
+    })
+      .sort({ createdAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      status: 'success',
+      log: latestLog || null,
+    });
+  } catch (error) {
+    const message = String(error?.message || 'Failed to rebalance now.');
+    const statusCode = message.includes('Rebalance already in progress') ? 409 : 500;
+    console.error('[RebalanceNow] Failed:', message);
+    return res.status(statusCode).json({
+      status: 'fail',
+      message,
+    });
+  }
+};
 
 exports.getPortfolios = async (req, res) => {
   try {

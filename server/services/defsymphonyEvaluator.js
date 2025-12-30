@@ -1669,6 +1669,10 @@ const loadPriceData = async (
     asOfMode === 'current';
   const priceSource = normalizePriceSource(options.priceSource);
   const forceRefresh = normalizePriceRefresh(options.forceRefresh);
+  const cacheOnly =
+    normalizeBoolean(options.cacheOnly) ??
+    (asOfMode === 'previous-close' && forceRefresh === false);
+  const minBars = Number.isFinite(Number(options.minBars)) ? Math.max(0, Math.floor(Number(options.minBars))) : 0;
   const map = new Map();
   const missing = [];
   const handleSymbol = async (symbol) => {
@@ -1681,6 +1685,8 @@ const loadPriceData = async (
         adjustment,
         source: priceSource,
         forceRefresh,
+        minBars,
+        cacheOnly,
       });
       let bars = response.bars || [];
       if (asOfMode === 'previous-close' && bars.length > 1) {
@@ -1848,6 +1854,7 @@ const evaluateDefsymphonyStrategy = async ({
       asOfMode: resolvedAsOfMode,
       priceSource: resolvedPriceSource,
       forceRefresh: resolvedPriceRefresh,
+      minBars: requiredBars,
     }
   );
   const effectiveAsOfDate = dataAsOfDate || resolvedAsOfDate;
@@ -1855,7 +1862,12 @@ const evaluateDefsymphonyStrategy = async ({
   if (!usableHistory) {
     throw new Error('Unable to align price history for the requested lookback window.');
   }
-  const asOfLabel = `, as of ${formatDateForLog(effectiveAsOfDate)}`;
+  const requestedAsOfLabel = formatDateForLog(resolvedAsOfDate);
+  const effectiveAsOfLabel = formatDateForLog(effectiveAsOfDate);
+  const asOfLabel =
+    requestedAsOfLabel && effectiveAsOfLabel && requestedAsOfLabel !== effectiveAsOfLabel
+      ? `, requested ${requestedAsOfLabel}, effective ${effectiveAsOfLabel}`
+      : `, as of ${effectiveAsOfLabel}`;
   const context = {
     priceData,
     metricCache: new WeakMap(),

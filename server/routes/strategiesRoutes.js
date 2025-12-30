@@ -23,6 +23,8 @@ const {
   updateComposerHoldings,
   getComposerHoldings,
   compareComposerHoldings,
+  diagnoseAllocationMismatch,
+  rebalanceNow,
 } = require("../controllers/strategiesController");
 
 
@@ -46,6 +48,8 @@ router.route("/metadata/:userId/:strategyId").patch(auth, updateStrategyMetadata
 router.route("/rebalance-date/:userId/:strategyId").patch(auth, updateNextRebalanceDate);
 router.route("/composer-holdings/:userId/:strategyId").get(auth, getComposerHoldings).patch(auth, updateComposerHoldings);
 router.route("/composer-holdings/compare/:userId/:strategyId").get(auth, compareComposerHoldings);
+router.route("/diagnose/:userId/:strategyId").get(auth, diagnoseAllocationMismatch);
+router.route("/rebalance-now/:userId/:strategyId").post(auth, rebalanceNow);
 router.route("/progress/:jobId").get(streamStrategyProgress);
 
 
