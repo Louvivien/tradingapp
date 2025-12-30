@@ -191,6 +191,31 @@ const ORDER_PENDING_STATUSES = new Set([
   'partially_filled',
 ]);
 
+const DEFAULT_REBALANCE_WINDOW_MINUTES = (() => {
+  const parsed = Number(process.env.REBALANCE_WINDOW_MINUTES);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 15;
+})();
+
+const computeRebalanceWindow = (closeTime, windowMinutes = DEFAULT_REBALANCE_WINDOW_MINUTES) => {
+  const close = closeTime instanceof Date ? closeTime : new Date(closeTime);
+  if (!close || Number.isNaN(close.getTime())) {
+    return null;
+  }
+  const minutes = Math.max(1, Math.floor(Number(windowMinutes) || DEFAULT_REBALANCE_WINDOW_MINUTES));
+  const start = new Date(close.getTime() - minutes * 60 * 1000);
+  return { start, end: close, minutes };
+};
+
+const isWithinRebalanceWindow = (date, window) => {
+  if (!date || !(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return false;
+  }
+  if (!window?.start || !window?.end) {
+    return false;
+  }
+  return date >= window.start && date < window.end;
+};
+
 const sanitizeSymbol = (value) => {
   if (!value) {
     return null;
@@ -458,6 +483,63 @@ const alignToNextMarketOpen = async (tradingKeys, desiredDate) => {
   }
 
   return nextSession?.open || desiredDate;
+};
+
+const alignToRebalanceWindowStart = async (tradingKeys, desiredDate) => {
+  if (!desiredDate) {
+    return desiredDate;
+  }
+  const session = await fetchNextMarketSessionAfter(tradingKeys, desiredDate);
+  if (!session) {
+    return desiredDate;
+  }
+
+  const pick = (targetDate, marketSession) => {
+    if (!marketSession?.close) {
+      return targetDate;
+    }
+    const window = computeRebalanceWindow(marketSession.close);
+    if (!window) {
+      return targetDate;
+    }
+    if (targetDate <= window.start) {
+      return window.start;
+    }
+    if (isWithinRebalanceWindow(targetDate, window)) {
+      return targetDate;
+    }
+    return null;
+  };
+
+  const activeCandidate = session.activeSession ? pick(desiredDate, session.activeSession) : null;
+  if (activeCandidate) {
+    return activeCandidate;
+  }
+  if (session.activeSession) {
+    const activeWindow = computeRebalanceWindow(session.activeSession.close);
+    if (activeWindow && desiredDate >= activeWindow.end) {
+      const nextSession = session.nextSession?.open
+        ? await fetchNextMarketSessionAfter(tradingKeys, new Date(session.nextSession.open.getTime() + 1000))
+        : null;
+      const followUp = nextSession?.activeSession || nextSession?.nextSession || session.nextSession;
+      const nextCandidate = followUp ? pick(desiredDate, followUp) : null;
+      if (nextCandidate) {
+        return nextCandidate;
+      }
+    }
+  }
+
+  const nextCandidate = session.nextSession ? pick(desiredDate, session.nextSession) : null;
+  if (nextCandidate) {
+    return nextCandidate;
+  }
+
+  const alignedOpen = await alignToNextMarketOpen(tradingKeys, desiredDate);
+  if (alignedOpen && alignedOpen !== desiredDate) {
+    const nextAligned = await alignToRebalanceWindowStart(tradingKeys, alignedOpen);
+    return nextAligned || alignedOpen;
+  }
+  return desiredDate;
 };
 
 const buildRebalanceHumanSummary = ({
@@ -1186,16 +1268,18 @@ const rebalancePortfolio = async (portfolio) => {
     const nextOpen = clockData.next_open ? new Date(clockData.next_open) : null;
     const nextOpenValid = nextOpen && !Number.isNaN(nextOpen.getTime());
 
-    let scheduledAt = nextOpenValid ? nextOpen : await alignToNextMarketOpen(tradingKeys, fallbackNext);
+    const openAnchor = nextOpenValid ? nextOpen : await alignToNextMarketOpen(tradingKeys, fallbackNext);
+    let scheduledAt = await alignToRebalanceWindowStart(tradingKeys, openAnchor || fallbackNext);
 
     if (!scheduledAt || scheduledAt <= now) {
       const bufferDate = new Date(now.getTime() + 60000);
       const bufferedNext = computeNextRebalanceAt(recurrence, bufferDate);
-      const alignedBuffered = await alignToNextMarketOpen(tradingKeys, bufferedNext);
+      const alignedBuffered = await alignToRebalanceWindowStart(tradingKeys, bufferedNext);
       scheduledAt = alignedBuffered > now ? alignedBuffered : bufferedNext;
     }
 
     portfolio.nextRebalanceAt = scheduledAt;
+    portfolio.nextRebalanceManual = false;
     portfolio.recurrence = recurrence;
     await portfolio.save();
 
@@ -1223,6 +1307,55 @@ const rebalancePortfolio = async (portfolio) => {
     });
 
     return;
+  }
+
+  if (!portfolio.nextRebalanceManual) {
+    let closeTime = clockData?.next_close ? new Date(clockData.next_close) : null;
+    if (!closeTime || Number.isNaN(closeTime.getTime())) {
+      const session = await fetchNextMarketSessionAfter(tradingKeys, now);
+      closeTime = session?.activeSession?.close || null;
+    }
+    const window = closeTime && !Number.isNaN(closeTime.getTime()) ? computeRebalanceWindow(closeTime) : null;
+    if (window && !isWithinRebalanceWindow(now, window)) {
+      const scheduledAt =
+        now < window.start
+          ? window.start
+          : await alignToRebalanceWindowStart(tradingKeys, new Date(window.end.getTime() + 60000));
+
+      portfolio.nextRebalanceAt = scheduledAt;
+      portfolio.nextRebalanceManual = false;
+      portfolio.recurrence = recurrence;
+      await portfolio.save();
+
+      await recordStrategyLog({
+        strategyId: portfolio.strategy_id,
+        userId: portfolio.userId,
+        strategyName: portfolio.name,
+        message: 'Skipped rebalance: outside rebalance window',
+        details: {
+          recurrence,
+          marketStatus: 'open',
+          rebalanceWindow: {
+            minutes: window.minutes,
+            start: window.start.toISOString(),
+            end: window.end.toISOString(),
+          },
+          rescheduledFor: scheduledAt.toISOString(),
+          thoughtProcess: {
+            ...baseThoughtProcess,
+            reason: 'Market open but current time is outside the default rebalance window; rescheduled.',
+          },
+          humanSummary: [
+            `Rebalance postponed for "${portfolio.name}" because it's outside the default rebalance window.`,
+            `• Window length: ${window.minutes} minutes before market close.`,
+            `• Next attempt scheduled for ${formatDateTimeHuman(scheduledAt)}.`,
+            '• Tip: You can manually schedule a one-time rebalance during market hours from the portfolio schedule dialog.',
+          ].filter(Boolean).join('\n'),
+        },
+      });
+
+      return;
+    }
   }
 
   const [positionsResponse, accountResponse] = await Promise.all([
@@ -1845,8 +1978,9 @@ const rebalancePortfolio = async (portfolio) => {
   portfolio.rebalanceCount = (toNumber(portfolio.rebalanceCount, 0) || 0) + 1;
   portfolio.lastRebalancedAt = now;
   const provisionalNext = computeNextRebalanceAt(recurrence, now);
-  const alignedNext = await alignToNextMarketOpen(tradingKeys, provisionalNext);
+  const alignedNext = await alignToRebalanceWindowStart(tradingKeys, provisionalNext);
   portfolio.nextRebalanceAt = alignedNext || provisionalNext;
+  portfolio.nextRebalanceManual = false;
   portfolio.recurrence = recurrence;
 
   const humanSummary = buildRebalanceHumanSummary({
@@ -2013,6 +2147,8 @@ const rebalanceNow = async ({ strategyId, userId }) => withRebalanceLock(async (
   if (!portfolio) {
     throw new Error('Portfolio not found');
   }
+  // Manual "rebalance now" should bypass the default end-of-day window once.
+  portfolio.nextRebalanceManual = true;
   await rebalancePortfolio(portfolio);
 });
 
@@ -2024,4 +2160,7 @@ module.exports = {
   rebalanceNow,
   isRebalanceLocked,
   buildAdjustments,
+  fetchNextMarketSessionAfter,
+  alignToRebalanceWindowStart,
+  computeRebalanceWindow,
 };

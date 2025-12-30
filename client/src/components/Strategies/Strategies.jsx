@@ -96,7 +96,7 @@ const Strategies = () => {
   const [backtestOpen, setBacktestOpen] = useState(false);
   const [backtestStartDate, setBacktestStartDate] = useState("");
   const [backtestEndDate, setBacktestEndDate] = useState("");
-  const [backtestCostBps, setBacktestCostBps] = useState("0");
+  const [backtestCostBps, setBacktestCostBps] = useState("1");
   const [backtestLoading, setBacktestLoading] = useState(false);
   const [backtestResult, setBacktestResult] = useState(null);
   const [backtestError, setBacktestError] = useState(null);
@@ -1062,6 +1062,15 @@ return (
                     <Typography variant="body2">Max drawdown: {formatPct(backtestResult.metrics.maxDrawdown)}</Typography>
                     <Typography variant="body2">Volatility: {formatNumber(backtestResult.metrics.volatility)}</Typography>
                     <Typography variant="body2">Sharpe: {formatNumber(backtestResult.metrics.sharpe)}</Typography>
+                    {(backtestResult.metrics.beta != null || backtestResult.metrics.r2 != null) && (
+                      <>
+                        <Typography variant="body2">
+                          Beta{backtestResult.metrics.benchmarkSymbol ? ` (vs ${backtestResult.metrics.benchmarkSymbol})` : ""}:{" "}
+                          {formatNumber(backtestResult.metrics.beta)}
+                        </Typography>
+                        <Typography variant="body2">R²: {formatNumber(backtestResult.metrics.r2)}</Typography>
+                      </>
+                    )}
                     <Typography variant="body2">Avg turnover: {formatPct(backtestResult.metrics.avgTurnover)}</Typography>
                     {backtestResult.benchmark?.metrics && (
                       <>

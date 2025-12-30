@@ -21,7 +21,12 @@ const Axios = require("axios");
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('../services/strategyLogger');
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
-const { rebalanceNow, isRebalanceLocked } = require('../services/rebalanceService');
+const {
+  rebalanceNow,
+  isRebalanceLocked,
+  fetchNextMarketSessionAfter,
+  alignToRebalanceWindowStart,
+} = require('../services/rebalanceService');
 const { runEquityBackfill, TASK_NAME: EQUITY_BACKFILL_TASK } = require('../services/equityBackfillService');
 const {
   addSubscriber,
@@ -2118,10 +2123,21 @@ exports.updateStrategyRecurrence = async (req, res) => {
     const strategy = await Strategy.findOne({ strategy_id: strategyId, userId: String(userId) });
 
     const now = new Date();
-    const nextRebalanceAt = computeNextRebalanceAt(normalizedRecurrence, now);
+    const provisionalNext = computeNextRebalanceAt(normalizedRecurrence, now);
+    let nextRebalanceAt = provisionalNext;
+    try {
+      const alpacaConfig = await getAlpacaConfig(userId);
+      if (alpacaConfig?.hasValidKeys) {
+        const tradingKeys = alpacaConfig.getTradingKeys();
+        nextRebalanceAt = await alignToRebalanceWindowStart(tradingKeys, provisionalNext);
+      }
+    } catch (error) {
+      nextRebalanceAt = provisionalNext;
+    }
 
     portfolio.recurrence = normalizedRecurrence;
     portfolio.nextRebalanceAt = nextRebalanceAt;
+    portfolio.nextRebalanceManual = false;
     await portfolio.save();
 
     if (strategy) {
@@ -2188,6 +2204,30 @@ exports.updateNextRebalanceDate = async (req, res) => {
       });
     }
 
+    const alpacaConfig = await getAlpacaConfig(userId);
+    if (!alpacaConfig?.hasValidKeys) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Invalid Alpaca credentials; cannot validate market hours for scheduling.',
+      });
+    }
+    const tradingKeys = alpacaConfig.getTradingKeys();
+    const session = await fetchNextMarketSessionAfter(tradingKeys, parsedDate);
+    if (!session?.activeSession) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Manual reschedule must be within market open hours on a trading day.',
+      });
+    }
+    const openTime = session.activeSession.open;
+    const closeTime = session.activeSession.close;
+    if (!openTime || !closeTime || parsedDate < openTime || parsedDate >= closeTime) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Manual reschedule must be within market open hours on a trading day.',
+      });
+    }
+
     const portfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: String(userId) });
     if (!portfolio) {
       return res.status(404).json({
@@ -2197,6 +2237,7 @@ exports.updateNextRebalanceDate = async (req, res) => {
     }
 
     portfolio.nextRebalanceAt = parsedDate;
+    portfolio.nextRebalanceManual = true;
     await portfolio.save();
 
     await recordStrategyLog({
@@ -2206,6 +2247,7 @@ exports.updateNextRebalanceDate = async (req, res) => {
       message: 'Next reallocation updated manually',
       details: {
         nextRebalanceAt: parsedDate,
+        nextRebalanceManual: true,
         requestedBy: userId,
       },
     });

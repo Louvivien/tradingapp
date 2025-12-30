@@ -45,7 +45,7 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
   const [backtestPortfolio, setBacktestPortfolio] = useState(null);
   const [backtestStartDate, setBacktestStartDate] = useState("");
   const [backtestEndDate, setBacktestEndDate] = useState("");
-  const [backtestCostBps, setBacktestCostBps] = useState("0");
+  const [backtestCostBps, setBacktestCostBps] = useState("1");
   const [backtestLoading, setBacktestLoading] = useState(false);
   const [backtestResult, setBacktestResult] = useState(null);
   const [backtestError, setBacktestError] = useState(null);
@@ -988,6 +988,9 @@ const deleteStrategy = async (strategyId) => {
           <Typography id="edit-rebalance-modal-description" variant="body2" color="textSecondary">
             Strategy: {scheduleEditor.portfolio?.name || '—'}
           </Typography>
+          <Typography variant="body2" color="textSecondary">
+            One-time override: after the next rebalance runs, scheduling returns to the default end-of-day window. Manual times must be during market hours.
+          </Typography>
           <TextField
             label="Next reallocation"
             type="datetime-local"
@@ -1145,6 +1148,15 @@ const deleteStrategy = async (strategyId) => {
               <Typography variant="body2">Max drawdown: {formatPct(backtestResult.metrics.maxDrawdown)}</Typography>
               <Typography variant="body2">Volatility: {formatNumber(backtestResult.metrics.volatility)}</Typography>
               <Typography variant="body2">Sharpe: {formatNumber(backtestResult.metrics.sharpe)}</Typography>
+              {(backtestResult.metrics.beta != null || backtestResult.metrics.r2 != null) && (
+                <>
+                  <Typography variant="body2">
+                    Beta{backtestResult.metrics.benchmarkSymbol ? ` (vs ${backtestResult.metrics.benchmarkSymbol})` : ""}:{" "}
+                    {formatNumber(backtestResult.metrics.beta)}
+                  </Typography>
+                  <Typography variant="body2">R²: {formatNumber(backtestResult.metrics.r2)}</Typography>
+                </>
+              )}
               <Typography variant="body2">Avg turnover: {formatPct(backtestResult.metrics.avgTurnover)}</Typography>
               {backtestResult.benchmark?.metrics && (
                 <>

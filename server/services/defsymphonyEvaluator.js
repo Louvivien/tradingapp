@@ -2272,30 +2272,34 @@ const computeBacktestMetrics = ({ navSeries, dailyReturns, turnoverSeries }) => 
   const totalReturn = endingNav - 1;
   const avgDailyReturn =
     totalDays > 0 ? dailyReturns.reduce((sum, value) => sum + value, 0) / totalDays : 0;
+  const annualizedMeanReturn = avgDailyReturn * TRADING_DAYS_PER_YEAR;
+  // Composer metrics assume a zero risk-free rate and use a population standard deviation
+  // of daily returns, annualized by sqrt(252).
   const volatility =
-    totalDays > 1
+    totalDays > 0
       ? (() => {
           const mean = avgDailyReturn;
           const variance =
-            dailyReturns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (totalDays - 1);
+            dailyReturns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / totalDays;
           return Math.sqrt(variance) * Math.sqrt(TRADING_DAYS_PER_YEAR);
         })()
       : 0;
   const cagr = totalDays > 0 ? (endingNav ** (TRADING_DAYS_PER_YEAR / totalDays) - 1) : 0;
 
   let peak = 1;
-  let maxDrawdown = 0;
+  let minDrawdown = 0;
   navSeries.forEach((nav) => {
     if (nav > peak) {
       peak = nav;
     }
     const dd = (nav - peak) / peak;
-    if (dd < maxDrawdown) {
-      maxDrawdown = dd;
+    if (dd < minDrawdown) {
+      minDrawdown = dd;
     }
   });
-  const sharpe = volatility > 0 ? cagr / volatility : 0;
-  const calmar = maxDrawdown < 0 ? cagr / Math.abs(maxDrawdown) : 0;
+  const maxDrawdown = Math.abs(minDrawdown);
+  const sharpe = volatility > 0 ? annualizedMeanReturn / volatility : 0;
+  const calmar = maxDrawdown > 0 ? cagr / maxDrawdown : 0;
   const winRate = totalDays > 0 ? dailyReturns.filter((value) => value > 0).length / totalDays : 0;
   const avgTurnover =
     turnoverSeries.length > 0 ? turnoverSeries.reduce((sum, value) => sum + value, 0) / turnoverSeries.length : 0;
@@ -2310,7 +2314,58 @@ const computeBacktestMetrics = ({ navSeries, dailyReturns, turnoverSeries }) => 
     calmar,
     winRate,
     avgDailyReturn,
+    annualizedMeanReturn,
     avgTurnover,
+  };
+};
+
+const computeBetaStats = ({ strategyReturns, benchmarkReturns }) => {
+  if (!Array.isArray(strategyReturns) || !Array.isArray(benchmarkReturns)) {
+    return { beta: null, r2: null, correlation: null };
+  }
+  const count = Math.min(strategyReturns.length, benchmarkReturns.length);
+  const xs = [];
+  const ys = [];
+  for (let i = 0; i < count; i += 1) {
+    const x = Number(benchmarkReturns[i]);
+    const y = Number(strategyReturns[i]);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      continue;
+    }
+    xs.push(x);
+    ys.push(y);
+  }
+  if (xs.length < 2) {
+    return { beta: null, r2: null, correlation: null };
+  }
+
+  const mean = (arr) => arr.reduce((sum, v) => sum + v, 0) / arr.length;
+  const meanX = mean(xs);
+  const meanY = mean(ys);
+  let varX = 0;
+  let varY = 0;
+  let covXY = 0;
+  for (let i = 0; i < xs.length; i += 1) {
+    const dx = xs[i] - meanX;
+    const dy = ys[i] - meanY;
+    varX += dx * dx;
+    varY += dy * dy;
+    covXY += dx * dy;
+  }
+  varX /= xs.length;
+  varY /= xs.length;
+  covXY /= xs.length;
+
+  if (!Number.isFinite(varX) || varX <= 0 || !Number.isFinite(varY) || varY <= 0) {
+    return { beta: null, r2: null, correlation: null };
+  }
+  const beta = covXY / varX;
+  const correlation = covXY / Math.sqrt(varX * varY);
+  const r2 = correlation * correlation;
+  return {
+    beta: Number.isFinite(beta) ? beta : null,
+    correlation: Number.isFinite(correlation) ? correlation : null,
+    r2: Number.isFinite(r2) ? r2 : null,
   };
 };
 
@@ -2644,7 +2699,6 @@ const backtestDefsymphonyStrategy = async ({
   }
   finalAllocation = asOfPositions;
 
-  const metrics = computeBacktestMetrics({ navSeries, dailyReturns, turnoverSeries });
   const series = navSeries.map((navValue, offset) => {
     const idx = executionStartIdx + offset;
     const dateKey = axisDates[idx];
@@ -2681,6 +2735,7 @@ const backtestDefsymphonyStrategy = async ({
     .sort((a, b) => (b.weight || 0) - (a.weight || 0));
 
   let benchmark = null;
+  let betaStats = null;
   if (includeBenchmark && benchmarkSymbol) {
     try {
       const normalizedBenchmark = String(benchmarkSymbol).trim().toUpperCase();
@@ -2738,9 +2793,24 @@ const backtestDefsymphonyStrategy = async ({
           turnoverSeries: Array.from({ length: benchReturns.length }, () => 0),
         }),
       };
+      betaStats = computeBetaStats({ strategyReturns: dailyReturns, benchmarkReturns: benchReturns });
     } catch (error) {
       benchmark = null;
+      betaStats = null;
     }
+  }
+
+  const metrics = computeBacktestMetrics({ navSeries, dailyReturns, turnoverSeries });
+  if (betaStats) {
+    metrics.beta = betaStats.beta;
+    metrics.r2 = betaStats.r2;
+    metrics.correlation = betaStats.correlation;
+    metrics.benchmarkSymbol = benchmark?.symbol || null;
+  } else {
+    metrics.beta = null;
+    metrics.r2 = null;
+    metrics.correlation = null;
+    metrics.benchmarkSymbol = null;
   }
 
   return {

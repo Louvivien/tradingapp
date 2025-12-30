@@ -50,6 +50,10 @@ const portfolioSchema = new Schema({
     default: null,
     index: true,
   },
+  nextRebalanceManual: {
+    type: Boolean,
+    default: false,
+  },
   targetPositions: {
     type: [{
       symbol: {
