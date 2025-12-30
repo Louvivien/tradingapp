@@ -44,9 +44,27 @@ const toISO = (value) => {
   return date.toISOString();
 };
 
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const parseStartDateInput = (value) => {
+  if (typeof value === 'string' && DATE_KEY_RE.test(value.trim())) {
+    return new Date(`${value.trim()}T00:00:00.000Z`);
+  }
+  return value ? new Date(value) : null;
+};
+
+const parseEndDateInput = (value) => {
+  if (typeof value === 'string' && DATE_KEY_RE.test(value.trim())) {
+    return new Date(`${value.trim()}T23:59:59.999Z`);
+  }
+  return value ? new Date(value) : null;
+};
+
 const normalizeDateRange = (startInput, endInput) => {
-  const end = endInput ? new Date(endInput) : new Date();
-  const start = startInput ? new Date(startInput) : new Date(end.getTime() - MAX_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const end = parseEndDateInput(endInput) || new Date();
+  const start =
+    parseStartDateInput(startInput) ||
+    new Date(end.getTime() - MAX_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
   if (start > end) {
     throw new Error('Start date must be before end date.');
   }
@@ -57,9 +75,14 @@ const barsCoverRange = (bars = [], start, end) => {
   if (!bars.length) {
     return false;
   }
-  const first = bars[0].t;
-  const last = bars[bars.length - 1].t;
-  return first <= start && last >= end;
+  const firstKey = toISODateKey(bars[0].t);
+  const lastKey = toISODateKey(bars[bars.length - 1].t);
+  const startKey = toISODateKey(start);
+  const endKey = toISODateKey(end);
+  if (!firstKey || !lastKey || !startKey || !endKey) {
+    return false;
+  }
+  return firstKey <= startKey && lastKey >= endKey;
 };
 
 const toISODateKey = (value) => {
@@ -396,6 +419,41 @@ const fetchLatestPriceFromYahoo = async ({ symbol }) => {
   return Number.isFinite(price) && price > 0 ? price : null;
 };
 
+const fetchLatestPriceFromYahooChart = async ({ symbol }) => {
+  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+    symbol
+  )}?interval=1m&range=1d`;
+  const { data } = await Axios.get(url, {
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0 Safari/537.36',
+    },
+  });
+  const result = data?.chart?.result?.[0];
+
+  const metaPrice = Number(
+    result?.meta?.regularMarketPrice ??
+      result?.meta?.postMarketPrice ??
+      result?.meta?.preMarketPrice ??
+      result?.meta?.chartPreviousClose
+  );
+  if (Number.isFinite(metaPrice) && metaPrice > 0) {
+    return metaPrice;
+  }
+
+  const closes = result?.indicators?.quote?.[0]?.close;
+  if (Array.isArray(closes) && closes.length) {
+    for (let idx = closes.length - 1; idx >= 0; idx -= 1) {
+      const value = Number(closes[idx]);
+      if (Number.isFinite(value) && value > 0) {
+        return value;
+      }
+    }
+  }
+
+  return null;
+};
+
 const fetchLatestPrice = async ({ symbol, source } = {}) => {
   const normalizedSource = String(source ?? '').trim().toLowerCase();
   if (!symbol) {
@@ -409,6 +467,16 @@ const fetchLatestPrice = async ({ symbol, source } = {}) => {
       }
     } catch (error) {
       console.warn(`[PriceCache] Yahoo latest price failed for ${symbol}: ${error.message}`);
+    }
+    try {
+      const price = await fetchLatestPriceFromYahooChart({ symbol });
+      if (price) {
+        return price;
+      }
+    } catch (error) {
+      console.warn(
+        `[PriceCache] Yahoo chart latest price failed for ${symbol}: ${error.message}`
+      );
     }
   } else if (normalizedSource === 'alpaca') {
     try {
@@ -437,6 +505,17 @@ const fetchLatestPrice = async ({ symbol, source } = {}) => {
     }
   } catch (error) {
     console.warn(`[PriceCache] Yahoo latest price fallback failed for ${symbol}: ${error.message}`);
+  }
+
+  try {
+    const price = await fetchLatestPriceFromYahooChart({ symbol });
+    if (price) {
+      return price;
+    }
+  } catch (error) {
+    console.warn(
+      `[PriceCache] Yahoo chart latest price fallback failed for ${symbol}: ${error.message}`
+    );
   }
 
   return null;
@@ -641,16 +720,24 @@ const getCachedPrices = async ({
   const resolvedCacheOnly = normalizeBoolean(cacheOnly) ?? false;
 
   const baseQuery = { symbol: uppercaseSymbol, granularity: '1Day' };
-  const sourceQuery =
-    resolvedSource === 'yahoo' || resolvedSource === 'alpaca' || resolvedSource === 'tiingo'
-      ? { dataSource: resolvedSource }
-      : {};
-  const cacheQuery =
+  const cacheQueryBase =
     resolvedAdjustment === 'raw'
-      ? { ...baseQuery, ...sourceQuery, $or: [{ adjustment: 'raw' }, { adjustment: { $exists: false } }] }
-      : { ...baseQuery, ...sourceQuery, adjustment: resolvedAdjustment };
+      ? { ...baseQuery, $or: [{ adjustment: 'raw' }, { adjustment: { $exists: false } }] }
+      : { ...baseQuery, adjustment: resolvedAdjustment };
 
-  let cache = await PriceCache.findOne(cacheQuery);
+  const preferredSource =
+    resolvedSource === 'yahoo' || resolvedSource === 'alpaca' || resolvedSource === 'tiingo' || resolvedSource === 'stooq'
+      ? resolvedSource
+      : null;
+
+  let cache = null;
+  if (preferredSource) {
+    cache = await PriceCache.findOne({ ...cacheQueryBase, dataSource: preferredSource }).sort({ refreshedAt: -1 });
+  }
+  if (!cache) {
+    cache = await PriceCache.findOne(cacheQueryBase).sort({ refreshedAt: -1 });
+  }
+
   const relaxedCoverageOk = (bars = []) => {
     if (!minBarsNeeded) {
       return false;
@@ -658,8 +745,9 @@ const getCachedPrices = async ({
     if (!Array.isArray(bars) || bars.length < minBarsNeeded) {
       return false;
     }
-    const last = bars[bars.length - 1]?.t;
-    return last instanceof Date && last >= end;
+    const lastKey = toISODateKey(bars[bars.length - 1]?.t);
+    const endKey = toISODateKey(end);
+    return Boolean(lastKey && endKey && lastKey >= endKey);
   };
   const isFresh =
     !resolvedForceRefresh &&
@@ -677,8 +765,12 @@ const getCachedPrices = async ({
       source: resolvedSource,
       minBars: minBarsNeeded,
     });
+    const writeQuery =
+      resolvedAdjustment === 'raw'
+        ? { ...baseQuery, dataSource, $or: [{ adjustment: 'raw' }, { adjustment: { $exists: false } }] }
+        : { ...baseQuery, dataSource, adjustment: resolvedAdjustment };
     cache = await PriceCache.findOneAndUpdate(
-      cacheQuery,
+      writeQuery,
       {
         symbol: uppercaseSymbol,
         start: bars[0].t,

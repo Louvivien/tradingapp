@@ -1,0 +1,78 @@
+(defsymphony
+ "?? BB-XM 1.z ||| Deez ||| 14JUN2023 (Invest Copy)"
+ {:asset-class "EQUITIES", :rebalance-threshold 0.069}
+ (weight-equal
+  [(group
+    "?? V 0.1a | Minimal BB | Simple Beta Baller Signal (Invest Copy)"
+    [(weight-equal
+      [(if
+        (< (rsi "BIL" {:window 10}) (rsi "SOXX" {:window 10}))
+        [(weight-equal
+          [(if
+            (> (rsi "SPY" {:window 6}) 75)
+            [(group
+              "Overbought S&P. Sell the rip. Buy volatility."
+              [(weight-equal
+                [(filter
+                  (rsi {:window 13})
+                  (select-bottom 1)
+                  [(asset
+                    "UVXY"
+                    "ProShares Ultra VIX Short-Term Futures ETF")
+                   (asset
+                    "VIXY"
+                    "ProShares VIX Short-Term Futures ETF")])])])]
+            [(weight-equal
+              [(asset
+                "SOXL"
+                "Direxion Daily Semiconductor Bull 3x Shares")])])])]
+        [(group
+          "? SOXX RSI Machine | Deez | 15NOV2022"
+          [(weight-equal
+            [(if
+              (> (rsi "SOXX" {:window 10}) 76)
+              [(weight-equal
+                [(asset
+                  "SOXS"
+                  "Direxion Daily Semiconductor Bear 3x Shares")])]
+              [(weight-equal
+                [(if
+                  (< (rsi "SOXX" {:window 2}) 42)
+                  [(weight-equal
+                    [(if
+                      (< (rsi "SOXL" {:window 10}) 57)
+                      [(asset
+                        "SOXL"
+                        "Direxion Daily Semiconductor Bull 3x Shares")]
+                      [(asset
+                        "SOXS"
+                        "Direxion Daily Semiconductor Bear 3x Shares")])])]
+                  [(group
+                    "? SLUNT | Deez | 5MAY2023"
+                    [(weight-equal
+                      [(if
+                        (>=
+                         (current-price "SPY")
+                         (moving-average-price "SPY" {:window 2}))
+                        [(weight-equal
+                          [(if
+                            (<
+                             (moving-average-price "SPY" {:window 5})
+                             (moving-average-price "SPY" {:window 10}))
+                            [(asset
+                              "SPXU"
+                              "ProShares UltraPro Short S&P500")]
+                            [(asset
+                              "UPRO"
+                              "ProShares UltraPro S&P500")])])]
+                        [(weight-equal
+                          [(if
+                            (>=
+                             (rsi "SPY" {:window 3})
+                             (rsi "SPY" {:window 21}))
+                            [(asset
+                              "SQQQ"
+                              "ProShares UltraPro Short QQQ")]
+                            [(asset
+                              "TQQQ"
+                              "ProShares UltraPro QQQ")])])])])])])])])])])])])])]))

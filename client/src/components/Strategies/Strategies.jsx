@@ -21,6 +21,11 @@ import {
   DialogActions,
   CircularProgress,
   Divider,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
 } from "@mui/material";
 import { styled } from "@mui/system";
 import Skeleton from "@mui/lab/Skeleton";
@@ -970,11 +975,24 @@ return (
                     <Typography variant="body2" fontWeight={600}>
                       Positions ({localEvalResult.positions.length})
                     </Typography>
-                    {localEvalResult.positions.map((pos, index) => (
-                      <Typography key={`local-pos-${index}`} variant="body2">
-                        {pos.symbol}: {((pos.weight || 0) * 100).toFixed(2)}% target · Qty {pos.quantity ?? 'n/a'}
-                      </Typography>
-                    ))}
+                    <Table size="small" sx={{ mt: 1 }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Asset</TableCell>
+                          <TableCell align="right">Allocation %</TableCell>
+                          <TableCell align="right">Quantity</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {localEvalResult.positions.map((pos, index) => (
+                          <TableRow key={`local-pos-${index}`}>
+                            <TableCell>{pos.symbol}</TableCell>
+                            <TableCell align="right">{formatPct(pos.weight)}</TableCell>
+                            <TableCell align="right">{pos.quantity ?? "—"}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </Box>
                 )}
               </Box>
@@ -1060,6 +1078,43 @@ return (
                         </Typography>
                       </>
                     )}
+                  </>
+                )}
+
+                {Array.isArray(backtestResult?.finalHoldings) && backtestResult.finalHoldings.length > 0 && (
+                  <>
+                    <Divider sx={{ my: 2 }} />
+                    <Typography variant="subtitle2">
+                      Final holdings {backtestResult.finalDate ? `(as of ${backtestResult.finalDate})` : ""}
+                    </Typography>
+                    <Table size="small" sx={{ mt: 1 }}>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell>Asset</TableCell>
+                          <TableCell align="right">Allocation %</TableCell>
+                          <TableCell align="right">Close</TableCell>
+                          <TableCell align="right">Quantity</TableCell>
+                          <TableCell align="right">Value</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {backtestResult.finalHoldings.map((pos) => (
+                          <TableRow key={`backtest-final-${pos.symbol}`}>
+                            <TableCell>{pos.symbol}</TableCell>
+                            <TableCell align="right">{formatPct(pos.weight)}</TableCell>
+                            <TableCell align="right">
+                              {Number.isFinite(Number(pos.close)) ? Number(pos.close).toFixed(2) : "—"}
+                            </TableCell>
+                            <TableCell align="right">
+                              {Number.isFinite(Number(pos.quantity)) ? Number(pos.quantity).toFixed(4) : "—"}
+                            </TableCell>
+                            <TableCell align="right">
+                              {Number.isFinite(Number(pos.value)) ? Number(pos.value).toFixed(2) : "—"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </>
                 )}
               </DialogContent>

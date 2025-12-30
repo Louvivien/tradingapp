@@ -466,6 +466,13 @@ const normalizeAsOfDate = (value) => {
   if (!value) {
     return null;
   }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const date = new Date(`${trimmed}T23:59:59.999Z`);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+  }
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
     return null;
@@ -1904,7 +1911,11 @@ const evaluateDefsymphonyStrategy = async ({
     enableGroupMetrics: false,
     debugIndicators: resolvedDebugIndicators,
     rsiMethod: resolvedRsiMethod,
-    usePreviousBarForIndicators: (resolvedDataAsOfMode || resolvedAsOfMode) === 'previous-close',
+    // `loadPriceData()` already enforces "previous-close" semantics by dropping today's unfinished
+    // daily bar when needed. Only drop the latest bar from indicator calculations when we explicitly
+    // appended a live quote on top of the previous-close history.
+    usePreviousBarForIndicators:
+      (resolvedDataAsOfMode || resolvedAsOfMode) === 'previous-close' && Boolean(appendLivePrice),
     asOfDate: effectiveAsOfDate,
     dataAdjustment: resolvedAdjustment,
     reasoning: [
@@ -2079,9 +2090,40 @@ const findLastIndex = (items, predicate) => {
   return -1;
 };
 
-const normalizeBacktestDate = (value, label) => {
+const normalizeBacktestStartDate = (value, label) => {
   if (!value) {
     throw new Error(`${label} is required (YYYY-MM-DD).`);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const date = new Date(`${trimmed}T00:00:00.000Z`);
+      if (Number.isNaN(date.getTime())) {
+        throw new Error(`${label} is invalid; expected YYYY-MM-DD.`);
+      }
+      return date;
+    }
+  }
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    throw new Error(`${label} is invalid; expected YYYY-MM-DD.`);
+  }
+  return date;
+};
+
+const normalizeBacktestEndDate = (value, label) => {
+  if (!value) {
+    throw new Error(`${label} is required (YYYY-MM-DD).`);
+  }
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const date = new Date(`${trimmed}T23:59:59.999Z`);
+      if (Number.isNaN(date.getTime())) {
+        throw new Error(`${label} is invalid; expected YYYY-MM-DD.`);
+      }
+      return date;
+    }
   }
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) {
@@ -2149,6 +2191,79 @@ const computeTurnover = (prevWeights, nextWeights) => {
     sumAbs += Math.abs((nextWeights.get(symbol) || 0) - (prevWeights.get(symbol) || 0));
   });
   return sumAbs / 2;
+};
+
+const extractDefsymphonyOptions = (node) => {
+  if (!Array.isArray(node)) {
+    return null;
+  }
+  if (node[0] !== 'defsymphony') {
+    return null;
+  }
+  const options = node[2];
+  return options && typeof options === 'object' && !Array.isArray(options) ? options : null;
+};
+
+const normalizeRebalanceFrequency = (value) => {
+  if (!value) {
+    return null;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  const stripped = normalized.startsWith(':') ? normalized.slice(1) : normalized;
+  if (['daily', 'weekly', 'monthly', 'quarterly', 'yearly', 'none', 'threshold'].includes(stripped)) {
+    return stripped;
+  }
+  return null;
+};
+
+const extractRebalanceConfig = (ast) => {
+  const options = extractDefsymphonyOptions(ast);
+  const thresholdRaw = options ? options[':rebalance-threshold'] : null;
+  const threshold = Number(thresholdRaw);
+  if (Number.isFinite(threshold) && threshold > 0) {
+    return { mode: 'threshold', threshold };
+  }
+
+  const freqRaw = options ? options[':rebalance-frequency'] : null;
+  const freq = normalizeRebalanceFrequency(freqRaw) || 'daily';
+  if (freq === 'threshold') {
+    return { mode: 'threshold', threshold: 0 };
+  }
+  return { mode: freq, threshold: 0 };
+};
+
+const shouldRebalanceOnDate = (mode, currentDateKey, previousDateKey) => {
+  if (!mode || mode === 'daily') {
+    return true;
+  }
+  if (mode === 'none') {
+    return false;
+  }
+  if (!currentDateKey || !previousDateKey) {
+    return true;
+  }
+  if (mode === 'weekly') {
+    // Rebalance on the first trading day after a week boundary.
+    const prevDate = new Date(`${previousDateKey}T00:00:00.000Z`);
+    const currentDate = new Date(`${currentDateKey}T00:00:00.000Z`);
+    const prevWeek = Math.floor(prevDate.getTime() / (7 * 24 * 60 * 60 * 1000));
+    const currentWeek = Math.floor(currentDate.getTime() / (7 * 24 * 60 * 60 * 1000));
+    return currentWeek !== prevWeek;
+  }
+  if (mode === 'monthly') {
+    return currentDateKey.slice(0, 7) !== previousDateKey.slice(0, 7);
+  }
+  if (mode === 'quarterly') {
+    const quarter = (key) => {
+      const month = Number(key.slice(5, 7));
+      return `${key.slice(0, 4)}-Q${Math.floor((month - 1) / 3) + 1}`;
+    };
+    return quarter(currentDateKey) !== quarter(previousDateKey);
+  }
+  if (mode === 'yearly') {
+    return currentDateKey.slice(0, 4) !== previousDateKey.slice(0, 4);
+  }
+  return true;
 };
 
 const computeBacktestMetrics = ({ navSeries, dailyReturns, turnoverSeries }) => {
@@ -2223,8 +2338,8 @@ const backtestDefsymphonyStrategy = async ({
     throw new Error('No tickers found in defsymphony script.');
   }
 
-  const resolvedStart = normalizeBacktestDate(startDate, 'startDate');
-  const resolvedEnd = normalizeBacktestDate(endDate, 'endDate');
+  const resolvedStart = normalizeBacktestStartDate(startDate, 'startDate');
+  const resolvedEnd = normalizeBacktestEndDate(endDate, 'endDate');
   if (resolvedStart >= resolvedEnd) {
     throw new Error('startDate must be before endDate.');
   }
@@ -2266,6 +2381,8 @@ const backtestDefsymphonyStrategy = async ({
     .trim()
     .toUpperCase();
 
+  const rebalanceConfig = extractRebalanceConfig(ast);
+
   const priceBarsBySymbol = new Map();
   const fetchSymbol = async (symbol) => {
     const response = await getCachedPrices({
@@ -2275,7 +2392,7 @@ const backtestDefsymphonyStrategy = async ({
       adjustment: resolvedAdjustment,
       source: resolvedPriceSource,
       forceRefresh: resolvedPriceRefresh,
-      minBars: minBarsForRange,
+      minBars: requiredBars,
     });
     const bars = response.bars || [];
     priceBarsBySymbol.set(symbol, buildBarsByDateKey(bars));
@@ -2288,6 +2405,39 @@ const backtestDefsymphonyStrategy = async ({
     await Promise.all(symbolsToFetch.map((ticker) => fetchSymbol(ticker.toUpperCase())));
   }
 
+  // If the requested end date is "today" and the daily bar isn't published yet, Composer's UI commonly
+  // shows holdings using the latest available quote. To match that behavior, append a synthetic bar
+  // for `endKey` using the latest quote (when available).
+  const endKey = toISODateKey(resolvedEnd);
+  const todayKey = toISODateKey(new Date());
+  let appendedLivePriceBar = false;
+  if (endKey && todayKey && endKey === todayKey) {
+    const calendarMap = priceBarsBySymbol.get(calendarSymbol);
+    const calendarLastKey = calendarMap?.size ? Array.from(calendarMap.keys()).sort().slice(-1)[0] : null;
+    if (calendarLastKey && calendarLastKey < endKey) {
+      appendedLivePriceBar = true;
+      const attachLatest = async (symbol) => {
+        try {
+          const latest = await fetchLatestPrice({ symbol, source: resolvedPriceSource });
+          if (!Number.isFinite(latest) || latest <= 0) {
+            return;
+          }
+          if (!priceBarsBySymbol.has(symbol)) {
+            priceBarsBySymbol.set(symbol, new Map());
+          }
+          priceBarsBySymbol.get(symbol).set(endKey, {
+            close: latest,
+            timestamp: `${endKey}T00:00:00.000Z`,
+          });
+        } catch (error) {
+          // best-effort only
+        }
+      };
+
+      await runWithConcurrency(symbolsToFetch, 3, async (ticker) => attachLatest(ticker.toUpperCase()));
+    }
+  }
+
   const desiredAxisStartKey = toISODateKey(dataStart);
   const axisDates = pickDateAxis(priceBarsBySymbol, calendarSymbol, desiredAxisStartKey);
   if (axisDates.length < requiredBars + 2) {
@@ -2297,9 +2447,9 @@ const backtestDefsymphonyStrategy = async ({
   }
 
   const startKey = toISODateKey(resolvedStart);
-  const endKey = toISODateKey(resolvedEnd);
+  const endKeyResolved = toISODateKey(resolvedEnd);
   const requestedStartIdx = findFirstIndex(axisDates, (key) => key >= startKey);
-  const requestedEndIdx = findLastIndex(axisDates, (key) => key <= endKey);
+  const requestedEndIdx = findLastIndex(axisDates, (key) => key <= endKeyResolved);
   if (requestedStartIdx === -1 || requestedEndIdx === -1 || requestedEndIdx <= 0) {
     throw new Error('No overlapping trading days found for the requested date range.');
   }
@@ -2375,7 +2525,7 @@ const backtestDefsymphonyStrategy = async ({
   const dailyReturns = [];
   const turnoverSeries = [];
   let nav = 1;
-  let prevWeights = null;
+  let heldWeights = null;
   let finalAllocation = [];
 
   for (let idx = executionStartIdx; idx <= requestedEndIdx; idx += 1) {
@@ -2388,24 +2538,45 @@ const backtestDefsymphonyStrategy = async ({
       previewStack: null,
     };
 
-    let positions = [];
+    let targetPositions = [];
     try {
       const raw = evaluateNode(ast, 1, ctx);
-      positions = safeNormalizePositions(raw);
+      targetPositions = safeNormalizePositions(raw);
     } catch (error) {
-      positions = [];
+      targetPositions = [];
     }
-    finalAllocation = positions;
 
-    const weightMap = new Map();
-    positions.forEach((pos) => {
+    const targetWeights = new Map();
+    targetPositions.forEach((pos) => {
       if (pos?.symbol) {
-        weightMap.set(pos.symbol, Number(pos.weight) || 0);
+        targetWeights.set(pos.symbol, Number(pos.weight) || 0);
       }
     });
 
-    const turnover = computeTurnover(prevWeights, weightMap);
-    const grossReturn = positions.length ? computePortfolioReturn(positions, priceData, idx) : 0;
+    const dateKey = axisDates[idx];
+    const prevDateKey = idx > 0 ? axisDates[idx - 1] : null;
+    const scheduledRebalance =
+      !heldWeights ||
+      (rebalanceConfig.mode !== 'threshold' &&
+        shouldRebalanceOnDate(rebalanceConfig.mode, dateKey, prevDateKey));
+
+    const currentWeights = heldWeights ? new Map(heldWeights) : new Map();
+    const turnoverToTarget = heldWeights ? computeTurnover(currentWeights, targetWeights) : 0;
+    const shouldRebalance =
+      !heldWeights ||
+      (rebalanceConfig.mode === 'threshold'
+        ? turnoverToTarget > (rebalanceConfig.threshold || 0)
+        : scheduledRebalance);
+
+    const startWeights = shouldRebalance ? targetWeights : currentWeights;
+    const turnover = shouldRebalance ? turnoverToTarget : 0;
+    const startPositions = Array.from(startWeights.entries()).map(([symbol, weight]) => ({
+      symbol,
+      weight,
+      rationale: shouldRebalance ? 'Rebalanced to target weights.' : 'Held due to rebalance schedule/threshold.',
+    }));
+
+    const grossReturn = startPositions.length ? computePortfolioReturn(startPositions, priceData, idx) : 0;
     const costs = resolvedCostBps ? turnover * (resolvedCostBps / 10000) : 0;
     const netReturn = grossReturn - costs;
 
@@ -2413,8 +2584,65 @@ const backtestDefsymphonyStrategy = async ({
     navSeries.push(nav);
     dailyReturns.push(netReturn);
     turnoverSeries.push(turnover);
-    prevWeights = weightMap;
+
+    // Drift weights forward using each asset's realized return for the period.
+    const drifted = new Map();
+    let driftTotal = 0;
+    startWeights.forEach((weight, symbol) => {
+      const series = priceData.get(symbol.toUpperCase());
+      if (!series || !Array.isArray(series.closes)) {
+        return;
+      }
+      const offset = Number(series.offset) || 0;
+      const relIdx = idx - offset;
+      const prevRelIdx = relIdx - 1;
+      if (prevRelIdx < 0) {
+        return;
+      }
+      const prev = series.closes[Math.min(prevRelIdx, series.closes.length - 1)];
+      const curr = series.closes[Math.min(Math.max(relIdx, 0), series.closes.length - 1)];
+      if (!Number.isFinite(prev) || !Number.isFinite(curr) || prev <= 0) {
+        return;
+      }
+      const assetReturn = (curr - prev) / prev;
+      const driftedWeight = Number(weight) * (1 + assetReturn);
+      if (!Number.isFinite(driftedWeight) || driftedWeight <= 0) {
+        return;
+      }
+      drifted.set(symbol, driftedWeight);
+      driftTotal += driftedWeight;
+    });
+
+    if (driftTotal > 0) {
+      drifted.forEach((weight, symbol) => {
+        drifted.set(symbol, weight / driftTotal);
+      });
+      heldWeights = drifted;
+    } else {
+      heldWeights = startWeights;
+    }
   }
+
+  // Composer's "Simulated Holdings" view is most comparable to a final allocation computed using
+  // information available at the last completed bar (i.e., an as-of allocation for the next session),
+  // not the drifted weights at the last close.
+  const asOfCtx = {
+    ...baseCtx,
+    priceIndex: requestedEndIdx,
+    usePreviousBarForIndicators:
+      resolvedAsOfMode === 'previous-close' && appendedLivePriceBar,
+    metricCache: new WeakMap(),
+    reasoning: null,
+    previewStack: null,
+  };
+  let asOfPositions = [];
+  try {
+    const raw = evaluateNode(ast, 1, asOfCtx);
+    asOfPositions = safeNormalizePositions(raw);
+  } catch (error) {
+    asOfPositions = [];
+  }
+  finalAllocation = asOfPositions;
 
   const metrics = computeBacktestMetrics({ navSeries, dailyReturns, turnoverSeries });
   const series = navSeries.map((navValue, offset) => {
