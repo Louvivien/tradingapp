@@ -237,12 +237,12 @@ const upsertStrategyTemplate = async ({
 
 const validateAlpacaTradableSymbols = async (alpacaConfig, symbols = []) => {
   if (!alpacaConfig?.getTradingKeys || !Array.isArray(symbols) || !symbols.length) {
-    return { tradable: [], invalid: [] };
+    return { tradable: [], invalid: [], fractionableBySymbol: {} };
   }
 
   const tradingKeys = alpacaConfig.getTradingKeys();
   if (!tradingKeys?.client || !tradingKeys?.apiUrl || !tradingKeys?.keyId || !tradingKeys?.secretKey) {
-    return { tradable: [], invalid: [] };
+    return { tradable: [], invalid: [], fractionableBySymbol: {} };
   }
 
   const uniqueSymbols = Array.from(
@@ -254,11 +254,12 @@ const validateAlpacaTradableSymbols = async (alpacaConfig, symbols = []) => {
   );
 
   if (!uniqueSymbols.length) {
-    return { tradable: [], invalid: [] };
+    return { tradable: [], invalid: [], fractionableBySymbol: {} };
   }
 
   const tradable = [];
   const invalid = [];
+  const fractionableBySymbol = {};
 
   await Promise.all(
     uniqueSymbols.map(async (symbol) => {
@@ -277,6 +278,7 @@ const validateAlpacaTradableSymbols = async (alpacaConfig, symbols = []) => {
         const isTradable = data?.tradable !== false && (assetStatus === '' || assetStatus === 'active');
         if (isTradable) {
           tradable.push(symbol);
+          fractionableBySymbol[symbol] = Boolean(data?.fractionable);
         } else {
           console.warn(`[AlpacaValidation] ${symbol} is not tradable (status: ${data?.status}, tradable: ${data?.tradable}).`);
           invalid.push(symbol);
@@ -289,7 +291,7 @@ const validateAlpacaTradableSymbols = async (alpacaConfig, symbols = []) => {
     })
   );
 
-  return { tradable, invalid };
+  return { tradable, invalid, fractionableBySymbol };
 };
 
 const fetchLatestPriceFromYahoo = async (symbol) => {
@@ -615,12 +617,15 @@ const fetchLatestPrices = async (symbols, dataKeys) => {
 
 const shouldFallbackToWholeShares = (error) => {
   const status = Number(error?.response?.status);
+  const code = Number(error?.response?.data?.code);
   const message = String(error?.response?.data?.message || error?.message || '').toLowerCase();
-  if (status !== 400 && status !== 422) {
+  if (status !== 400 && status !== 403 && status !== 422) {
     return false;
   }
   return (
+    code === 40310000 ||
     message.includes('fractional') ||
+    message.includes('fractionable') ||
     message.includes('cannot be fractional') ||
     message.includes('qty must be integer') ||
     message.includes('quantity must be integer') ||
@@ -759,13 +764,18 @@ exports.createCollaborative = async (req, res) => {
     }
 
     const jobId = rawJobId;
-    const progressFail = (statusCode, message, step = 'error') => {
-      publishProgress(jobId, { step, status: 'failed', message });
-      completeProgress(jobId, { step: 'finished', status: 'failed', message });
+    const progressFail = (statusCode, message, step = 'error', details = null) => {
+      const payload = details ? { step, status: 'failed', message, details } : { step, status: 'failed', message };
+      const finishedPayload = details
+        ? { step: 'finished', status: 'failed', message, details }
+        : { step: 'finished', status: 'failed', message };
+      publishProgress(jobId, payload);
+      completeProgress(jobId, finishedPayload);
       return res.status(statusCode).json({
         status: "fail",
         message,
         jobId,
+        ...(details ? { details } : {}),
       });
     };
 
@@ -961,17 +971,31 @@ exports.createCollaborative = async (req, res) => {
     const alpacaApi = new Alpaca(alpacaConfig);
     console.log("connected to alpaca");
     const account = await alpacaApi.getAccount();
+    const accountStatus = String(account?.status || '').trim().toLowerCase();
+    if (accountStatus && accountStatus !== 'active') {
+      return progressFail(
+        403,
+        `Alpaca account status is "${account?.status || accountStatus}". Trading is not available until the account is active.`,
+        'validation'
+      );
+    }
+    if (account?.trading_blocked || account?.account_blocked) {
+      return progressFail(
+        403,
+        'Alpaca account is blocked from trading. Please check your Alpaca account permissions/status.',
+        'validation'
+      );
+    }
+
     const accountCash = toNumber(account?.cash, 0);
-    const planningBudget = Math.min(
-      cashLimitInput,
-      accountCash > 0 ? accountCash : cashLimitInput
-    );
+    const planningBudget = Math.min(cashLimitInput, Math.max(0, accountCash));
 
     if (!planningBudget || planningBudget <= 0) {
-      return res.status(400).json({
-        status: "fail",
-        message: "Insufficient available cash to fund the collaborative strategy with the selected limit.",
-      });
+      return progressFail(
+        400,
+        "Insufficient available cash to fund the collaborative strategy with the selected limit.",
+        'validation'
+      );
     }
 
     const dataKeys = alpacaConfig.getDataKeys ? alpacaConfig.getDataKeys() : null;
@@ -990,7 +1014,10 @@ exports.createCollaborative = async (req, res) => {
       });
     }
 
-    const { invalid: nonTradableSymbols } = await validateAlpacaTradableSymbols(alpacaConfig, uniqueSymbols);
+    const { invalid: nonTradableSymbols, fractionableBySymbol } = await validateAlpacaTradableSymbols(
+      alpacaConfig,
+      uniqueSymbols
+    );
     if (nonTradableSymbols.length) {
       return res.status(400).json({
         status: "fail",
@@ -1093,14 +1120,24 @@ exports.createCollaborative = async (req, res) => {
         continue;
       }
 
+      const fractionableKnown = Boolean(
+        fractionableBySymbol &&
+          typeof fractionableBySymbol === 'object' &&
+          Object.prototype.hasOwnProperty.call(fractionableBySymbol, symbol)
+      );
+      const isFractionable = fractionableKnown ? Boolean(fractionableBySymbol[symbol]) : true;
+      const allowFractionalQty = ENABLE_FRACTIONAL_ORDERS && isFractionable;
+
       const desiredValue = planningBudget * target.targetWeight;
       const remainingBudget = planningBudget - plannedCost;
       const cappedValue = Math.min(desiredValue, Math.max(0, remainingBudget));
       let qty = ENABLE_FRACTIONAL_ORDERS
-        ? floorToDecimals(cappedValue / price, FRACTIONAL_QTY_DECIMALS) || 0
+        ? ((allowFractionalQty
+            ? floorToDecimals(cappedValue / price, FRACTIONAL_QTY_DECIMALS)
+            : Math.floor(cappedValue / price)) || 0)
         : Math.floor(cappedValue / price);
 
-      if (!ENABLE_FRACTIONAL_ORDERS) {
+      if (!ENABLE_FRACTIONAL_ORDERS || !allowFractionalQty) {
         if (qty <= 0 && remainingBudget >= price) {
           qty = 1;
         }
@@ -1111,7 +1148,7 @@ exports.createCollaborative = async (req, res) => {
       }
 
       const cost = qty * price;
-      if (ENABLE_FRACTIONAL_ORDERS && cost < MIN_FRACTIONAL_NOTIONAL) {
+      if (allowFractionalQty && cost < MIN_FRACTIONAL_NOTIONAL) {
         continue;
       }
       plannedCost += cost;
@@ -1131,7 +1168,15 @@ exports.createCollaborative = async (req, res) => {
     if (remainingBudget > 0 && orderPlan.length) {
       if (ENABLE_FRACTIONAL_ORDERS) {
         const topPlan = orderPlan[0];
-        const extraQty = floorToDecimals(remainingBudget / topPlan.price, FRACTIONAL_QTY_DECIMALS) || 0;
+        const topFractionable =
+          !fractionableBySymbol ||
+          typeof fractionableBySymbol !== 'object' ||
+          !Object.prototype.hasOwnProperty.call(fractionableBySymbol, topPlan.symbol)
+            ? true
+            : Boolean(fractionableBySymbol[topPlan.symbol]);
+        const extraQty = topFractionable
+          ? floorToDecimals(remainingBudget / topPlan.price, FRACTIONAL_QTY_DECIMALS) || 0
+          : Math.floor(remainingBudget / topPlan.price);
         if (extraQty > 0) {
           topPlan.qty = (topPlan.qty || 0) + extraQty;
           topPlan.cost += extraQty * topPlan.price;
@@ -1195,6 +1240,7 @@ exports.createCollaborative = async (req, res) => {
       message: 'Submitting orders to Alpaca.',
     });
 
+    const orderFailures = [];
     const orderPromises = finalizedPlan.map(({ symbol, qty }) => {
       return retry(() => {
         const normalized = ENABLE_FRACTIONAL_ORDERS ? normalizeQtyForOrder(qty) : { qty: Math.floor(toNumber(qty, 0)), isFractional: false };
@@ -1249,16 +1295,31 @@ exports.createCollaborative = async (req, res) => {
           || headers['x-request-id']
           || headers['x-request-id'.toLowerCase()]
           || 'n/a';
-        const sanitizedBody =
-          responseData && typeof responseData === 'object'
-            ? JSON.stringify(responseData)
-            : (responseData || 'No response body');
+        const sanitizedBody = (() => {
+          if (!responseData) {
+            return 'No response body';
+          }
+          if (typeof responseData === 'object') {
+            return JSON.stringify(responseData);
+          }
+          return String(responseData);
+        })();
         console.error(
           `[OrderError] Failed to place order for ${symbol}. status=${status || 'unknown'} requestId=${requestId} body=${sanitizedBody}`
         );
         if (error?.message) {
           console.error(`[OrderError] Axios message for ${symbol}: ${error.message}`);
         }
+        orderFailures.push({
+          symbol,
+          status: status ?? null,
+          requestId,
+          message:
+            (typeof responseData === 'object' && responseData && responseData.message)
+              ? String(responseData.message)
+              : (error?.message ? String(error.message) : 'Unknown order error'),
+          body: responseData && typeof responseData === 'object' ? responseData : sanitizedBody,
+        });
         return null;
       });
     });
@@ -1267,7 +1328,15 @@ exports.createCollaborative = async (req, res) => {
     const initialInvestmentEstimate = plannedCost;
     if (!orders.length) {
       console.error('Failed to place all orders.');
-      return progressFail(400, "Failed to place orders. Try again.", 'placing_orders');
+      const first = orderFailures[0];
+      const suffix = orderFailures.length > 1 ? ` (+${orderFailures.length - 1} more)` : '';
+      const detail = first?.message ? ` First error: ${first.message}${suffix}.` : '';
+      return progressFail(
+        400,
+        `Failed to place orders.${detail}`,
+        'placing_orders',
+        orderFailures.length ? { orderFailures } : null
+      );
     }
 
     publishProgress(jobId, {

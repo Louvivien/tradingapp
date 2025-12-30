@@ -619,6 +619,7 @@ const fetchBarsFromStooq = async ({ symbol }) => {
 const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, minBars }) => {
   const normalizedSource = String(source ?? '').trim().toLowerCase();
   const minBarsNeeded = Number.isFinite(Number(minBars)) ? Math.max(0, Math.floor(Number(minBars))) : 0;
+  const endKey = toISODateKey(end);
   const preferred =
     normalizedSource === 'yahoo' ||
     normalizedSource === 'alpaca' ||
@@ -665,14 +666,31 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, m
 
   let lastError = null;
   let bestResult = null;
+  let bestCoversEnd = false;
+  const coversEndDate = (bars = []) => {
+    if (!Array.isArray(bars) || !bars.length || !endKey) {
+      return false;
+    }
+    const lastKey = toISODateKey(bars[bars.length - 1]?.t);
+    return Boolean(lastKey && lastKey >= endKey);
+  };
   for (const candidate of attemptOrder) {
     try {
       const result = await attempt(candidate);
       if (Array.isArray(result.bars) && result.bars.length) {
-        if (!bestResult || result.bars.length > bestResult.bars.length) {
+        const resultCoversEnd = coversEndDate(result.bars);
+        if (
+          !bestResult ||
+          (resultCoversEnd && !bestCoversEnd) ||
+          (resultCoversEnd === bestCoversEnd && result.bars.length > bestResult.bars.length)
+        ) {
           bestResult = result;
+          bestCoversEnd = resultCoversEnd;
         }
-        if (!minBarsNeeded || result.bars.length >= minBarsNeeded) {
+        // Only early-return when we have enough bars AND they reach the requested end date.
+        // Some providers can return long histories that stop early (e.g. delisted/sparse tickers),
+        // and we still want to try alternate sources that might have up-to-date data.
+        if ((!minBarsNeeded || result.bars.length >= minBarsNeeded) && resultCoversEnd) {
           return result;
         }
       }
