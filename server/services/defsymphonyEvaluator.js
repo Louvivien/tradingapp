@@ -1710,11 +1710,18 @@ const loadPriceData = async (
         const lastDayKey = lastBar?.t
           ? formatDateKeyInTimeZone(lastBar.t, 'America/New_York') || toISODateKey(lastBar.t)
           : null;
+        const nowDate = now();
+        const nowDayKey =
+          formatDateKeyInTimeZone(nowDate, 'America/New_York') || toISODateKey(nowDate);
+        const isAsOfToday = Boolean(asOfDayKey && nowDayKey && asOfDayKey === nowDayKey);
+        // Treat the current trading day as incomplete until the real-time market close, even when
+        // the requested as-of date is expressed as an end-of-day timestamp (e.g. YYYY-MM-DD).
+        const marketClosedForAsOfDay = isAsOfToday ? isAfterUsMarketClose(nowDate) : true;
         const shouldDropIntradayBar =
           asOfDayKey &&
           lastDayKey &&
           lastDayKey === asOfDayKey &&
-          !isAfterUsMarketClose(asOfDate, { dateKeyOverride: asOfDateKeyOverride });
+          !marketClosedForAsOfDay;
         if (shouldDropIntradayBar) {
           bars = bars.slice(0, -1);
         }
