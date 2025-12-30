@@ -18,7 +18,7 @@ Main features:
 - Composer/defsymphony strategies: import strategies and evaluate them locally into target allocations.
 - Automated rebalancing: scheduled portfolio rebalances with logs and cash/position reconciliation.
 - Diagnostics: allocation diff/trace endpoint + one-shot rebalance trigger for fixing mismatched holdings.
-- Data + analytics: price caching with multi-source fallback (Yahoo/Tiingo/Alpaca), equity snapshots/history.
+- Data + analytics: price caching with multi-source fallback (Yahoo/Tiingo/Stooq/Alpaca), equity snapshots/history.
 - Optional sentiment/news tooling (work in progress).
 
 Credit for UI: [OktarianTB](https://github.com/OktarianTB/stock-trading-simulator)
@@ -114,6 +114,7 @@ The server evaluates defsymphony strategies locally. To keep results aligned wit
 - As-of mode: previous close (`COMPOSER_ASOF_MODE=previous-close`)
 - Price source: Yahoo with Tiingo fallback (`COMPOSER_PRICE_SOURCE=yahoo`)
 - Price refresh: disabled by default (`COMPOSER_PRICE_REFRESH=false`) to avoid unexpected allocation changes
+- Indicators are computed using the prior bar when `previous-close` is used (lookahead-safe, closer to Composer backtests)
 
 If you override these settings (ex: `RSI_METHOD=simple` or `PRICE_DATA_SOURCE=alpaca`), the app will still work but allocations can differ from Composer; rebalance logs will include a warning.
 

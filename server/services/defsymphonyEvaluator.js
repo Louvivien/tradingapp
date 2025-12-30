@@ -45,6 +45,17 @@ const getSeriesValuesForContext = (series, ctx) => {
   return series.closes.slice(0, limit);
 };
 
+const getIndicatorValuesForContext = (series, ctx) => {
+  const values = getSeriesValuesForContext(series, ctx);
+  if (!values.length) {
+    return values;
+  }
+  if (ctx?.usePreviousBarForIndicators && values.length > 1) {
+    return values.slice(0, -1);
+  }
+  return values;
+};
+
 const getLatestValueForContext = (series, ctx) => {
   if (!series || !Array.isArray(series.closes) || !series.closes.length) {
     return null;
@@ -144,18 +155,11 @@ const collectAstStats = (
 };
 
 const alignPriceHistory = (priceData, lookbackBars = DEFAULT_LOOKBACK_BARS) => {
+  const target = Math.max(1, Number(lookbackBars) || DEFAULT_LOOKBACK_BARS);
   let minLength = Infinity;
+
   priceData.forEach((series) => {
-    if (Array.isArray(series?.closes) && series.closes.length) {
-      minLength = Math.min(minLength, series.closes.length);
-    }
-  });
-  if (!Number.isFinite(minLength) || minLength === 0) {
-    return 0;
-  }
-  const target = Math.min(minLength, lookbackBars);
-  priceData.forEach((series) => {
-    if (!Array.isArray(series?.closes)) {
+    if (!Array.isArray(series?.closes) || !series.closes.length) {
       return;
     }
     if (series.closes.length > target) {
@@ -165,8 +169,13 @@ const alignPriceHistory = (priceData, lookbackBars = DEFAULT_LOOKBACK_BARS) => {
       series.bars = series.bars.slice(-target);
     }
     series.latest = series.closes[series.closes.length - 1];
+    minLength = Math.min(minLength, series.closes.length);
   });
-  return target;
+
+  if (!Number.isFinite(minLength) || minLength <= 0) {
+    return 0;
+  }
+  return minLength;
 };
 
 const gatherGroupNodes = (node, acc = []) => {
@@ -751,8 +760,8 @@ const isSimpleRsiMethod = (method) => {
 };
 
 const computeRSI = (series, window, method = getRsiMethod()) => {
-  if (series.length < window + 1) {
-    throw new Error(`Not enough data to compute RSI window ${window}.`);
+  if (!Array.isArray(series) || series.length < window + 1) {
+    return null;
   }
 
   if (isSimpleRsiMethod(method)) {
@@ -813,16 +822,16 @@ const computeRSI = (series, window, method = getRsiMethod()) => {
 };
 
 const computeSMA = (series, window) => {
-  if (series.length < window) {
-    throw new Error(`Not enough data to compute moving average window ${window}.`);
+  if (!Array.isArray(series) || series.length < window) {
+    return null;
   }
   const subset = tail(series, window);
   return subset.reduce((sum, value) => sum + value, 0) / window;
 };
 
 const computeEMA = (series, window) => {
-  if (series.length < window) {
-    throw new Error(`Not enough data to compute EMA window ${window}.`);
+  if (!Array.isArray(series) || series.length < window) {
+    return null;
   }
   const alpha = 2 / (window + 1);
   let ema = series[series.length - window];
@@ -833,8 +842,8 @@ const computeEMA = (series, window) => {
 };
 
 const computeReturns = (series, window) => {
-  if (series.length < window + 1) {
-    throw new Error(`Not enough data to compute returns window ${window}.`);
+  if (!Array.isArray(series) || series.length < window + 1) {
+    return null;
   }
   const returns = [];
   for (let i = series.length - window; i < series.length; i += 1) {
@@ -844,30 +853,33 @@ const computeReturns = (series, window) => {
     }
     returns.push((series[i] - prev) / prev);
   }
-  return returns;
+  return returns.length ? returns : null;
 };
 
 const computeMovingAverageReturn = (series, window) => {
   const returns = computeReturns(series, window);
-  if (!returns.length) {
-    throw new Error('Unable to compute moving average return.');
+  if (!returns || !returns.length) {
+    return null;
   }
   return returns.reduce((sum, value) => sum + value, 0) / returns.length;
 };
 
 const computeCumulativeReturn = (series, window) => {
-  if (series.length < window + 1) {
-    throw new Error(`Not enough data to compute cumulative return window ${window}.`);
+  if (!Array.isArray(series) || series.length < window + 1) {
+    return null;
   }
   const latest = series[series.length - 1];
   const prior = series[series.length - 1 - window];
+  if (!Number.isFinite(latest) || !Number.isFinite(prior) || prior === 0) {
+    return null;
+  }
   return (latest - prior) / prior;
 };
 
 const computeStdDevReturn = (series, window) => {
   const returns = computeReturns(series, window);
-  if (!returns.length) {
-    throw new Error('Unable to compute stdev return.');
+  if (!returns || !returns.length) {
+    return null;
   }
   const mean = returns.reduce((sum, value) => sum + value, 0) / returns.length;
   const variance =
@@ -877,8 +889,8 @@ const computeStdDevReturn = (series, window) => {
 };
 
 const computeMaxDrawdown = (series, window) => {
-  if (series.length < window) {
-    throw new Error(`Not enough data to compute max drawdown window ${window}.`);
+  if (!Array.isArray(series) || series.length < window) {
+    return null;
   }
   const subset = tail(series, window);
   let peak = subset[0];
@@ -1052,7 +1064,7 @@ const evaluateExpression = (node, ctx) => {
       const method = ctx?.rsiMethod || getRsiMethod();
       const cacheKey = buildMetricCacheKey('rsi', window, method, ctx);
       return readCachedMetric(ctx, series, cacheKey, () => {
-        const closes = getSeriesValuesForContext(series, ctx);
+        const closes = getIndicatorValuesForContext(series, ctx);
         return computeRSI(closes, window, method);
       });
     }
@@ -1078,7 +1090,7 @@ const evaluateExpression = (node, ctx) => {
       }
       const cacheKey = buildMetricCacheKey('moving-average-price', window, null, ctx);
       return readCachedMetric(ctx, series, cacheKey, () => {
-        const closes = getSeriesValuesForContext(series, ctx);
+        const closes = getIndicatorValuesForContext(series, ctx);
         return computeSMA(closes, window);
       });
     }
@@ -1104,7 +1116,7 @@ const evaluateExpression = (node, ctx) => {
       }
       const cacheKey = buildMetricCacheKey('exponential-moving-average-price', window, null, ctx);
       return readCachedMetric(ctx, series, cacheKey, () => {
-        const closes = getSeriesValuesForContext(series, ctx);
+        const closes = getIndicatorValuesForContext(series, ctx);
         return computeEMA(closes, window);
       });
     }
@@ -1143,7 +1155,7 @@ const evaluateExpression = (node, ctx) => {
       }
       const cacheKey = buildMetricCacheKey('moving-average-return', window, null, ctx);
       return readCachedMetric(ctx, series, cacheKey, () => {
-        const closes = getSeriesValuesForContext(series, ctx);
+        const closes = getIndicatorValuesForContext(series, ctx);
         return computeMovingAverageReturn(closes, window);
       });
     }
@@ -1169,7 +1181,7 @@ const evaluateExpression = (node, ctx) => {
       }
       const cacheKey = buildMetricCacheKey('cumulative-return', window, null, ctx);
       return readCachedMetric(ctx, series, cacheKey, () => {
-        const closes = getSeriesValuesForContext(series, ctx);
+        const closes = getIndicatorValuesForContext(series, ctx);
         return computeCumulativeReturn(closes, window);
       });
     }
@@ -1196,7 +1208,7 @@ const evaluateExpression = (node, ctx) => {
       }
       const cacheKey = buildMetricCacheKey(type, window, null, ctx);
       return readCachedMetric(ctx, series, cacheKey, () => {
-        const closes = getSeriesValuesForContext(series, ctx);
+        const closes = getIndicatorValuesForContext(series, ctx);
         return computeStdDevReturn(closes, window);
       });
     }
@@ -1224,7 +1236,7 @@ const evaluateExpression = (node, ctx) => {
       }
       const cacheKey = buildMetricCacheKey('max-drawdown', window, null, ctx);
       return readCachedMetric(ctx, series, cacheKey, () => {
-        const closes = getSeriesValuesForContext(series, ctx);
+        const closes = getIndicatorValuesForContext(series, ctx);
         return computeMaxDrawdown(closes, window);
       });
     }
@@ -1258,8 +1270,14 @@ const evaluateMetricForCandidate = (metricNode, candidate, ctx) => {
     metricCtx.metricSymbol = candidate.symbol;
     metricCtx.metricSeries = null;
   }
-  const value = evaluateExpression(metricNode, metricCtx);
-  return Number.isFinite(value) ? value : null;
+  try {
+    const value = evaluateExpression(metricNode, metricCtx);
+    return Number.isFinite(value) ? value : null;
+  } catch (error) {
+    const symbol = candidate.type === 'asset' ? candidate.symbol : metricCtx.metricSymbol;
+    noteMissingPriceData(metricCtx, symbol, error?.message || 'Indicator computation failed.');
+    return null;
+  }
 };
 
 const applySelector = (selectorNode, scoredAssets) => {
@@ -1369,23 +1387,10 @@ function evaluateFilterNode(node, parentWeight, ctx) {
   if (!selected.length) {
     if (ctx?.reasoning) {
       ctx.reasoning.push(
-        `Filter evaluation: ${metricSummary}. No instruments produced a valid score; aborting branch.`
+        `Filter evaluation: ${metricSummary}. No instruments produced a valid score; skipping branch.`
       );
     }
-    const missingSymbols = candidates
-      .map((entry) => entry.symbol)
-      .filter(Boolean)
-      .map((symbol) => {
-        const reason = ctx?.missingSymbols?.get(symbol);
-        return reason ? `${symbol} (${reason})` : symbol;
-      });
-    const missingCandidates =
-      missingSymbols.length > 0
-        ? missingSymbols.join(', ')
-        : candidates.map((entry) => describeCandidate(entry)).join(', ') || 'none';
-    throw new Error(
-      `Unable to evaluate ${metricSummary} because price/indicator data was missing for: ${missingCandidates}.`
-    );
+    return [];
   }
   if (ctx?.reasoning) {
     const formatValue = (value) => {
@@ -1778,7 +1783,7 @@ const loadPriceData = async (
     if (Number.isNaN(date.getTime())) {
       return;
     }
-    if (!asOfDateUsed || date < asOfDateUsed) {
+    if (!asOfDateUsed || date > asOfDateUsed) {
       asOfDateUsed = date;
     }
   });
@@ -1830,9 +1835,9 @@ const evaluateDefsymphonyStrategy = async ({
     normalizeBoolean(debugIndicators) ?? ENABLE_INDICATOR_DEBUG;
 
   const requiredBars = Math.max(
-    DEFAULT_LOOKBACK_BARS,
     Math.max(0, Number(astStats.maxWindow) || 0) + 5,
-    rsiWindow + rsiHistoryBuffer
+    rsiWindow + rsiHistoryBuffer,
+    30
   );
   const calendarLookbackDays = Math.min(
     MAX_CALENDAR_LOOKBACK_DAYS,
@@ -1841,7 +1846,7 @@ const evaluateDefsymphonyStrategy = async ({
 
   const {
     map: priceData,
-    missing: missingFromCache,
+    missing: missingFromCacheRaw,
     asOfDate: dataAsOfDate,
     asOfMode: resolvedDataAsOfMode,
     appendLivePrice,
@@ -1857,7 +1862,30 @@ const evaluateDefsymphonyStrategy = async ({
       minBars: requiredBars,
     }
   );
+  const missingFromCache = Array.isArray(missingFromCacheRaw) ? [...missingFromCacheRaw] : [];
   const effectiveAsOfDate = dataAsOfDate || resolvedAsOfDate;
+
+  // If a subset of symbols returned stale series (e.g., delisted tickers or sparse Yahoo coverage),
+  // exclude them rather than forcing the entire evaluation to rewind to the oldest available date.
+  const effectiveDayKey = toISODateKey(effectiveAsOfDate);
+  if (effectiveDayKey) {
+    const stale = [];
+    priceData.forEach((series, symbol) => {
+      const lastBar = Array.isArray(series?.bars) && series.bars.length ? series.bars[series.bars.length - 1] : null;
+      const lastKey = lastBar?.t ? toISODateKey(lastBar.t) : null;
+      if (lastKey && lastKey < effectiveDayKey) {
+        stale.push({ symbol, lastKey });
+      }
+    });
+    stale.forEach(({ symbol, lastKey }) => {
+      priceData.delete(symbol);
+      missingFromCache.push({
+        symbol,
+        reason: `Stale price history (last bar ${lastKey}, expected ${effectiveDayKey}).`,
+      });
+    });
+  }
+
   const usableHistory = alignPriceHistory(priceData, requiredBars);
   if (!usableHistory) {
     throw new Error('Unable to align price history for the requested lookback window.');
@@ -1876,6 +1904,7 @@ const evaluateDefsymphonyStrategy = async ({
     enableGroupMetrics: false,
     debugIndicators: resolvedDebugIndicators,
     rsiMethod: resolvedRsiMethod,
+    usePreviousBarForIndicators: (resolvedDataAsOfMode || resolvedAsOfMode) === 'previous-close',
     asOfDate: effectiveAsOfDate,
     dataAdjustment: resolvedAdjustment,
     reasoning: [
@@ -2018,6 +2047,7 @@ const evaluateDefsymphonyStrategy = async ({
         dataAdjustment: resolvedAdjustment,
         debugIndicators: resolvedDebugIndicators,
         asOfMode: resolvedDataAsOfMode || resolvedAsOfMode,
+        usePreviousBarForIndicators: context.usePreviousBarForIndicators,
         appendLivePrice,
         priceSource: resolvedPriceSource,
         priceRefresh: resolvedPriceRefresh,
@@ -2211,6 +2241,11 @@ const backtestDefsymphonyStrategy = async ({
   );
   const warmupCalendarDays = Math.ceil((requiredBars * CALENDAR_DAYS_PER_YEAR) / TRADING_DAYS_PER_YEAR) + 14;
   const dataStart = new Date(resolvedStart.getTime() - warmupCalendarDays * 24 * 60 * 60 * 1000);
+  const requestedCalendarDays = Math.max(1, Math.ceil((resolvedEnd.getTime() - dataStart.getTime()) / (24 * 60 * 60 * 1000)));
+  const minBarsForRange = Math.max(
+    requiredBars + 5,
+    Math.ceil((requestedCalendarDays * TRADING_DAYS_PER_YEAR) / CALENDAR_DAYS_PER_YEAR) + 5
+  );
 
   const resolvedRsiMethod =
     normalizeRsiMethod(rsiMethod) || normalizeRsiMethod(process.env.RSI_METHOD) || 'wilder';
@@ -2240,6 +2275,7 @@ const backtestDefsymphonyStrategy = async ({
       adjustment: resolvedAdjustment,
       source: resolvedPriceSource,
       forceRefresh: resolvedPriceRefresh,
+      minBars: minBarsForRange,
     });
     const bars = response.bars || [];
     priceBarsBySymbol.set(symbol, buildBarsByDateKey(bars));
@@ -2340,6 +2376,7 @@ const backtestDefsymphonyStrategy = async ({
   const turnoverSeries = [];
   let nav = 1;
   let prevWeights = null;
+  let finalAllocation = [];
 
   for (let idx = executionStartIdx; idx <= requestedEndIdx; idx += 1) {
     const decisionIndex = idx - 1;
@@ -2358,6 +2395,7 @@ const backtestDefsymphonyStrategy = async ({
     } catch (error) {
       positions = [];
     }
+    finalAllocation = positions;
 
     const weightMap = new Map();
     positions.forEach((pos) => {
@@ -2390,6 +2428,29 @@ const backtestDefsymphonyStrategy = async ({
       turnover: turnoverSeries[offset],
     };
   });
+
+  const finalDateKey = series.length ? series[series.length - 1]?.date : null;
+  const finalValue = series.length ? series[series.length - 1]?.value : resolvedCapital;
+  const finalHoldings = (finalAllocation || [])
+    .filter((pos) => pos?.symbol && Number.isFinite(Number(pos.weight)) && Number(pos.weight) > 0)
+    .map((pos) => {
+      const symbol = pos.symbol.toUpperCase();
+      const record = priceData.get(symbol);
+      const offset = Number(record?.offset) || 0;
+      const relIdx = requestedEndIdx - offset;
+      const close = Array.isArray(record?.closes) && relIdx >= 0 ? record.closes[Math.min(relIdx, record.closes.length - 1)] : null;
+      const weight = Number(pos.weight) || 0;
+      const value = finalValue * weight;
+      const quantity = Number.isFinite(close) && close > 0 ? value / close : 0;
+      return {
+        symbol,
+        weight,
+        close,
+        quantity,
+        value,
+      };
+    })
+    .sort((a, b) => (b.weight || 0) - (a.weight || 0));
 
   let benchmark = null;
   if (includeBenchmark && benchmarkSymbol) {
@@ -2462,6 +2523,7 @@ const backtestDefsymphonyStrategy = async ({
       blueprint,
       requiredBars,
       warmupCalendarDays,
+      minBarsForRange,
       executionStart: series[0]?.date || null,
       executionEnd: series[series.length - 1]?.date || null,
       initialCapital: resolvedCapital,
@@ -2475,6 +2537,10 @@ const backtestDefsymphonyStrategy = async ({
     },
     metrics,
     series,
+    finalAllocation: finalAllocation || [],
+    finalDate: finalDateKey,
+    finalValue,
+    finalHoldings,
     benchmark,
   };
 };

@@ -72,7 +72,12 @@ const toISODateKey = (value) => {
 
 const getTiingoTokens = () => {
   const tokens = [];
-  const fromList = String(process.env.TIINGO_API_KEYS ?? process.env.TIINGO_TOKEN ?? '')
+  const fromList = String(
+    process.env.TIINGO_API_KEYS ??
+      process.env.TIINGO_TOKEN ??
+      process.env.TIINGO_API_KEY ??
+      ''
+  )
     .split(/[,\s]+/)
     .map((entry) => entry.trim())
     .filter(Boolean);
@@ -124,6 +129,7 @@ const fetchBarsFromTiingo = async ({ symbol, start, end, adjustment }) => {
           const open = Number(row?.open);
           const high = Number(row?.high);
           const low = Number(row?.low);
+          const splitFactor = Number(row?.splitFactor);
           const volume = Number(row?.volume ?? row?.adjVolume ?? 0);
           const timestamp = row?.date;
           const date = timestamp ? new Date(timestamp) : null;
@@ -131,9 +137,29 @@ const fetchBarsFromTiingo = async ({ symbol, start, end, adjustment }) => {
             return null;
           }
 
-          const hasAdj = Number.isFinite(adjClose) && Number.isFinite(close) && close > 0;
-          const ratio = useAdjusted && hasAdj ? adjClose / close : 1;
-          const effectiveClose = useAdjusted && Number.isFinite(adjClose) ? adjClose : close;
+          const hasClose = Number.isFinite(close) && close > 0;
+          if (!hasClose) {
+            return null;
+          }
+
+          let ratio = 1;
+          if (resolvedAdjustment === 'split') {
+            if (Number.isFinite(splitFactor) && splitFactor > 0) {
+              ratio = splitFactor;
+            } else if (Number.isFinite(adjClose) && adjClose > 0) {
+              // Fallback: Tiingo adjClose includes dividends; still preferable to missing data.
+              ratio = adjClose / close;
+            }
+          } else if (useAdjusted && Number.isFinite(adjClose) && adjClose > 0) {
+            ratio = adjClose / close;
+          }
+
+          const effectiveClose =
+            resolvedAdjustment === 'raw'
+              ? close
+              : Number.isFinite(ratio) && ratio > 0
+                ? close * ratio
+                : close;
           const effectiveOpen = Number.isFinite(open) ? open * ratio : effectiveClose;
           const effectiveHigh = Number.isFinite(high) ? high * ratio : effectiveClose;
           const effectiveLow = Number.isFinite(low) ? low * ratio : effectiveClose;
@@ -256,38 +282,91 @@ const parseYahooResponse = (data, adjustment) => {
   const quote = result.indicators?.quote?.[0] || {};
   const adjcloseSeries = result.indicators?.adjclose?.[0]?.adjclose || [];
   const timestamps = result.timestamp || [];
-  const useAdjClose = normalizeAdjustment(adjustment) !== 'raw';
-  const bars = timestamps
+  const resolvedAdjustment = normalizeAdjustment(adjustment);
+
+  const rawBars = timestamps
     .map((ts, idx) => {
-      const open = quote.open?.[idx];
-      const high = quote.high?.[idx];
-      const low = quote.low?.[idx];
       const close = quote.close?.[idx];
-      const adjClose = adjcloseSeries?.[idx];
-      const volume = quote.volume?.[idx];
-      if (
-        !Number.isFinite(open) ||
-        !Number.isFinite(high) ||
-        !Number.isFinite(low) ||
-        !Number.isFinite(close) ||
-        !Number.isFinite(volume)
-      ) {
+      if (!Number.isFinite(close)) {
         return null;
       }
-      const effectiveClose = useAdjClose && Number.isFinite(adjClose) ? adjClose : close;
+      const open = Number.isFinite(quote.open?.[idx]) ? quote.open[idx] : close;
+      const high = Number.isFinite(quote.high?.[idx]) ? quote.high[idx] : close;
+      const low = Number.isFinite(quote.low?.[idx]) ? quote.low[idx] : close;
+      const volume = Number.isFinite(quote.volume?.[idx]) ? quote.volume[idx] : 0;
+      const adjClose = adjcloseSeries?.[idx];
+
       return {
         t: new Date(ts * 1000).toISOString(),
         o: open,
         h: high,
         l: low,
-        c: effectiveClose,
+        c: close,
+        adjClose: Number.isFinite(adjClose) ? adjClose : null,
         v: volume,
       };
     })
     .filter(Boolean);
 
-  bars.sort((a, b) => new Date(a.t) - new Date(b.t));
-  return bars;
+  rawBars.sort((a, b) => new Date(a.t) - new Date(b.t));
+
+  if (resolvedAdjustment === 'raw') {
+    return rawBars.map(({ adjClose, ...bar }) => bar);
+  }
+
+  if (resolvedAdjustment === 'split') {
+    const splits = Object.values(result.events?.splits || {})
+      .map((entry) => {
+        const numerator = Number(entry?.numerator);
+        const denominator = Number(entry?.denominator);
+        const seconds = Number(entry?.date);
+        if (!Number.isFinite(numerator) || !Number.isFinite(denominator) || numerator <= 0 || denominator <= 0) {
+          return null;
+        }
+        if (!Number.isFinite(seconds)) {
+          return null;
+        }
+        const dateKey = new Date(seconds * 1000).toISOString().slice(0, 10);
+        return { dateKey, numerator, denominator };
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.dateKey.localeCompare(a.dateKey));
+
+    let factor = 1;
+    let splitIdx = 0;
+    const adjusted = rawBars.map((bar) => ({ ...bar }));
+
+    for (let idx = adjusted.length - 1; idx >= 0; idx -= 1) {
+      const barKey = adjusted[idx].t.slice(0, 10);
+      while (splitIdx < splits.length && splits[splitIdx].dateKey > barKey) {
+        factor *= splits[splitIdx].denominator / splits[splitIdx].numerator;
+        splitIdx += 1;
+      }
+      adjusted[idx].o *= factor;
+      adjusted[idx].h *= factor;
+      adjusted[idx].l *= factor;
+      adjusted[idx].c *= factor;
+      adjusted[idx].v = factor ? adjusted[idx].v / factor : adjusted[idx].v;
+    }
+
+    return adjusted.map(({ adjClose, ...bar }) => bar);
+  }
+
+  // "dividend" and "all" are approximated with Yahoo's adjclose series (which includes dividends + splits).
+  return rawBars.map(({ adjClose, ...bar }) => {
+    if (!Number.isFinite(adjClose) || !Number.isFinite(bar.c) || bar.c === 0) {
+      return bar;
+    }
+    const ratio = adjClose / bar.c;
+    return {
+      ...bar,
+      o: bar.o * ratio,
+      h: bar.h * ratio,
+      l: bar.l * ratio,
+      c: adjClose,
+      v: ratio ? bar.v / ratio : bar.v,
+    };
+  });
 };
 
 const fetchLatestPriceFromAlpaca = async ({ symbol }) => {
@@ -414,23 +493,74 @@ const fetchBarsFromYahoo = async ({ symbol, start, end, adjustment }) => {
   return [];
 };
 
-const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source }) => {
+const fetchBarsFromStooq = async ({ symbol }) => {
+  if (!symbol) {
+    throw new Error('Symbol is required.');
+  }
+  const normalized = String(symbol).trim().toLowerCase();
+  if (!normalized) {
+    throw new Error('Symbol is required.');
+  }
+  const stooqSymbol = normalized.endsWith('.us') ? normalized : `${normalized}.us`;
+  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSymbol)}&i=d`;
+  const { data } = await Axios.get(url, { timeout: 30000 });
+  const text = typeof data === 'string' ? data : '';
+  const lines = text.split(/\r?\n/).filter(Boolean);
+  if (lines.length <= 1) {
+    return [];
+  }
+  const bars = [];
+  for (let idx = 1; idx < lines.length; idx += 1) {
+    const line = lines[idx];
+    const [date, open, high, low, close, volume] = line.split(',');
+    if (!date || date === 'Date') {
+      continue;
+    }
+    const c = Number(close);
+    if (!Number.isFinite(c)) {
+      continue;
+    }
+    const o = Number(open);
+    const h = Number(high);
+    const l = Number(low);
+    const v = Number(volume);
+    bars.push({
+      t: `${date}T00:00:00.000Z`,
+      o: Number.isFinite(o) ? o : c,
+      h: Number.isFinite(h) ? h : c,
+      l: Number.isFinite(l) ? l : c,
+      c,
+      v: Number.isFinite(v) ? v : 0,
+    });
+  }
+  bars.sort((a, b) => new Date(a.t) - new Date(b.t));
+  return bars;
+};
+
+const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, minBars }) => {
   const normalizedSource = String(source ?? '').trim().toLowerCase();
+  const minBarsNeeded = Number.isFinite(Number(minBars)) ? Math.max(0, Math.floor(Number(minBars))) : 0;
   const preferred =
-    normalizedSource === 'yahoo' || normalizedSource === 'alpaca' || normalizedSource === 'tiingo'
+    normalizedSource === 'yahoo' ||
+    normalizedSource === 'alpaca' ||
+    normalizedSource === 'tiingo' ||
+    normalizedSource === 'stooq'
       ? normalizedSource
       : null;
   const attemptOrder = (() => {
     if (preferred === 'yahoo') {
-      return ['yahoo', 'tiingo', 'alpaca'];
+      return ['yahoo', 'tiingo', 'stooq', 'alpaca'];
     }
     if (preferred === 'tiingo') {
-      return ['tiingo', 'yahoo', 'alpaca'];
+      return ['tiingo', 'yahoo', 'stooq', 'alpaca'];
     }
     if (preferred === 'alpaca') {
-      return ['alpaca', 'tiingo', 'yahoo'];
+      return ['alpaca', 'tiingo', 'yahoo', 'stooq'];
     }
-    return ['yahoo', 'tiingo', 'alpaca'];
+    if (preferred === 'stooq') {
+      return ['stooq', 'tiingo', 'yahoo', 'alpaca'];
+    }
+    return ['yahoo', 'tiingo', 'stooq', 'alpaca'];
   })();
 
   const attempt = async (candidate) => {
@@ -443,6 +573,10 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source })
         const bars = await fetchBarsFromTiingo({ symbol, start, end, adjustment });
         return { bars, dataSource: 'tiingo' };
       }
+      case 'stooq': {
+        const bars = await fetchBarsFromStooq({ symbol, start, end, adjustment });
+        return { bars, dataSource: 'stooq' };
+      }
       default: {
         const bars = await fetchBarsFromAlpaca({ symbol, start, end, adjustment });
         return { bars, dataSource: 'alpaca' };
@@ -451,17 +585,34 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source })
   };
 
   let lastError = null;
+  let bestResult = null;
   for (const candidate of attemptOrder) {
     try {
       const result = await attempt(candidate);
       if (Array.isArray(result.bars) && result.bars.length) {
-        return result;
+        if (!bestResult || result.bars.length > bestResult.bars.length) {
+          bestResult = result;
+        }
+        if (!minBarsNeeded || result.bars.length >= minBarsNeeded) {
+          return result;
+        }
       }
     } catch (error) {
       lastError = error;
-      const label = candidate === 'alpaca' ? 'Alpaca' : candidate === 'tiingo' ? 'Tiingo' : 'Yahoo';
+      const label =
+        candidate === 'alpaca'
+          ? 'Alpaca'
+          : candidate === 'tiingo'
+            ? 'Tiingo'
+            : candidate === 'stooq'
+              ? 'Stooq'
+              : 'Yahoo';
       console.warn(`[PriceCache] ${label} data fetch failed for ${symbol}: ${error.message}`);
     }
+  }
+
+  if (bestResult) {
+    return bestResult;
   }
 
   throw lastError || new Error(`No market data returned for ${symbol}.`);
@@ -524,6 +675,7 @@ const getCachedPrices = async ({
       end,
       adjustment: resolvedAdjustment,
       source: resolvedSource,
+      minBars: minBarsNeeded,
     });
     cache = await PriceCache.findOneAndUpdate(
       cacheQuery,

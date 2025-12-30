@@ -52,6 +52,27 @@ describe('evaluateDefsymphonyStrategy', () => {
     getCachedPrices.mockReset();
   });
 
+  it('does not truncate all symbols to the shortest history when evaluating long-window filters', async () => {
+    installPriceMapMock({
+      LONG: buildPriceResponse(100, 0.5, 220),
+      SHORT: buildPriceResponse(50, 0.2, 60),
+    });
+
+    const strategy = `
+      (defsymphony "History Alignment" {}
+        (filter
+          (moving-average-return {:window 100})
+          (select-top 1)
+          [
+            (asset "LONG")
+            (asset "SHORT")
+          ]))
+    `;
+
+    const result = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
+    expect(result.positions.map((pos) => pos.symbol)).toEqual(['LONG']);
+  });
+
   it('simulates group equity series and selects the strongest group for filters', async () => {
     installPriceMapMock({
       AAA: buildPriceResponse(100, 1),
@@ -195,18 +216,20 @@ describe('evaluateDefsymphonyStrategy', () => {
   it('defaults to Wilder RSI (Composer-style) but can toggle to simple-average RSI', async () => {
     const originalRsiMethod = process.env.RSI_METHOD;
 
+    // Construct a series where Wilder RSI stays elevated due to smoothing, while Cutler/SMA RSI
+    // reflects the recent pullback and stays below the threshold.
     const closes = [100];
-    for (let i = 0; i < 20; i += 1) {
+    for (let i = 0; i < 60; i += 1) {
       closes.push(closes[closes.length - 1] + 1);
     }
-    for (let i = 0; i < 20; i += 1) {
-      closes.push(closes[closes.length - 1] + (i % 2 === 0 ? -1 : 1));
+    for (let i = 0; i < 7; i += 1) {
+      closes.push(closes[closes.length - 1] - 1);
     }
 
     installPriceMapMock({
       AAA: buildPriceResponseFromSeries(closes),
-      WIN: buildPriceResponse(100, 0),
-      LOSE: buildPriceResponse(100, 0),
+      WIN: buildPriceResponse(100, 0, closes.length),
+      LOSE: buildPriceResponse(100, 0, closes.length),
     });
 
     const strategy = `
@@ -218,11 +241,19 @@ describe('evaluateDefsymphonyStrategy', () => {
     `;
 
     delete process.env.RSI_METHOD;
-    const wilderResult = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
+    const wilderResult = await evaluateDefsymphonyStrategy({
+      strategyText: strategy,
+      budget: 10000,
+      asOfMode: 'current',
+    });
     expect(wilderResult.positions.map((pos) => pos.symbol)).toEqual(['WIN']);
 
     process.env.RSI_METHOD = 'cutler';
-    const simpleResult = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
+    const simpleResult = await evaluateDefsymphonyStrategy({
+      strategyText: strategy,
+      budget: 10000,
+      asOfMode: 'current',
+    });
     expect(simpleResult.positions.map((pos) => pos.symbol)).toEqual(['LOSE']);
 
     if (originalRsiMethod === undefined) {
