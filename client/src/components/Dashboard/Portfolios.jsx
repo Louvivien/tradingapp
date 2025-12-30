@@ -832,6 +832,7 @@ const deleteStrategy = async (strategyId) => {
                   <TableHead>
                     <TableRow>
                       <TableCell>Asset</TableCell>
+                      <TableCell align="right">Allocation %</TableCell>
                       <TableCell>Quantity</TableCell>
                       <TableCell align="right">Avg Entry Price</TableCell>
                       <TableCell align="right">Current Price</TableCell>
@@ -846,6 +847,9 @@ const deleteStrategy = async (strategyId) => {
                       const avgCost = Number(stock.avgCost);
                       const currentPrice = Number(stock.currentPrice);
                       const marketValue = currentPrice && qty ? currentPrice * qty : null;
+                      const allocationRatio = marketValue !== null && totalCurrentTotal > 0
+                        ? marketValue / totalCurrentTotal
+                        : null;
                       const purchaseTotal = avgCost && qty ? avgCost * qty : null;
                       const unrealizedPL = purchaseTotal !== null && marketValue !== null ? marketValue - purchaseTotal : null;
                       const unrealizedPLPct = unrealizedPL !== null && purchaseTotal ? (unrealizedPL / purchaseTotal) * 100 : null;
@@ -856,6 +860,7 @@ const deleteStrategy = async (strategyId) => {
                             <TableCell>
                               <Link onClick={() => openSaleModal(stock)}>{stock.symbol}</Link>
                             </TableCell>
+                            <TableCell align="right">—</TableCell>
                             <TableCell>{stock.quantity || "----"}</TableCell>
                             <TableCell colSpan={5}>Order not filled yet.</TableCell>
                           </TableRow>
@@ -866,6 +871,9 @@ const deleteStrategy = async (strategyId) => {
                         <TableRow key={stock.symbol}>
                           <TableCell>
                             <Link onClick={() => openSaleModal(stock)}>{stock.symbol}</Link>
+                          </TableCell>
+                          <TableCell align="right">
+                            {allocationRatio !== null ? formatPct(allocationRatio) : "----"}
                           </TableCell>
                           <TableCell>{stock.quantity || "----"}</TableCell>
                           <TableCell align="right">
@@ -911,6 +919,7 @@ const deleteStrategy = async (strategyId) => {
                     {allStocksHaveAvgCost && (
                       <TableRow>
                         <TableCell>Total</TableCell>
+                        <TableCell align="right">100%</TableCell>
                         <TableCell>{totalQuantity}</TableCell>
                         <TableCell></TableCell>
                         <TableCell></TableCell>
