@@ -10,13 +10,18 @@
 ## About
 Welcome to the AI Trading App!
 
-It can connect to Alpaca to get positions and orders, sell and buy stocks.
-- You can import collaborative trading strategies
-- Currently implementing sentiment analysis strategy
+It connects to Alpaca to read positions/orders and place trades.
+
+Main features:
+- Alpaca integration: paper/live support, positions, orders, market-clock awareness.
+- Trading UI: search tickers, buy/sell, portfolio dashboard.
+- Composer/defsymphony strategies: import strategies and evaluate them locally into target allocations.
+- Automated rebalancing: scheduled portfolio rebalances with logs and cash/position reconciliation.
+- Diagnostics: allocation diff/trace endpoint + one-shot rebalance trigger for fixing mismatched holdings.
+- Data + analytics: price caching with multi-source fallback (Yahoo/Tiingo/Alpaca), equity snapshots/history.
+- Optional sentiment/news tooling (work in progress).
 
 Credit for UI: [OktarianTB](https://github.com/OktarianTB/stock-trading-simulator)
-
-Update: trailing orders removed
 
 ## Stack
 Backend: NodeJS with Python Scripts, AI: ChatGPT (collaborative strategy feature), Claude & Vertex (AI Fund feature)
@@ -46,13 +51,10 @@ Be the first to build an AI App on Google’s AI models!
 ## Installation
 Make sure you have NodeJS installed. You can check your Node.js version by running the command node -v in your terminal. If your version is older than 14.20.1, you will need to update Node.js. Please make sure that node -v gives you a version after 14.20.1 before doing anything else. 
 
-
-
-go to the server folder
+Go to the server folder:
 ```sh
 cd server
 ```
-
 
 Then install the required packages for the server with:
 
@@ -60,7 +62,7 @@ Then install the required packages for the server with:
 npm install
 ```
 
-go to the client folder
+Go to the client folder:
 ```sh
 cd ..
 ```
@@ -73,22 +75,18 @@ Install the required packages for the client with:
 npm install
 ```
 
-
-
 Then you have to set up the .env files for the server and the client:
 Go to the different services, create accounts and get the API keys
 
-here  /tradingapp/server/config/ you have an example file. Rename it .env and change the keys with yours
+In `tradingapp/server/config/` you have an example file. Rename it `.env` and change the keys with yours.
 
-there /tradingapp/client/  you have an example file. Rename it .env and change the keys with yours
+In `tradingapp/client/` you have an example file. Rename it `.env` and change the keys with yours.
 
-check REACT_APP_BASE_URL_DEV=http://localhost:3000 and make sure it's the right port
+Check `REACT_APP_BASE_URL_DEV=http://localhost:3000` and make sure it matches your server port.
 
 Please make sure you have created a .env in the server AND in the client or it will not work
 
 To use Vertex you will need to create /tradingapp/server/config/googlecredentials.json with your google credentials
-
-
 
 Then you can start the server and the client
 
@@ -109,6 +107,21 @@ npm run start
 
 Code explanation: [Video](https://www.loom.com/share/2411f7d34ea1491ab22c166957e107de) 
 
+## Strategy Evaluation Parity (Composer/defsymphony)
+The server evaluates defsymphony strategies locally. To keep results aligned with Composer, the defaults are:
+- RSI: Wilder (`COMPOSER_RSI_METHOD=wilder`)
+- Price adjustment: split (`COMPOSER_DATA_ADJUSTMENT=split`)
+- As-of mode: previous close (`COMPOSER_ASOF_MODE=previous-close`)
+- Price source: Yahoo with Tiingo fallback (`COMPOSER_PRICE_SOURCE=yahoo`)
+- Price refresh: disabled by default (`COMPOSER_PRICE_REFRESH=false`) to avoid unexpected allocation changes
+
+If you override these settings (ex: `RSI_METHOD=simple` or `PRICE_DATA_SOURCE=alpaca`), the app will still work but allocations can differ from Composer; rebalance logs will include a warning.
+
+### Debug endpoints
+These endpoints are helpful when investigating mismatched holdings vs expected allocation:
+- Diagnose allocation inputs/trace: `GET /api/strategies/diagnose/:userId/:strategyId`
+- Trigger an immediate rebalance: `POST /api/strategies/rebalance-now/:userId/:strategyId`
+
 
 
 ## Deployment
@@ -126,7 +139,7 @@ You can sell from the dashboard clicking on stocks ticker
 
 You can implement a collaborative strategy that you found online in Strategies, copy paste it and add a name for the strategy. It will buy the stocks. This create a strategy portfolio that will show up on the dashboard
 
-You can switch from paper trading to live trading in Config/Alpaca.js changing the apiurl
+Paper vs live trading depends on which Alpaca credentials are configured.
 
 ## How collaborative strategy evaluation works
 
@@ -134,19 +147,10 @@ See `tradingapp/docs/collaborative-strategies.md`.
 
 
 
-## To do
-
-Improve the AI Fund Strategy: better news quality, better sentiment analysis
-
-Implement transaction cost displays to evaluate strategy profitability is crucial
-
-Implement other AI trading strategies
-
-Implement crypto using Alpaca
-
-Implement other brokers: deGiro
-
-Fix bugs: currently a blocking bug on the collaborative strategy feature
+## Roadmap
+- Improve AI Fund signals (news quality, sentiment analysis).
+- Add transaction cost displays (slippage/fees) for strategy evaluation.
+- Add support for more brokers (ex: DeGiro) and crypto (via Alpaca).
 
 ## Links
 
