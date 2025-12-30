@@ -1702,17 +1702,15 @@ const loadPriceData = async (
       });
       let bars = response.bars || [];
       if (asOfMode === 'previous-close' && bars.length > 1) {
-        const asOfDayKey =
-          formatDateKeyInTimeZone(asOfDate, 'America/New_York') ||
-          (asOfDateKeyOverride ? asOfDateKeyOverride : null) ||
-          toISODateKey(asOfDate);
+        // Use a consistent day-key basis across the evaluator:
+        // - stale-series detection uses `toISODateKey()` (UTC-based)
+        // - some data sources timestamp daily bars at 00:00Z for the labeled session date
+        // So we compute the intraday-drop keys using `toISODateKey()` as well.
+        const asOfDayKey = asOfDateKeyOverride ? asOfDateKeyOverride : toISODateKey(asOfDate);
         const lastBar = bars[bars.length - 1];
-        const lastDayKey = lastBar?.t
-          ? formatDateKeyInTimeZone(lastBar.t, 'America/New_York') || toISODateKey(lastBar.t)
-          : null;
+        const lastDayKey = lastBar?.t ? toISODateKey(lastBar.t) : null;
         const nowDate = now();
-        const nowDayKey =
-          formatDateKeyInTimeZone(nowDate, 'America/New_York') || toISODateKey(nowDate);
+        const nowDayKey = toISODateKey(nowDate);
         const isAsOfToday = Boolean(asOfDayKey && nowDayKey && asOfDayKey === nowDayKey);
         // Treat the current trading day as incomplete until the real-time market close, even when
         // the requested as-of date is expressed as an end-of-day timestamp (e.g. YYYY-MM-DD).
