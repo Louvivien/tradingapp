@@ -1741,22 +1741,14 @@ const loadPriceData = async (
         // Use a consistent day-key basis across the evaluator:
         // - stale-series detection uses `toISODateKey()` (UTC-based)
         // - some data sources timestamp daily bars at 00:00Z for the labeled session date
-        // So we compute the intraday-drop keys using `toISODateKey()` as well.
+        // So we compute the as-of drop keys using `toISODateKey()` as well.
         const asOfDayKey = asOfDateKeyOverride ? asOfDateKeyOverride : toISODateKey(asOfDate);
         const lastBar = bars[bars.length - 1];
         const lastDayKey = lastBar?.t ? toISODateKey(lastBar.t) : null;
-        const nowDate = now();
-        const nowDayKey = toISODateKey(nowDate);
-        const isAsOfToday = Boolean(asOfDayKey && nowDayKey && asOfDayKey === nowDayKey);
-        // Treat the current trading day as incomplete until the real-time market close, even when
-        // the requested as-of date is expressed as an end-of-day timestamp (e.g. YYYY-MM-DD).
-        const marketClosedForAsOfDay = isAsOfToday ? isAfterUsMarketClose(nowDate) : true;
-        const shouldDropIntradayBar =
-          asOfDayKey &&
-          lastDayKey &&
-          lastDayKey === asOfDayKey &&
-          !marketClosedForAsOfDay;
-        if (shouldDropIntradayBar) {
+        // Composer "previous-close" semantics evaluate window functions using the previous market session,
+        // so we never include the bar for the as-of day itself (even if the close is already published).
+        const shouldDropAsOfBar = asOfDayKey && lastDayKey && lastDayKey === asOfDayKey;
+        if (shouldDropAsOfBar) {
           bars = bars.slice(0, -1);
         }
       }
