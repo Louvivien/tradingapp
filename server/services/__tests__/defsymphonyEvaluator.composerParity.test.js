@@ -163,6 +163,75 @@ describe('evaluateDefsymphonyStrategy (Composer parity)', () => {
     expect(weights.BBB).toBeCloseTo(11 / 46, 6);
   });
 
+  it('computes moving-average-return as the arithmetic mean of daily returns (not compounded)', async () => {
+    const barsLength = 60;
+    const priceMap = {
+      AAA: buildPriceResponseFromSeries(
+        buildClosesWithTail({
+          baseClose: 100,
+          length: barsLength,
+          tail: [100, 150, 75],
+        })
+      ),
+      BBB: buildPriceResponseFromSeries(
+        buildClosesWithTail({
+          baseClose: 100,
+          length: barsLength,
+          tail: [100, 90, 81],
+        })
+      ),
+    };
+
+    installPriceMapMock(priceMap);
+
+    const strategy = `
+      (defsymphony "Moving Average Return Arithmetic" {}
+        (filter
+          (moving-average-return {:window 2})
+          (select-top 1)
+          [
+            (asset "AAA")
+            (asset "BBB")
+          ]))
+    `;
+
+    const result = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
+    expect(result.positions.map((pos) => pos.symbol)).toEqual(['AAA']);
+  });
+
+  it('computes cumulative-return as the compounded end/start return (not sum of daily returns)', async () => {
+    const barsLength = 60;
+    const priceMap = {
+      AAA: buildPriceResponseFromSeries(
+        buildClosesWithTail({
+          baseClose: 100,
+          length: barsLength,
+          tail: [100, 110, 121],
+        })
+      ),
+      BBB: buildPriceResponseFromSeries(
+        buildClosesWithTail({
+          baseClose: 100,
+          length: barsLength,
+          tail: [100, 110, 120],
+        })
+      ),
+    };
+
+    installPriceMapMock(priceMap);
+
+    const strategy = `
+      (defsymphony "Cumulative Return Formula" {}
+        (if
+          (> (cumulative-return "AAA" {:window 2}) 0.205)
+          [(asset "AAA")]
+          [(asset "BBB")]))
+    `;
+
+    const result = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
+    expect(result.positions.map((pos) => pos.symbol)).toEqual(['AAA']);
+  });
+
   it('parity: evaluates the full sorts + inverse-volatility fixture deterministically', async () => {
     const strategy = fs.readFileSync(
       path.join(__dirname, 'fixtures/test_sorts_inverse_volatility.edn'),
