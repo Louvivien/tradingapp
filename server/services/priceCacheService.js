@@ -710,23 +710,24 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, m
       : null;
   const attemptOrder = (() => {
     if (preferred === 'yahoo') {
-      return ['yahoo', 'tiingo', 'testfolio', 'stooq', 'alpaca'];
+      return ['yahoo', 'tiingo', 'testfolio', 'alpaca', 'stooq'];
     }
     if (preferred === 'tiingo') {
-      // Prefer Tiingo; if rate-limited or missing data, fall back to Testfolio to maintain parity.
-      return ['tiingo', 'testfolio'];
+      // Composer-style: Tiingo first, then Testfolio, then Alpaca.
+      return ['tiingo', 'testfolio', 'alpaca', 'yahoo', 'stooq'];
     }
     if (preferred === 'alpaca') {
       return ['alpaca', 'tiingo', 'testfolio', 'yahoo', 'stooq'];
     }
     if (preferred === 'stooq') {
-      return ['stooq', 'tiingo', 'testfolio', 'yahoo', 'alpaca'];
+      return ['stooq', 'tiingo', 'testfolio', 'alpaca', 'yahoo'];
     }
     if (preferred === 'testfolio') {
       // When caller asks for Testfolio, keep the surface pure: do not pull Yahoo/Alpaca fallback to avoid mixing sources.
       return ['testfolio'];
     }
-    return ['yahoo', 'tiingo', 'testfolio', 'stooq', 'alpaca'];
+    // Default: Tiingo -> Testfolio -> Alpaca -> Yahoo -> Stooq.
+    return ['tiingo', 'testfolio', 'alpaca', 'yahoo', 'stooq'];
   })();
 
   const attempt = async (candidate) => {
