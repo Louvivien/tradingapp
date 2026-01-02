@@ -1905,10 +1905,11 @@ const evaluateDefsymphonyStrategy = async ({
     normalizePriceSource(process.env.COMPOSER_PRICE_SOURCE) ||
     normalizePriceSource(process.env.PRICE_DATA_SOURCE) ||
     (hasTiingoToken() ? 'tiingo' : 'yahoo');
+  const parityModeDefault = normalizeBoolean(process.env.COMPOSER_PARITY_MODE) === true;
   const resolvedPriceRefresh =
     normalizePriceRefresh(priceRefresh) ??
     normalizePriceRefresh(process.env.PRICE_DATA_FORCE_REFRESH) ??
-    resolvedPriceSource === 'yahoo';
+    (parityModeDefault ? true : resolvedPriceSource === 'yahoo');
   const resolvedDebugIndicators =
     normalizeBoolean(debugIndicators) ?? ENABLE_INDICATOR_DEBUG;
 
@@ -2505,10 +2506,11 @@ const backtestDefsymphonyStrategy = async ({
     normalizePriceSource(process.env.COMPOSER_PRICE_SOURCE) ||
     normalizePriceSource(process.env.PRICE_DATA_SOURCE) ||
     (hasTiingoToken() ? 'tiingo' : null);
+  const parityModeDefault = normalizeBoolean(process.env.COMPOSER_PARITY_MODE) === true;
   const resolvedPriceRefresh =
     normalizePriceRefresh(priceRefresh) ??
     normalizePriceRefresh(process.env.PRICE_DATA_FORCE_REFRESH) ??
-    resolvedPriceSource === 'yahoo';
+    (parityModeDefault ? true : resolvedPriceSource === 'yahoo');
   const resolvedAsOfMode = normalizeAsOfMode(asOfMode) || 'previous-close';
 
   const calendarSymbol = String(
