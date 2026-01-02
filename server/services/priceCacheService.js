@@ -645,7 +645,7 @@ const fetchBarsFromTestfolio = async ({ symbol, start, end }) => {
   for (let attempt = 0; attempt < 6; attempt += 1) {
     try {
       const { data } = await Axios.post('https://testfol.io/api/tactical', body, {
-        timeout: 30000,
+        timeout: 15000,
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'tradingapp/priceCache',
@@ -683,7 +683,12 @@ const fetchBarsFromTestfolio = async ({ symbol, start, end }) => {
     } catch (error) {
       lastError = error;
       const status = Number(error?.response?.status);
-      if (status !== 429) {
+      const isTimeout =
+        error?.code === 'ETIMEDOUT' ||
+        error?.code === 'ENETUNREACH' ||
+        /timeout/i.test(String(error?.message || ''));
+      // If Testfolio is unreachable, allow fallback to the next provider (e.g., Alpaca).
+      if (!isTimeout && status !== 429) {
         break;
       }
       await sleep(1000 + attempt * 500);
