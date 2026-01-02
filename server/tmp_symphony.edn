@@ -1,0 +1,121 @@
+(defsymphony
+ "[Test] Sorts and Inverse Volatility"
+ {:asset-class "EQUITIES", :rebalance-frequency :daily}
+ (weight-equal
+  [(group
+    "Standard Deviation of Return"
+    [(weight-equal
+      [(filter
+        (stdev-return {:window 10})
+        (select-top 1)
+        [(asset
+          "SOXS"
+          "Direxion Shares ETF Trust - Direxion Daily Semiconductor Bear 3X Shares")
+         (asset
+          "TECS"
+          "Direxion Shares ETF Trust - Direxion Daily Technology Bear -3X Shares")])
+       (filter
+        (stdev-return {:window 80})
+        (select-bottom 1)
+        [(asset
+          "UPRO"
+          "ProShares Trust - ProShares UltraPro S&P 500 ETF 3x Shares")
+         (asset
+          "SPXL"
+          "Direxion Shares ETF Trust - Direxion Daily S&P 500 Bull 3X Shares")])])])
+   (group
+    "Moving Average of Return"
+    [(weight-equal
+      [(filter
+        (moving-average-return {:window 20})
+        (select-top 1)
+        [(asset
+          "QLD"
+          "ProShares Trust - ProShares Ultra QQQ 2x Shares")
+         (asset
+          "TECL"
+          "Direxion Shares ETF Trust - Direxion Daily Technology Bull 3X Shares")])
+       (filter
+        (moving-average-return {:window 60})
+        (select-bottom 1)
+        [(asset "SPY" "SSgA Active Trust - SPDR S&P 500 ETF Trust")
+         (asset "GLD" "SPDR Gold Trust - SPDR Gold Shares")])])])
+   (group
+    "Cumulative Return"
+    [(weight-equal
+      [(filter
+        (cumulative-return {:window 120})
+        (select-top 1)
+        [(asset
+          "SOXL"
+          "Direxion Shares ETF Trust - Direxion Daily Semiconductor Bull 3X Shares")
+         (asset
+          "VIXY"
+          "ProShares Trust - ProShares VIX Short-Term Futures ETF")])
+       (filter
+        (cumulative-return {:window 20})
+        (select-bottom 1)
+        [(asset
+          "UVXY"
+          "ProShares Trust - ProShares Ultra VIX Short-Term Futures ETF 1.5x Shares")
+         (asset
+          "SVXY"
+          "ProShares Trust - ProShares Short VIX Short-Term Futures ETF -0.5x Shares")])])])
+   (group
+    "RSI Test"
+    [(weight-equal
+      [(filter
+        (rsi {:window 100})
+        (select-top 1)
+        [(asset
+          "UVIX"
+          "Volatility Shares Trust - 2x Long VIX Futures ETF")
+         (asset
+          "QQQE"
+          "Direxion Shares ETF Trust - Direxion NASDAQ-100 Equal Weighted Index Shares")])
+       (filter
+        (rsi {:window 10})
+        (select-bottom 1)
+        [(asset
+          "SHNY"
+          "Bank of Montreal - MicroSectors Gold 3X Leveraged ETNs")
+         (asset
+          "DULL"
+          "Bank of Montreal - MicroSectors Gold -3X Inverse Leveraged ETNs")])])])
+   (group
+    "Max Drawdown"
+    [(weight-equal
+      [(filter
+        (max-drawdown {:window 20})
+        (select-top 1)
+        [(asset
+          "TQQQ"
+          "ProShares Trust - ProShares UltraPro QQQ 3x Shares")
+         (asset
+          "VIXM"
+          "ProShares Trust - ProShares VIX Mid-Term Futures ETF")])
+       (filter
+        (max-drawdown {:window 5})
+        (select-bottom 1)
+        [(asset
+          "SQQQ"
+          "ProShares Trust - ProShares UltraPro Short QQQ -3x Shares")
+         (asset
+          "TQQQ"
+          "ProShares Trust - ProShares UltraPro QQQ 3x Shares")])])])
+   (group
+    "Inverse Volatility"
+    [(weight-inverse-volatility
+      20
+      [(asset
+        "TLT"
+        "BlackRock Institutional Trust Company N.A. - iShares 20+ Year Treasury Bond ETF")
+       (asset "PSQ" "ProShares Trust - ProShares Short QQQ -1x Shares")
+       (weight-inverse-volatility
+        60
+        [(asset
+          "TLT"
+          "BlackRock Institutional Trust Company N.A. - iShares 20+ Year Treasury Bond ETF")
+         (asset
+          "PSQ"
+          "ProShares Trust - ProShares Short QQQ -1x Shares")])])])]))

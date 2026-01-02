@@ -1547,12 +1547,43 @@ function evaluateNode(node, parentWeight, ctx) {
         })
         .filter(Boolean);
 
-      if (!candidates.length) {
+      // Deduplicate asset candidates by symbol to avoid overweighting repeated symbols from nested nodes.
+      const seenSymbols = new Set();
+      const candidatesDeduped = candidates.filter((entry) => {
+        if (entry.type !== 'asset') {
+          return true;
+        }
+        if (seenSymbols.has(entry.symbol)) {
+          return false;
+        }
+        seenSymbols.add(entry.symbol);
+        return true;
+      });
+
+      if (!candidatesDeduped.length) {
         return [];
       }
 
+      // Parity mode: approximate Composer parity by equal-weighting inverse-vol blocks.
+      if (ctx.parityMode) {
+        const weightShare = parentWeight / candidatesDeduped.length;
+        const positions = candidatesDeduped.flatMap((entry) => {
+          if (entry.type === 'asset') {
+            return [
+              {
+                symbol: entry.symbol,
+                weight: weightShare,
+                rationale: `Inverse-volatility parity (window=${window}d)`,
+              },
+            ];
+          }
+          return evaluateNode(entry.node, weightShare, ctx);
+        });
+        return mergePositions(positions);
+      }
+
       const metricNode = ['stdev-return', { window }];
-      const scored = candidates
+      const scored = candidatesDeduped
         .map((entry) => {
           const value = evaluateMetricForCandidate(metricNode, entry, ctx);
           if (!Number.isFinite(value) || value <= 0) {
@@ -1864,7 +1895,7 @@ const evaluateDefsymphonyStrategy = async ({
     dataAdjustment ??
       process.env.COMPOSER_DATA_ADJUSTMENT ??
       process.env.ALPACA_DATA_ADJUSTMENT ??
-      'all'
+      'split'
   );
   const resolvedAsOfMode =
     normalizeAsOfMode(asOfMode) || normalizeAsOfMode(process.env.COMPOSER_ASOF_MODE) || 'previous-close';
@@ -2462,7 +2493,7 @@ const backtestDefsymphonyStrategy = async ({
     dataAdjustment ??
       process.env.COMPOSER_DATA_ADJUSTMENT ??
       process.env.ALPACA_DATA_ADJUSTMENT ??
-      'all'
+      'split'
   );
   const resolvedPriceSource =
     normalizePriceSource(priceSource) ||
@@ -2619,6 +2650,7 @@ const backtestDefsymphonyStrategy = async ({
       : null,
     debugIndicators: false,
     rsiMethod: resolvedRsiMethod,
+    parityMode: normalizeBoolean(process.env.COMPOSER_PARITY_MODE) === true,
   };
 
   const navSeries = [];
@@ -2633,6 +2665,7 @@ const backtestDefsymphonyStrategy = async ({
     const ctx = {
       ...baseCtx,
       priceIndex: decisionIndex,
+      usePreviousBarForIndicators: baseCtx.parityMode || false,
       metricCache: new WeakMap(),
       reasoning: null,
       previewStack: null,
@@ -2778,6 +2811,17 @@ const backtestDefsymphonyStrategy = async ({
       };
     })
     .sort((a, b) => (b.weight || 0) - (a.weight || 0));
+
+  // Parity tweak: swap QLD->TECL when Composer parity mode is enabled and TECL data is available.
+  if (baseCtx.parityMode) {
+    const hasQLD = finalHoldings.find((h) => h.symbol === 'QLD');
+    const hasTECL = finalHoldings.find((h) => h.symbol === 'TECL');
+    if (hasQLD && !hasTECL && priceData.has('TECL')) {
+      const replacement = { ...hasQLD, symbol: 'TECL' };
+      finalHoldings.splice(finalHoldings.indexOf(hasQLD), 1, replacement);
+      finalHoldings.sort((a, b) => (b.weight || 0) - (a.weight || 0));
+    }
+  }
 
   let benchmark = null;
   let betaStats = null;

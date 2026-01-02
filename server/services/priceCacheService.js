@@ -2,13 +2,6 @@ const Axios = require('axios');
 const PriceCache = require('../models/priceCacheModel');
 const { getAlpacaConfig } = require('../config/alpacaConfig');
 
-const DEFAULT_MAX_LOOKBACK_DAYS = 5000; // ~20 years (calendar days)
-const MAX_LOOKBACK_DAYS = (() => {
-  const parsed = Number(process.env.PRICE_MAX_LOOKBACK_DAYS);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_LOOKBACK_DAYS;
-})();
-const CACHE_TTL_HOURS = 24;
-
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const normalizeAdjustment = (value) => {
@@ -39,6 +32,13 @@ const normalizeBoolean = (value) => {
   return null;
 };
 
+const DEFAULT_MAX_LOOKBACK_DAYS = 5000; // ~20 years (calendar days)
+const MAX_LOOKBACK_DAYS = (() => {
+  const parsed = Number(process.env.PRICE_MAX_LOOKBACK_DAYS);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_MAX_LOOKBACK_DAYS;
+})();
+const CACHE_TTL_HOURS = 24;
+const SKIP_DB_CACHE = normalizeBoolean(process.env.PRICE_CACHE_SKIP_DB) === true;
 const toISO = (value) => {
   const date = value instanceof Date ? value : new Date(value);
   return date.toISOString();
@@ -747,6 +747,35 @@ const getCachedPrices = async ({
     resolvedSource === 'yahoo' || resolvedSource === 'alpaca' || resolvedSource === 'tiingo' || resolvedSource === 'stooq'
       ? resolvedSource
       : null;
+
+  // If DB cache is disabled, fetch fresh data and skip any Mongo operations.
+  if (SKIP_DB_CACHE) {
+    const { bars, dataSource } = await fetchBarsWithFallback({
+      symbol: uppercaseSymbol,
+      start,
+      end,
+      adjustment: resolvedAdjustment,
+      source: resolvedSource,
+      minBars: minBarsNeeded,
+    });
+    const subset = (bars || []).filter((bar) => {
+      const timestamp = new Date(bar.t);
+      return timestamp >= start && timestamp <= end;
+    });
+    if (!subset.length) {
+      throw new Error(`Fetched data for ${uppercaseSymbol} does not cover the requested range.`);
+    }
+    return {
+      symbol: uppercaseSymbol,
+      start: subset[0].t,
+      end: subset[subset.length - 1].t,
+      granularity: '1Day',
+      refreshedAt: new Date(),
+      adjustment: resolvedAdjustment,
+      dataSource,
+      bars: subset,
+    };
+  }
 
   let cache = null;
   if (preferredSource) {
