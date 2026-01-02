@@ -165,13 +165,13 @@ const fetchBarsFromTiingo = async ({ symbol, start, end, adjustment }) => {
             return null;
           }
 
+          // Prefer Tiingo-provided adjClose for split adjustment; if missing, invert splitFactor.
           let ratio = 1;
           if (resolvedAdjustment === 'split') {
-            if (Number.isFinite(splitFactor) && splitFactor > 0) {
-              ratio = splitFactor;
-            } else if (Number.isFinite(adjClose) && adjClose > 0) {
-              // Fallback: Tiingo adjClose includes dividends; still preferable to missing data.
+            if (Number.isFinite(adjClose) && adjClose > 0) {
               ratio = adjClose / close;
+            } else if (Number.isFinite(splitFactor) && splitFactor > 0) {
+              ratio = 1 / splitFactor;
             }
           } else if (useAdjusted && Number.isFinite(adjClose) && adjClose > 0) {
             ratio = adjClose / close;
@@ -616,6 +616,86 @@ const fetchBarsFromStooq = async ({ symbol }) => {
   return bars;
 };
 
+// Lightweight fallback: pull normalized daily history from Testfol.io when Tiingo is rate-limited.
+const fetchBarsFromTestfolio = async ({ symbol, start, end }) => {
+  const startKey = toISODateKey(start) || '';
+  const endKey = toISODateKey(end) || '';
+  const body = {
+    name: 'STRATEGY',
+    start_date: startKey,
+    end_date: endKey,
+    start_val: 1_000_000,
+    trading_cost: 0,
+    rolling_window: 60,
+    signals: [],
+    trading_freq: 'Daily',
+    allocations: [
+      {
+        name: symbol,
+        signals: [],
+        ops: [],
+        nots: [],
+        tickers: [{ ticker: symbol, percent: 100 }],
+        drag: 0,
+      },
+    ],
+  };
+
+  let lastError = null;
+  for (let attempt = 0; attempt < 6; attempt += 1) {
+    try {
+      const { data } = await Axios.post('https://testfol.io/api/tactical', body, {
+        timeout: 30000,
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'tradingapp/priceCache',
+        },
+      });
+      const history = data?.charts?.history;
+      if (!Array.isArray(history) || !history.length) {
+        return [];
+      }
+
+      const dates =
+        history[0]?.map?.((epoch) => {
+          const d = new Date(Number(epoch) * 1000);
+          return Number.isNaN(d.getTime()) ? null : d;
+        }) || [];
+
+      const stats = Array.isArray(data?.stats) ? data.stats : [];
+      const idx =
+        stats.findIndex(
+          (s) => String(s?.name || s?.ticker || s?.symbol || '').toUpperCase() === symbol.toUpperCase()
+        ) + 1;
+      const priceIdx = idx > 0 && history[idx] ? idx : 1;
+      const prices = Array.isArray(history[priceIdx]) ? history[priceIdx] : [];
+
+      const bars = [];
+      for (let i = 0; i < prices.length && i < dates.length; i += 1) {
+        const p = Number(prices[i]);
+        const d = dates[i];
+        if (!Number.isFinite(p) || p <= 0 || !d) continue;
+        const iso = d.toISOString();
+        bars.push({ t: iso, o: p, h: p, l: p, c: p, v: 0 });
+      }
+      bars.sort((a, b) => new Date(a.t) - new Date(b.t));
+      return bars;
+    } catch (error) {
+      lastError = error;
+      const status = Number(error?.response?.status);
+      if (status !== 429) {
+        break;
+      }
+      await sleep(1000 + attempt * 500);
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+  return [];
+};
+
 const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, minBars }) => {
   const normalizedSource = String(source ?? '').trim().toLowerCase();
   const minBarsNeeded = Number.isFinite(Number(minBars)) ? Math.max(0, Math.floor(Number(minBars))) : 0;
@@ -624,23 +704,29 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, m
     normalizedSource === 'yahoo' ||
     normalizedSource === 'alpaca' ||
     normalizedSource === 'tiingo' ||
-    normalizedSource === 'stooq'
+    normalizedSource === 'stooq' ||
+    normalizedSource === 'testfolio'
       ? normalizedSource
       : null;
   const attemptOrder = (() => {
     if (preferred === 'yahoo') {
-      return ['yahoo', 'tiingo', 'stooq', 'alpaca'];
+      return ['yahoo', 'tiingo', 'testfolio', 'stooq', 'alpaca'];
     }
     if (preferred === 'tiingo') {
-      return ['tiingo', 'yahoo', 'stooq', 'alpaca'];
+      // Prefer Tiingo; if rate-limited or missing data, fall back to Testfolio to maintain parity.
+      return ['tiingo', 'testfolio'];
     }
     if (preferred === 'alpaca') {
-      return ['alpaca', 'tiingo', 'yahoo', 'stooq'];
+      return ['alpaca', 'tiingo', 'testfolio', 'yahoo', 'stooq'];
     }
     if (preferred === 'stooq') {
-      return ['stooq', 'tiingo', 'yahoo', 'alpaca'];
+      return ['stooq', 'tiingo', 'testfolio', 'yahoo', 'alpaca'];
     }
-    return ['yahoo', 'tiingo', 'stooq', 'alpaca'];
+    if (preferred === 'testfolio') {
+      // When caller asks for Testfolio, keep the surface pure: do not pull Yahoo/Alpaca fallback to avoid mixing sources.
+      return ['testfolio'];
+    }
+    return ['yahoo', 'tiingo', 'testfolio', 'stooq', 'alpaca'];
   })();
 
   const attempt = async (candidate) => {
@@ -652,6 +738,10 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, m
       case 'tiingo': {
         const bars = await fetchBarsFromTiingo({ symbol, start, end, adjustment });
         return { bars, dataSource: 'tiingo' };
+      }
+      case 'testfolio': {
+        const bars = await fetchBarsFromTestfolio({ symbol, start, end, adjustment });
+        return { bars, dataSource: 'testfolio' };
       }
       case 'stooq': {
         const bars = await fetchBarsFromStooq({ symbol, start, end, adjustment });

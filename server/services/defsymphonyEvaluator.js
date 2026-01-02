@@ -316,9 +316,9 @@ const pickDateAxis = (mapsBySymbol, preferredSymbol, desiredStartKey = null) => 
   const preferred = preferredSymbol?.toUpperCase?.();
   const preferredMap = preferred ? mapsBySymbol.get(preferred) : null;
   const preferredMinKey = preferredMap ? resolveMinKey(preferredMap) : null;
-  const preferredEligible =
-    preferredMap && preferredMap.size && (!desiredStartKey || (preferredMinKey && preferredMinKey <= desiredStartKey));
-  if (preferredEligible) {
+  // Prefer the calendar symbol whenever it has data to keep the axis anchored to the requested instrument,
+  // even if its history starts after the desired warmup window.
+  if (preferredMap && preferredMap.size) {
     return Array.from(preferredMap.keys()).sort();
   }
 
@@ -640,7 +640,7 @@ const normalizePriceSource = (value) => {
     return null;
   }
   const normalized = String(value).trim().toLowerCase();
-  if (normalized === 'yahoo' || normalized === 'alpaca' || normalized === 'tiingo') {
+  if (normalized === 'yahoo' || normalized === 'alpaca' || normalized === 'tiingo' || normalized === 'stooq' || normalized === 'testfolio') {
     return normalized;
   }
   return null;
@@ -1886,7 +1886,8 @@ const evaluateDefsymphonyStrategy = async ({
   const nodeIdMap = assignNodeIds(ast);
 
   const rsiWindow = Math.max(0, Number(astStats.maxRsiWindow) || 0);
-  const rsiHistoryBuffer = rsiWindow ? 250 : 0;
+  // Keep RSI warmup lean to match Composer parity (no excessive buffer).
+  const rsiHistoryBuffer = rsiWindow ? rsiWindow : 0;
 
   const resolvedAsOfDate = normalizeAsOfDate(asOfDate) || now();
   const resolvedRsiMethod =
@@ -2600,8 +2601,17 @@ const backtestDefsymphonyStrategy = async ({
   }
 
   const offsets = tickers.map((ticker) => Number(alignedSeries.get(ticker)?.offset) || 0);
-  const minExecutionIndex = Math.max(1, ...offsets.map((offset) => offset + requiredBars + 1));
+  // Start execution once all tickers have data; apply a modest warmup (requiredBars minus a small cushion)
+  // to better mirror Composer backtest starts without over-padding.
+  const executionWarmup = Math.max(1, requiredBars - 5);
+  const minExecutionIndex = Math.max(1, executionWarmup, ...offsets);
   const executionStartIdx = Math.max(requestedStartIdx, minExecutionIndex);
+  if (process.env.DEBUG_BACKTEST === '1') {
+    console.log(
+      '[backtest-debug]',
+      { requestedStartIdx, requestedEndIdx, minExecutionIndex, executionStartIdx, requiredBars, offsets }
+    );
+  }
   if (executionStartIdx > requestedEndIdx) {
     const earliestKey = axisDates[Math.min(minExecutionIndex, axisDates.length - 1)];
     const axisStart = axisDates[0];
