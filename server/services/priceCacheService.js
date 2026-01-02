@@ -253,6 +253,7 @@ const fetchBarsFromAlpaca = async ({ symbol, start, end, adjustment }) => {
           'APCA-API-KEY-ID': dataKeys.keyId,
           'APCA-API-SECRET-KEY': dataKeys.secretKey,
         },
+        timeout: 15000,
       });
       const payload = data?.bars || [];
       payload.forEach((bar) => {
@@ -581,8 +582,9 @@ const fetchBarsFromStooq = async ({ symbol }) => {
     throw new Error('Symbol is required.');
   }
   const stooqSymbol = normalized.endsWith('.us') ? normalized : `${normalized}.us`;
-  const url = `https://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSymbol)}&i=d`;
-  const { data } = await Axios.get(url, { timeout: 30000 });
+  // Stooq can refuse TLS on port 443; use HTTP to improve reachability.
+  const url = `http://stooq.com/q/d/l/?s=${encodeURIComponent(stooqSymbol)}&i=d`;
+  const { data } = await Axios.get(url, { timeout: 10000 });
   const text = typeof data === 'string' ? data : '';
   const lines = text.split(/\r?\n/).filter(Boolean);
   if (lines.length <= 1) {

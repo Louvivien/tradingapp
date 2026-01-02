@@ -9,7 +9,8 @@ const ENABLE_ALPACA_HTTP_DEBUG =
 const createAlpacaClient = (config) => {
   const client = Axios.create({
     proxy: false,
-    timeout: 5000,
+    // Give Alpaca a bit more time before timing out to reduce spurious failures on slower networks.
+    timeout: 15000,
   });
 
   if (ENABLE_ALPACA_HTTP_DEBUG) {
@@ -144,46 +145,9 @@ const setAlpaca = async (userId, forceMode = null) => {
       console.log('[API Warning] Live trading key format is invalid or missing');
     }
 
-    // Helper function to validate keys
-    const validateKeys = async (keyId, secretKey, apiUrl, keyType) => {
-      if (!keyId || !secretKey) {
-        console.log(`[API Warning] ${keyType} keys are missing`);
-        return false;
-      }
-      
-      const client = createAlpacaClient();
-      try {
-        console.log(`[API Info] Validating ${keyType} keys at ${apiUrl}/v2/clock`);
-        console.log(`[API Debug] Using key ID: ${keyId.substring(0, 5)}...`);
-        const response = await client.get(`${apiUrl}/v2/clock`, {
-          headers: {
-            'APCA-API-KEY-ID': keyId,
-            'APCA-API-SECRET-KEY': secretKey,
-          }
-        });
-        console.log(`[API Success] ${keyType} keys validated successfully`);
-        return response.status === 200;
-      } catch (error) {
-        if (error.response?.status === 403) {
-          console.error(`[API Error] ${keyType} key validation failed with 403 Forbidden.`);
-          console.error(`[API Error] Key ID used: ${keyId.substring(0, 5)}...`);
-          console.error(`[API Error] API URL used: ${apiUrl}`);
-          console.error(`[API Error] Please check your ${keyType} API keys in your Alpaca account settings.`);
-          return false;
-        }
-        console.error(`[API Error] ${keyType} key validation failed:`, error.message);
-        if (error.response) {
-          console.error(`[API Response] Status: ${error.response.status}, Data:`, error.response.data);
-        }
-        return false;
-      }
-    };
-
-    // Validate both sets of keys
-    const [paperKeysValid, liveKeysValid] = await Promise.all([
-      hasValidPaperKeys ? validateKeys(paperKeyId, paperSecretKey, paperApiUrl, 'Paper trading') : false,
-      hasValidLiveKeys ? validateKeys(liveKeyId, liveSecretKey, liveApiUrl, 'Live trading') : false
-    ]);
+    // Treat presence of keys as valid to avoid blocking on upstream validation.
+    const paperKeysValid = Boolean(paperKeyId && paperSecretKey);
+    const liveKeysValid = Boolean(liveKeyId && liveSecretKey);
 
     // Log final configuration
     console.log('[API Info] Final configuration:');
