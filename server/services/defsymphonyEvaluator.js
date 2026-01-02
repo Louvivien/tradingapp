@@ -2141,7 +2141,8 @@ const evaluateDefsymphonyStrategy = async ({
   };
 };
 
-const BACKTEST_MAX_DAYS = Math.max(30, Math.min(10000, Number(process.env.COMPOSER_BACKTEST_MAX_DAYS) || 2500));
+// Allow longer parity backtests by default; cap at 10k trading days unless overridden.
+const BACKTEST_MAX_DAYS = Math.max(30, Math.min(10000, Number(process.env.COMPOSER_BACKTEST_MAX_DAYS) || 4000));
 
 const findFirstIndex = (items, predicate) => {
   for (let idx = 0; idx < items.length; idx += 1) {
@@ -2340,22 +2341,25 @@ const shouldRebalanceOnDate = (mode, currentDateKey, previousDateKey) => {
 const computeBacktestMetrics = ({ navSeries, dailyReturns, turnoverSeries }) => {
   const totalDays = dailyReturns.length;
   const endingNav = navSeries.length ? navSeries[navSeries.length - 1] : 1;
+  const startingNav = navSeries.length ? navSeries[0] : 1;
   const totalReturn = endingNav - 1;
   const avgDailyReturn =
     totalDays > 0 ? dailyReturns.reduce((sum, value) => sum + value, 0) / totalDays : 0;
   const annualizedMeanReturn = avgDailyReturn * TRADING_DAYS_PER_YEAR;
-  // Composer metrics assume a zero risk-free rate and use a population standard deviation
-  // of daily returns, annualized by sqrt(252).
+  // Mirror composerutil: sample standard deviation of daily returns, annualized by sqrt(252).
   const volatility =
-    totalDays > 0
+    totalDays > 1
       ? (() => {
           const mean = avgDailyReturn;
           const variance =
-            dailyReturns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / totalDays;
+            dailyReturns.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (totalDays - 1);
           return Math.sqrt(variance) * Math.sqrt(TRADING_DAYS_PER_YEAR);
         })()
       : 0;
-  const cagr = totalDays > 0 ? (endingNav ** (TRADING_DAYS_PER_YEAR / totalDays) - 1) : 0;
+  const periods = Math.max(1, navSeries.length - 1);
+  const years = periods / TRADING_DAYS_PER_YEAR;
+  const cagr =
+    startingNav > 0 && years > 0 ? Math.pow(endingNav / startingNav, 1 / years) - 1 : 0;
 
   let peak = 1;
   let minDrawdown = 0;
@@ -2605,7 +2609,8 @@ const backtestDefsymphonyStrategy = async ({
   // to better mirror Composer backtest starts without over-padding.
   const executionWarmup = Math.max(1, requiredBars - 5);
   const minExecutionIndex = Math.max(1, executionWarmup, ...offsets);
-  const executionStartIdx = Math.max(requestedStartIdx, minExecutionIndex);
+  const parityMode = normalizeBoolean(process.env.COMPOSER_PARITY_MODE) === true;
+  const executionStartIdx = parityMode ? requestedStartIdx : Math.max(requestedStartIdx, minExecutionIndex);
   if (process.env.DEBUG_BACKTEST === '1') {
     console.log(
       '[backtest-debug]',
@@ -2660,7 +2665,7 @@ const backtestDefsymphonyStrategy = async ({
       : null,
     debugIndicators: false,
     rsiMethod: resolvedRsiMethod,
-    parityMode: normalizeBoolean(process.env.COMPOSER_PARITY_MODE) === true,
+    parityMode,
   };
 
   const navSeries = [];
@@ -2669,13 +2674,21 @@ const backtestDefsymphonyStrategy = async ({
   let nav = 1;
   let heldWeights = null;
   let finalAllocation = [];
+  // In parity mode we mirror composerutil's “same-day signal, next-day return” behaviour:
+  // decisions at idx are applied to the return from idx -> idx+1.
+  const lastExecutableIdx = requestedEndIdx;
 
-  for (let idx = executionStartIdx; idx <= requestedEndIdx; idx += 1) {
-    const decisionIndex = idx - 1;
+  for (let idx = executionStartIdx; idx <= lastExecutableIdx; idx += 1) {
+    const decisionIndex = parityMode ? idx : idx - 1;
+    const priceIndex = parityMode ? idx + 1 : idx;
+    if (decisionIndex < 0) {
+      continue;
+    }
     const ctx = {
       ...baseCtx,
       priceIndex: decisionIndex,
-      usePreviousBarForIndicators: baseCtx.parityMode || false,
+      usePreviousBarForIndicators:
+        parityMode ? false : resolvedAsOfMode === 'previous-close',
       metricCache: new WeakMap(),
       reasoning: null,
       previewStack: null,
@@ -2719,7 +2732,7 @@ const backtestDefsymphonyStrategy = async ({
       rationale: shouldRebalance ? 'Rebalanced to target weights.' : 'Held due to rebalance schedule/threshold.',
     }));
 
-    const grossReturn = startPositions.length ? computePortfolioReturn(startPositions, priceData, idx) : 0;
+    const grossReturn = startPositions.length ? computePortfolioReturn(startPositions, priceData, priceIndex) : 0;
     const costs = resolvedCostBps ? turnover * (resolvedCostBps / 10000) : 0;
     const netReturn = grossReturn - costs;
 
@@ -2737,7 +2750,7 @@ const backtestDefsymphonyStrategy = async ({
         return;
       }
       const offset = Number(series.offset) || 0;
-      const relIdx = idx - offset;
+      const relIdx = priceIndex - offset;
       const prevRelIdx = relIdx - 1;
       if (prevRelIdx < 0) {
         return;
@@ -2807,7 +2820,10 @@ const backtestDefsymphonyStrategy = async ({
       const symbol = pos.symbol.toUpperCase();
       const record = priceData.get(symbol);
       const offset = Number(record?.offset) || 0;
-      const relIdx = requestedEndIdx - offset;
+      const finalPriceIdx = parityMode
+        ? Math.min(requestedEndIdx, axisDates.length - 1)
+        : requestedEndIdx;
+      const relIdx = finalPriceIdx - offset;
       const close = Array.isArray(record?.closes) && relIdx >= 0 ? record.closes[Math.min(relIdx, record.closes.length - 1)] : null;
       const weight = Number(pos.weight) || 0;
       const value = finalValue * weight;
