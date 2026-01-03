@@ -1898,14 +1898,16 @@ const evaluateDefsymphonyStrategy = async ({
       process.env.ALPACA_DATA_ADJUSTMENT ??
       'split'
   );
+  const parityModeDefault = normalizeBoolean(process.env.COMPOSER_PARITY_MODE) === true;
   const resolvedAsOfMode =
-    normalizeAsOfMode(asOfMode) || normalizeAsOfMode(process.env.COMPOSER_ASOF_MODE) || 'previous-close';
+    normalizeAsOfMode(asOfMode) ||
+    normalizeAsOfMode(process.env.COMPOSER_ASOF_MODE) ||
+    (parityModeDefault ? 'close' : 'previous-close');
   const resolvedPriceSource =
     normalizePriceSource(priceSource) ||
     normalizePriceSource(process.env.COMPOSER_PRICE_SOURCE) ||
     normalizePriceSource(process.env.PRICE_DATA_SOURCE) ||
     (hasTiingoToken() ? 'tiingo' : 'yahoo');
-  const parityModeDefault = normalizeBoolean(process.env.COMPOSER_PARITY_MODE) === true;
   const resolvedPriceRefresh =
     normalizePriceRefresh(priceRefresh) ??
     normalizePriceRefresh(process.env.PRICE_DATA_FORCE_REFRESH) ??
@@ -2511,7 +2513,10 @@ const backtestDefsymphonyStrategy = async ({
     normalizePriceRefresh(priceRefresh) ??
     normalizePriceRefresh(process.env.PRICE_DATA_FORCE_REFRESH) ??
     (parityModeDefault ? true : resolvedPriceSource === 'yahoo');
-  const resolvedAsOfMode = normalizeAsOfMode(asOfMode) || 'previous-close';
+  const resolvedAsOfMode =
+    normalizeAsOfMode(asOfMode) ||
+    normalizeAsOfMode(process.env.COMPOSER_ASOF_MODE) ||
+    (parityModeDefault ? 'close' : 'previous-close');
 
   const calendarSymbol = String(
     includeBenchmark && benchmarkSymbol ? benchmarkSymbol : tickers[0]
