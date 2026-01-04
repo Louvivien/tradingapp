@@ -88,7 +88,7 @@ const fetchClobServerTime = async () => {
   return ts;
 };
 
-const createL2Headers = async ({ address, apiKey, secret, passphrase, method, requestPath, body }) => {
+const createL2Headers = async ({ authAddress, apiKey, secret, passphrase, method, requestPath, body }) => {
   const ts = await fetchClobServerTime().catch(() => Math.floor(Date.now() / 1000));
   const signature = buildPolyHmacSignature({
     secret,
@@ -99,7 +99,7 @@ const createL2Headers = async ({ address, apiKey, secret, passphrase, method, re
   });
 
   return {
-    POLY_ADDRESS: String(address || '').trim(),
+    POLY_ADDRESS: String(authAddress || '').trim(),
     POLY_SIGNATURE: signature,
     POLY_TIMESTAMP: `${ts}`,
     POLY_API_KEY: String(apiKey || '').trim(),
@@ -107,10 +107,10 @@ const createL2Headers = async ({ address, apiKey, secret, passphrase, method, re
   };
 };
 
-const fetchTradesPage = async ({ address, apiKey, secret, passphrase, makerAddress, nextCursor }) => {
+const fetchTradesPage = async ({ authAddress, apiKey, secret, passphrase, makerAddress, nextCursor }) => {
   const endpoint = '/data/trades';
   const headers = await createL2Headers({
-    address,
+    authAddress,
     apiKey,
     secret,
     passphrase,
@@ -213,15 +213,27 @@ const syncPolymarketPortfolio = async (portfolio) => {
 
   const poly = portfolio.polymarket || {};
   const address = String(poly.address || '').trim();
-  const apiKey = decryptIfEncrypted(poly.apiKey);
-  const secret = decryptIfEncrypted(poly.secret);
-  const passphrase = decryptIfEncrypted(poly.passphrase);
+  const apiKey = decryptIfEncrypted(poly.apiKey) ||
+    decryptIfEncrypted(process.env.POLYMARKET_API_KEY || process.env.CLOB_API_KEY);
+  const secret = decryptIfEncrypted(poly.secret) ||
+    decryptIfEncrypted(process.env.POLYMARKET_SECRET || process.env.CLOB_SECRET);
+  const passphrase = decryptIfEncrypted(poly.passphrase) ||
+    decryptIfEncrypted(process.env.POLYMARKET_PASSPHRASE || process.env.CLOB_PASS_PHRASE);
+  const authAddressEnv = String(
+    process.env.POLYMARKET_AUTH_ADDRESS || process.env.POLYMARKET_ADDRESS || ''
+  ).trim();
+  if (authAddressEnv && !isValidHexAddress(authAddressEnv)) {
+    throw new Error('POLYMARKET_AUTH_ADDRESS is set but invalid.');
+  }
+  const authAddress = authAddressEnv || address;
 
   if (!isValidHexAddress(address)) {
     throw new Error('Polymarket address is missing or invalid.');
   }
   if (!apiKey || !secret || !passphrase) {
-    throw new Error('Polymarket API credentials are required (apiKey, secret, passphrase).');
+    throw new Error(
+      'Polymarket credentials are required (apiKey, secret, passphrase). Provide them in the strategy or set POLYMARKET_* env vars.'
+    );
   }
 
   const lastTradeId = poly.lastTradeId ? String(poly.lastTradeId).trim() : null;
@@ -238,7 +250,7 @@ const syncPolymarketPortfolio = async (portfolio) => {
 
   while (nextCursor !== END_CURSOR && pendingTrades.length < MAX_TRADES_PER_SYNC && !foundLastTrade) {
     const page = await fetchTradesPage({
-      address,
+      authAddress,
       apiKey,
       secret,
       passphrase,

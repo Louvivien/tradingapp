@@ -2077,14 +2077,25 @@ exports.createPolymarketCopyTrader = async (req, res) => {
       });
     }
 
-    const apiKey = typeof req.body.apiKey === 'string' ? req.body.apiKey.trim() : '';
-    const secret = typeof req.body.secret === 'string' ? req.body.secret.trim() : '';
-    const passphrase = typeof req.body.passphrase === 'string' ? req.body.passphrase.trim() : '';
+    const apiKeyInput = typeof req.body.apiKey === 'string' ? req.body.apiKey.trim() : '';
+    const secretInput = typeof req.body.secret === 'string' ? req.body.secret.trim() : '';
+    const passphraseInput = typeof req.body.passphrase === 'string' ? req.body.passphrase.trim() : '';
+
+    const apiKeyEnv = String(process.env.POLYMARKET_API_KEY || process.env.CLOB_API_KEY || '').trim();
+    const secretEnv = String(process.env.POLYMARKET_SECRET || process.env.CLOB_SECRET || '').trim();
+    const passphraseEnv = String(
+      process.env.POLYMARKET_PASSPHRASE || process.env.CLOB_PASS_PHRASE || ''
+    ).trim();
+
+    const apiKey = apiKeyInput || apiKeyEnv;
+    const secret = secretInput || secretEnv;
+    const passphrase = passphraseInput || passphraseEnv;
 
     if (!apiKey || !secret || !passphrase) {
       return res.status(400).json({
         status: 'fail',
-        message: 'Polymarket apiKey, secret, and passphrase are required.',
+        message:
+          'Polymarket credentials are required. Provide apiKey/secret/passphrase or set POLYMARKET_API_KEY, POLYMARKET_SECRET, POLYMARKET_PASSPHRASE in server config.',
       });
     }
 
@@ -2144,9 +2155,10 @@ exports.createPolymarketCopyTrader = async (req, res) => {
       stocks: [],
       polymarket: {
         address,
-        apiKey: encryptIfPossible(apiKey),
-        secret: encryptIfPossible(secret),
-        passphrase: encryptIfPossible(passphrase),
+        // If the user provided explicit keys, store them encrypted; otherwise rely on server env vars.
+        apiKey: apiKeyInput ? encryptIfPossible(apiKey) : null,
+        secret: secretInput ? encryptIfPossible(secret) : null,
+        passphrase: passphraseInput ? encryptIfPossible(passphrase) : null,
         lastTradeMatchTime: now.toISOString(),
         lastTradeId: null,
       },

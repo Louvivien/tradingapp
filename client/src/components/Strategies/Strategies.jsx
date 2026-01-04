@@ -646,8 +646,12 @@ const Strategies = () => {
       return;
     }
 
-    if (!polymarketApiKey || !polymarketSecret || !polymarketPassphrase) {
-      setError("Please provide Polymarket apiKey, secret, and passphrase.");
+    const apiKeyValue = String(polymarketApiKey || "").trim();
+    const secretValue = String(polymarketSecret || "").trim();
+    const passphraseValue = String(polymarketPassphrase || "").trim();
+    const providedAnyCredential = Boolean(apiKeyValue || secretValue || passphraseValue);
+    if (providedAnyCredential && !(apiKeyValue && secretValue && passphraseValue)) {
+      setError("Provide apiKey, secret, and passphrase together (or leave all blank to use server .env keys).");
       return;
     }
 
@@ -672,11 +676,13 @@ const Strategies = () => {
         strategyName: polymarketStrategyName,
         address: polymarketAddress,
         cashLimit: polymarketCashLimit,
-        apiKey: polymarketApiKey,
-        secret: polymarketSecret,
-        passphrase: polymarketPassphrase,
         recurrence: polymarketRecurrence,
       };
+      if (providedAnyCredential) {
+        payload.apiKey = apiKeyValue;
+        payload.secret = secretValue;
+        payload.passphrase = passphraseValue;
+      }
 
       const response = await Axios.post(url, payload, { headers });
       if (response.status === 200 && response.data?.status === "success") {
@@ -1326,9 +1332,12 @@ const Strategies = () => {
 	                fullWidth
 	                margin="normal"
 	              />
+	              <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
+	                Leave apiKey / secret / passphrase blank to use the server `.env` Polymarket keys.
+	              </Typography>
 	              <TextField
 	                variant="outlined"
-	                label="Polymarket apiKey"
+	                label="Polymarket apiKey (optional override)"
 	                value={polymarketApiKey}
 	                onChange={(e) => setPolymarketApiKey(e.target.value)}
 	                fullWidth
@@ -1337,7 +1346,7 @@ const Strategies = () => {
 	              <TextField
 	                variant="outlined"
 	                type="password"
-	                label="Polymarket secret"
+	                label="Polymarket secret (optional override)"
 	                value={polymarketSecret}
 	                onChange={(e) => setPolymarketSecret(e.target.value)}
 	                fullWidth
@@ -1346,7 +1355,7 @@ const Strategies = () => {
 	              <TextField
 	                variant="outlined"
 	                type="password"
-	                label="Polymarket passphrase"
+	                label="Polymarket passphrase (optional override)"
 	                value={polymarketPassphrase}
 	                onChange={(e) => setPolymarketPassphrase(e.target.value)}
 	                fullWidth
