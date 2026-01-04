@@ -40,6 +40,13 @@ const POLYMARKET_HTTP_TIMEOUT_MS = (() => {
   }
   return Math.max(1000, Math.min(Math.floor(raw), 120000));
 })();
+const POLYMARKET_PROGRESS_LOG_EVERY_TRADES = (() => {
+  const raw = Number(process.env.POLYMARKET_PROGRESS_LOG_EVERY_TRADES);
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return 2000;
+  }
+  return Math.max(100, Math.min(Math.floor(raw), 20000));
+})();
 const ENCRYPTION_KEY = String(process.env.ENCRYPTION_KEY || process.env.CryptoJS_secret_key || '').trim() || null;
 
 const INITIAL_CURSOR = 'MA==';
@@ -132,6 +139,24 @@ const parseProxyUrl = (proxyUrl) => {
   return normalized.toString();
 };
 
+const sanitizeUrlForLog = (url) => {
+  const raw = String(url || '').trim();
+  if (!raw) {
+    return null;
+  }
+  try {
+    const parsed = new URL(raw);
+    parsed.username = '';
+    parsed.password = '';
+    parsed.pathname = '';
+    parsed.search = '';
+    parsed.hash = '';
+    return `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
+  } catch (error) {
+    return raw;
+  }
+};
+
 let cachedProxyPool = null;
 const getProxyPool = () => {
   if (cachedProxyPool !== null) {
@@ -151,6 +176,7 @@ const getProxyPool = () => {
       seen.add(proxyUrl);
       pool.push({
         url: proxyUrl,
+        display: sanitizeUrlForLog(proxyUrl),
         agent: new HttpsProxyAgent(proxyUrl),
       });
     } catch (error) {
@@ -482,6 +508,10 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
       : 'incremental';
   const resetPortfolio = mode === 'backfill' ? options?.reset !== false : false;
   const address = String(poly.address || '').trim();
+  const proxyPool = getProxyPool();
+  const proxyActive = proxyPool.length
+    ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
+    : null;
   const storedApiKey = decryptIfEncrypted(poly.apiKey);
   const storedSecret = decryptIfEncrypted(poly.secret);
   const storedPassphrase = decryptIfEncrypted(poly.passphrase);
@@ -523,10 +553,32 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
     ? (lastTradeMatchTime || now.toISOString())
     : null;
 
+  if (mode === 'backfill') {
+    await recordStrategyLog({
+      strategyId: portfolio.strategy_id,
+      userId: portfolio.userId,
+      strategyName: portfolio.name,
+      message: 'Polymarket backfill started',
+      details: {
+        provider: 'polymarket',
+        mode,
+        address,
+        resetPortfolio,
+        proxyMode: PROXY_MODE,
+        proxyCount: proxyPool.length,
+        proxyActive,
+        timeoutMs: POLYMARKET_HTTP_TIMEOUT_MS,
+        maxTrades: MAX_TRADES_PER_BACKFILL,
+      },
+    });
+  }
+
   let nextCursor = INITIAL_CURSOR;
   let foundLastTrade = false;
   let foundAnchor = false;
   const pendingTrades = [];
+  let pagesFetched = 0;
+  let nextProgressLogAt = POLYMARKET_PROGRESS_LOG_EVERY_TRADES;
 
   const fetchPage = async (cursor) => {
     try {
@@ -545,6 +597,7 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
 
   if (mode === 'backfill') {
     while (nextCursor !== END_CURSOR && pendingTrades.length < MAX_TRADES_PER_BACKFILL) {
+      pagesFetched += 1;
       const page = await fetchPage(nextCursor);
       const trades = Array.isArray(page?.data) ? page.data : [];
       if (!trades.length) {
@@ -566,9 +619,31 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
         break;
       }
       nextCursor = cursor;
+
+      if (pendingTrades.length >= nextProgressLogAt) {
+        const proxyActiveNow = proxyPool.length
+          ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
+          : null;
+        void recordStrategyLog({
+          strategyId: portfolio.strategy_id,
+          userId: portfolio.userId,
+          strategyName: portfolio.name,
+          message: 'Polymarket backfill downloading trades',
+          details: {
+            provider: 'polymarket',
+            mode,
+            tradesCollected: pendingTrades.length,
+            pagesFetched,
+            nextCursor,
+            proxyActive: proxyActiveNow,
+          },
+        });
+        nextProgressLogAt += POLYMARKET_PROGRESS_LOG_EVERY_TRADES;
+      }
     }
   } else {
     while (nextCursor !== END_CURSOR && pendingTrades.length < MAX_TRADES_PER_SYNC && !foundLastTrade) {
+      pagesFetched += 1;
       const page = await fetchPage(nextCursor);
 
       const trades = Array.isArray(page?.data) ? page.data : [];
@@ -624,6 +699,18 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
         backfillPending: false,
         backfilledAt: now.toISOString(),
       };
+      await recordStrategyLog({
+        strategyId: portfolio.strategy_id,
+        userId: portfolio.userId,
+        strategyName: portfolio.name,
+        message: 'Polymarket backfill completed (no trades found)',
+        details: {
+          provider: 'polymarket',
+          mode,
+          address,
+          pagesFetched,
+        },
+      });
     }
     portfolio.lastRebalancedAt = now;
     portfolio.nextRebalanceAt = computeNextRebalanceAt(normalizeRecurrence(portfolio.recurrence), now);
@@ -632,6 +719,22 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
   }
 
   const processedTrades = pendingTrades.slice().reverse();
+
+  if (mode === 'backfill') {
+    void recordStrategyLog({
+      strategyId: portfolio.strategy_id,
+      userId: portfolio.userId,
+      strategyName: portfolio.name,
+      message: 'Polymarket backfill replaying trades',
+      details: {
+        provider: 'polymarket',
+        mode,
+        tradesCollected: pendingTrades.length,
+        pagesFetched,
+      },
+    });
+  }
+
   const holdingsByAssetId = new Map();
   if (!resetPortfolio) {
     (portfolio.stocks || []).forEach((stock) => {
@@ -863,10 +966,6 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
         assetId,
         reason: 'unknown_side',
       });
-    }
-
-    if (conditionId) {
-      await ensureMarket(conditionId);
     }
   }
 

@@ -2215,25 +2215,59 @@ exports.createPolymarketCopyTrader = async (req, res) => {
       },
     });
 
-    // Best-effort initial sync: safe to ignore errors (geo-block/proxy/etc).
-    try {
-      const fresh = await Portfolio.findOne({ strategy_id, userId: userKey });
-      if (fresh) {
-        await syncPolymarketPortfolio(fresh, { mode: backfillRequested ? 'backfill' : 'incremental' });
+    const initialMode = backfillRequested ? 'backfill' : 'incremental';
+
+    await recordStrategyLog({
+      strategyId: strategy_id,
+      userId: userKey,
+      strategyName: rawName,
+      message: 'Polymarket initial sync queued',
+      details: {
+        provider: 'polymarket',
+        mode: initialMode,
+      },
+    });
+
+    // Run the initial sync asynchronously so the UI isn't blocked by a long backfill/proxy retries.
+    setImmediate(async () => {
+      try {
+        const fresh = await Portfolio.findOne({ strategy_id, userId: userKey });
+        if (!fresh) {
+          await recordStrategyLog({
+            strategyId: strategy_id,
+            userId: userKey,
+            strategyName: rawName,
+            level: 'warn',
+            message: 'Polymarket initial sync skipped (portfolio not found)',
+            details: { provider: 'polymarket', mode: initialMode },
+          });
+          return;
+        }
+
+        await recordStrategyLog({
+          strategyId: strategy_id,
+          userId: userKey,
+          strategyName: rawName,
+          message: 'Polymarket initial sync started',
+          details: { provider: 'polymarket', mode: initialMode },
+        });
+
+        await syncPolymarketPortfolio(fresh, { mode: initialMode });
+      } catch (error) {
+        await recordStrategyLog({
+          strategyId: strategy_id,
+          userId: userKey,
+          strategyName: rawName,
+          level: 'warn',
+          message: 'Polymarket initial sync failed',
+          details: {
+            provider: 'polymarket',
+            mode: initialMode,
+            error: String(error?.message || error),
+          },
+        });
       }
-    } catch (error) {
-      await recordStrategyLog({
-        strategyId: strategy_id,
-        userId: userKey,
-        strategyName: rawName,
-        level: 'warn',
-        message: 'Polymarket initial sync failed',
-        details: {
-          provider: 'polymarket',
-          error: String(error?.message || error),
-        },
-      });
-    }
+    });
 
     return res.status(200).json({
       status: 'success',
