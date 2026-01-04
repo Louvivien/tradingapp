@@ -4,9 +4,12 @@ import { Typography } from "@mui/material/";
 import Title from "../Template/Title.jsx";
 import styles from "./Dashboard.module.css";
 
-const Balance = ({ purchasedStocks = [], accountBalance = 0 }) => {
+const Balance = ({ purchasedStocks = [], accountBalance = 0, polymarketVirtualFunds = 0 }) => {
   const { userData } = useContext(UserContext);
   const [portfolioBalance, setPortfolioBalance] = useState(0);
+  const cashBalance = Number(accountBalance) || 0;
+  const polymarketBalance = Number(polymarketVirtualFunds) || 0;
+  const totalBalance = cashBalance + portfolioBalance + polymarketBalance;
 
   const getPortfolioBalance = () => {
     let total = 0;
@@ -43,6 +46,13 @@ const Balance = ({ purchasedStocks = [], accountBalance = 0 }) => {
         <Typography component="p" variant="h6" align="center" gutterBottom>
           ${portfolioBalance.toLocaleString()}
         </Typography>
+        <Typography color="textSecondary" align="center">
+          Polymarket Virtual Funds:
+        </Typography>
+
+        <Typography component="p" variant="h6" align="center" gutterBottom>
+          ${polymarketBalance ? polymarketBalance.toLocaleString() : "$---"}
+        </Typography>
         <div className={styles.addMargin}>
           <Typography color="textSecondary" align="center">
             Total:
@@ -53,12 +63,12 @@ const Balance = ({ purchasedStocks = [], accountBalance = 0 }) => {
             variant="h4"
             align="center"
             className={
-              +(accountBalance/1 + portfolioBalance) >= 100000
+              totalBalance >= 100000
                 ? styles.positive
                 : styles.negative
             }
           >
-            ${accountBalance ? (+(accountBalance/1 + portfolioBalance)).toLocaleString() : "---"}
+            ${totalBalance ? totalBalance.toLocaleString() : "---"}
           </Typography>
         </div>
       </div>

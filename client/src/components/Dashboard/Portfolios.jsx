@@ -654,23 +654,27 @@ const deleteStrategy = async (strategyId) => {
                 >
                   View Logs
                 </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  sx={{ ml: 1 }}
-                  onClick={(event) => openBacktestDialog(portfolio, event)}
-                >
-                  Backtest
-                </Button>
-                <Button
-                  size="small"
-                  variant="outlined"
-                  sx={{ ml: 1 }}
-                  onClick={(event) => openResendModal(portfolio, event)}
-                  disabled={!!resendStatus[portfolio.strategy_id]?.loading}
-                >
-                  {resendStatus[portfolio.strategy_id]?.loading ? 'Resending…' : 'Resend Orders'}
-                </Button>
+                {portfolio.provider !== "polymarket" && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    sx={{ ml: 1 }}
+                    onClick={(event) => openBacktestDialog(portfolio, event)}
+                  >
+                    Backtest
+                  </Button>
+                )}
+                {portfolio.provider !== "polymarket" && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    sx={{ ml: 1 }}
+                    onClick={(event) => openResendModal(portfolio, event)}
+                    disabled={!!resendStatus[portfolio.strategy_id]?.loading}
+                  >
+                    {resendStatus[portfolio.strategy_id]?.loading ? 'Resending…' : 'Resend Orders'}
+                  </Button>
+                )}
 
 
 
@@ -858,7 +862,11 @@ const deleteStrategy = async (strategyId) => {
                         return (
                           <TableRow key={stock.symbol}>
                             <TableCell>
-                              <Link onClick={() => openSaleModal(stock)}>{stock.symbol}</Link>
+                              {portfolio.provider === "polymarket" ? (
+                                <span>{stock.symbol}</span>
+                              ) : (
+                                <Link onClick={() => openSaleModal(stock)}>{stock.symbol}</Link>
+                              )}
                             </TableCell>
                             <TableCell align="right">—</TableCell>
                             <TableCell>{stock.quantity || "----"}</TableCell>
@@ -870,7 +878,11 @@ const deleteStrategy = async (strategyId) => {
                       return (
                         <TableRow key={stock.symbol}>
                           <TableCell>
-                            <Link onClick={() => openSaleModal(stock)}>{stock.symbol}</Link>
+                            {portfolio.provider === "polymarket" ? (
+                              <span>{stock.symbol}</span>
+                            ) : (
+                              <Link onClick={() => openSaleModal(stock)}>{stock.symbol}</Link>
+                            )}
                           </TableCell>
                           <TableCell align="right">
                             {allocationRatio !== null ? formatPct(allocationRatio) : "----"}

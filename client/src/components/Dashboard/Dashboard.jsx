@@ -31,6 +31,16 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState(null);
   const [portfolios, setPortfolios] = useState([]);
+  const polymarketVirtualFunds = (portfolios || []).reduce((sum, portfolio) => {
+    if (portfolio?.provider !== "polymarket") {
+      return sum;
+    }
+    const cash = Number(portfolio?.cashBuffer ?? 0);
+    const value = portfolio?.currentValue === null || portfolio?.currentValue === undefined
+      ? 0
+      : Number(portfolio.currentValue);
+    return sum + (Number.isFinite(cash) ? cash : 0) + (Number.isFinite(value) ? value : 0);
+  }, 0);
 
   // Function to get the list of purchased stocks from the server using Alpacas API
   const getPurchasedStocks = async () => {
@@ -132,7 +142,11 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
         {/* Balance */}
         <Grid item xs={12} md={4} lg={3}>
           <FixedHeightPaper>
-          <Balance accountBalance={accountBalance} purchasedStocks={purchasedStocks} />
+          <Balance
+            accountBalance={accountBalance}
+            purchasedStocks={purchasedStocks}
+            polymarketVirtualFunds={polymarketVirtualFunds}
+          />
           </FixedHeightPaper>
         </Grid>
 

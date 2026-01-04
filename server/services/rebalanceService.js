@@ -5,6 +5,7 @@ const { getAlpacaConfig } = require('../config/alpacaConfig');
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('./strategyLogger');
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
+const { syncPolymarketPortfolio } = require('./polymarketCopyService');
 
 const TOLERANCE = 0.01;
 const FRACTIONAL_QTY_DECIMALS = 6;
@@ -2116,7 +2117,12 @@ const runDueRebalances = async () => {
 
       for (const portfolio of duePortfolios) {
         try {
-          await rebalancePortfolio(portfolio);
+          const provider = String(portfolio.provider || 'alpaca');
+          if (provider === 'polymarket') {
+            await syncPolymarketPortfolio(portfolio);
+          } else {
+            await rebalancePortfolio(portfolio);
+          }
         } catch (error) {
           console.error(`[Rebalance] Failed for portfolio ${portfolio._id}:`, error.message);
           await recordStrategyLog({
@@ -2124,8 +2130,13 @@ const runDueRebalances = async () => {
             userId: portfolio.userId,
             strategyName: portfolio.name,
             level: 'error',
-            message: 'Portfolio rebalance failed',
-            details: { error: error.message },
+            message: String(portfolio.provider || 'alpaca') === 'polymarket'
+              ? 'Polymarket sync failed'
+              : 'Portfolio rebalance failed',
+            details: {
+              provider: String(portfolio.provider || 'alpaca'),
+              error: error.message,
+            },
           });
         }
       }
@@ -2149,7 +2160,12 @@ const rebalanceNow = async ({ strategyId, userId }) => withRebalanceLock(async (
   }
   // Manual "rebalance now" should bypass the default end-of-day window once.
   portfolio.nextRebalanceManual = true;
-  await rebalancePortfolio(portfolio);
+  const provider = String(portfolio.provider || 'alpaca');
+  if (provider === 'polymarket') {
+    await syncPolymarketPortfolio(portfolio);
+  } else {
+    await rebalancePortfolio(portfolio);
+  }
 });
 
 const isRebalanceLocked = () => rebalanceInProgress;

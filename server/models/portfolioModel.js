@@ -8,6 +8,11 @@ const portfolioSchema = new Schema({
     index: true,
     required: false,
   },
+  provider: {
+    type: String,
+    index: true,
+    default: 'alpaca',
+  },
   name: {
     type: String,
     required: true,
@@ -114,6 +119,18 @@ const portfolioSchema = new Schema({
         type: String,
         required: true,
       },
+      market: {
+        type: String,
+        default: null,
+      },
+      asset_id: {
+        type: String,
+        default: null,
+      },
+      outcome: {
+        type: String,
+        default: null,
+      },
       avgCost: {
         type: Number,
         default: null,
@@ -128,6 +145,38 @@ const portfolioSchema = new Schema({
       },
     }],
     default: [],
+  },
+  polymarket: {
+    address: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    apiKey: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    secret: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    passphrase: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    lastTradeMatchTime: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    lastTradeId: {
+      type: String,
+      default: null,
+      trim: true,
+    },
   },
   budget: {
     type: Number,

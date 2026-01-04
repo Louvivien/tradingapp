@@ -11,6 +11,7 @@ const Alpaca = require('@alpacahq/alpaca-trade-api');
 const axios = require("axios");
 const moment = require('moment');
 const crypto = require('crypto');
+const CryptoJS = require('crypto-js');
 const jwt = require('jsonwebtoken');
 const extractGPT = require("../utils/ChatGPTplugins");
 const { spawn } = require('child_process');
@@ -27,6 +28,7 @@ const {
   fetchNextMarketSessionAfter,
   alignToRebalanceWindowStart,
 } = require('../services/rebalanceService');
+const { syncPolymarketPortfolio, isValidHexAddress } = require('../services/polymarketCopyService');
 const { runEquityBackfill, TASK_NAME: EQUITY_BACKFILL_TASK } = require('../services/equityBackfillService');
 const {
   addSubscriber,
@@ -1470,6 +1472,8 @@ exports.createCollaborative = async (req, res) => {
           message: "Portfolio not found",
         });
       }
+
+      const provider = String(portfolio.provider || 'alpaca');
   
       // Delete the strategy
       await Strategy.deleteOne({
@@ -1498,6 +1502,28 @@ exports.createCollaborative = async (req, res) => {
           message: "An error occurred while deleting the portfolio",
         });
       });
+
+      if (provider === 'polymarket') {
+        await recordStrategyLog({
+          strategyId,
+          userId: userKey,
+          strategyName: strategy.name,
+          message: 'Polymarket strategy deleted',
+          details: {
+            provider,
+            liquidationAttempted: false,
+            humanSummary: [
+              `Polymarket strategy \"${strategy.name}\" deleted.`,
+              '• This strategy is paper-only; no live Polymarket orders were sent.',
+            ].join('\n'),
+          },
+        });
+        return res.status(200).json({
+          status: 'success',
+          message: 'Strategy deleted.',
+          sellOrders: [],
+        });
+      }
   
       const alpacaConfig = await getAlpacaConfig(UserID);
       const alpacaApi = new Alpaca(alpacaConfig);
@@ -2007,6 +2033,187 @@ exports.disableAIFund = async (req, res) => {
 };
 
 
+exports.createPolymarketCopyTrader = async (req, res) => {
+  try {
+    const UserID = req.body.userID;
+    const userKey = String(UserID || '');
+    if (!userKey || req.user !== userKey) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const rawName = typeof req.body.strategyName === 'string' ? req.body.strategyName.trim() : '';
+    if (!rawName) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Please provide a name for this strategy.',
+      });
+    }
+
+    const cashLimit = toNumber(req.body.cashLimit, null);
+    if (!cashLimit || cashLimit <= 0) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Please provide a positive cash limit.',
+      });
+    }
+
+    const recurrence = req.body.recurrence || 'every_minute';
+    if (recurrence && !VALID_RECURRENCES.has(String(recurrence))) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Recurrence value is not supported.',
+      });
+    }
+    const normalizedRecurrence = normalizeRecurrence(recurrence);
+
+    const address = typeof req.body.address === 'string' ? req.body.address.trim() : '';
+    if (!isValidHexAddress(address)) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Please provide a valid Polymarket address (0x…).',
+      });
+    }
+
+    const apiKey = typeof req.body.apiKey === 'string' ? req.body.apiKey.trim() : '';
+    const secret = typeof req.body.secret === 'string' ? req.body.secret.trim() : '';
+    const passphrase = typeof req.body.passphrase === 'string' ? req.body.passphrase.trim() : '';
+
+    if (!apiKey || !secret || !passphrase) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Polymarket apiKey, secret, and passphrase are required.',
+      });
+    }
+
+    const encryptionKey = String(process.env.ENCRYPTION_KEY || process.env.CryptoJS_secret_key || '').trim();
+    const encryptIfPossible = (value) => {
+      const raw = String(value || '').trim();
+      if (!raw) {
+        return raw;
+      }
+      if (raw.startsWith('U2Fsd')) {
+        return raw;
+      }
+      if (!encryptionKey) {
+        return raw;
+      }
+      try {
+        return CryptoJS.AES.encrypt(raw, encryptionKey).toString();
+      } catch (error) {
+        return raw;
+      }
+    };
+
+    const now = new Date();
+    const strategy_id = crypto.randomBytes(16).toString('hex');
+
+    const strategy = new Strategy({
+      userId: userKey,
+      provider: 'polymarket',
+      name: rawName,
+      strategy: 'Polymarket copy trader (paper)',
+      strategy_id,
+      recurrence: normalizedRecurrence,
+      summary: 'Copies trades from a Polymarket account into a paper portfolio.',
+      decisions: [],
+      symphonyUrl: null,
+    });
+
+    await strategy.save();
+
+    const portfolio = new Portfolio({
+      userId: userKey,
+      provider: 'polymarket',
+      name: rawName,
+      strategy_id,
+      recurrence: normalizedRecurrence,
+      initialInvestment: cashLimit,
+      cashBuffer: cashLimit,
+      retainedCash: cashLimit,
+      lastRebalancedAt: null,
+      nextRebalanceAt: computeNextRebalanceAt(normalizedRecurrence, now),
+      budget: cashLimit,
+      cashLimit: cashLimit,
+      rebalanceCount: 0,
+      pnlValue: 0,
+      pnlPercent: 0,
+      lastPerformanceComputedAt: now,
+      stocks: [],
+      polymarket: {
+        address,
+        apiKey: encryptIfPossible(apiKey),
+        secret: encryptIfPossible(secret),
+        passphrase: encryptIfPossible(passphrase),
+        lastTradeMatchTime: now.toISOString(),
+        lastTradeId: null,
+      },
+    });
+
+    await portfolio.save();
+
+    await recordStrategyLog({
+      strategyId: strategy_id,
+      userId: userKey,
+      strategyName: rawName,
+      message: 'Polymarket strategy created',
+      details: {
+        provider: 'polymarket',
+        recurrence: normalizedRecurrence,
+        nextRebalanceAt: portfolio.nextRebalanceAt,
+        cashLimit,
+        address,
+      },
+    });
+
+    // Best-effort initial sync: safe to ignore errors (geo-block/proxy/etc).
+    try {
+      const fresh = await Portfolio.findOne({ strategy_id, userId: userKey });
+      if (fresh) {
+        await syncPolymarketPortfolio(fresh);
+      }
+    } catch (error) {
+      await recordStrategyLog({
+        strategyId: strategy_id,
+        userId: userKey,
+        strategyName: rawName,
+        level: 'warn',
+        message: 'Polymarket initial sync failed',
+        details: {
+          provider: 'polymarket',
+          error: String(error?.message || error),
+        },
+      });
+    }
+
+    return res.status(200).json({
+      status: 'success',
+      message: 'Polymarket strategy created.',
+      strategyId: strategy_id,
+      schedule: {
+        recurrence: normalizedRecurrence,
+        nextRebalanceAt: portfolio.nextRebalanceAt,
+      },
+    });
+  } catch (error) {
+    const isDuplicate = error?.code === 11000;
+    if (isDuplicate) {
+      return res.status(409).json({
+        status: 'fail',
+        message: 'A strategy with this name already exists.',
+      });
+    }
+    console.error('[Polymarket] Failed to create strategy:', error.message);
+    return res.status(500).json({
+      status: 'fail',
+      message: error.message || 'Failed to create Polymarket strategy.',
+    });
+  }
+};
+
+
 
 exports.getStrategyLogs = async (req, res) => {
   try {
@@ -2275,36 +2482,39 @@ exports.updateNextRebalanceDate = async (req, res) => {
       });
     }
 
-    const alpacaConfig = await getAlpacaConfig(userId);
-    if (!alpacaConfig?.hasValidKeys) {
-      return res.status(400).json({
-        status: 'fail',
-        message: 'Invalid Alpaca credentials; cannot validate market hours for scheduling.',
-      });
-    }
-    const tradingKeys = alpacaConfig.getTradingKeys();
-    const session = await fetchNextMarketSessionAfter(tradingKeys, parsedDate);
-    if (!session?.activeSession) {
-      return res.status(400).json({
-        status: 'fail',
-        message: 'Manual reschedule must be within market open hours on a trading day.',
-      });
-    }
-    const openTime = session.activeSession.open;
-    const closeTime = session.activeSession.close;
-    if (!openTime || !closeTime || parsedDate < openTime || parsedDate >= closeTime) {
-      return res.status(400).json({
-        status: 'fail',
-        message: 'Manual reschedule must be within market open hours on a trading day.',
-      });
-    }
-
     const portfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: String(userId) });
     if (!portfolio) {
       return res.status(404).json({
         status: 'fail',
         message: 'Portfolio not found for this strategy.',
       });
+    }
+
+    const provider = String(portfolio.provider || 'alpaca');
+    if (provider !== 'polymarket') {
+      const alpacaConfig = await getAlpacaConfig(userId);
+      if (!alpacaConfig?.hasValidKeys) {
+        return res.status(400).json({
+          status: 'fail',
+          message: 'Invalid Alpaca credentials; cannot validate market hours for scheduling.',
+        });
+      }
+      const tradingKeys = alpacaConfig.getTradingKeys();
+      const session = await fetchNextMarketSessionAfter(tradingKeys, parsedDate);
+      if (!session?.activeSession) {
+        return res.status(400).json({
+          status: 'fail',
+          message: 'Manual reschedule must be within market open hours on a trading day.',
+        });
+      }
+      const openTime = session.activeSession.open;
+      const closeTime = session.activeSession.close;
+      if (!openTime || !closeTime || parsedDate < openTime || parsedDate >= closeTime) {
+        return res.status(400).json({
+          status: 'fail',
+          message: 'Manual reschedule must be within market open hours on a trading day.',
+        });
+      }
     }
 
     portfolio.nextRebalanceAt = parsedDate;
@@ -3003,49 +3213,54 @@ exports.getPortfolios = async (req, res) => {
       });
     }
 
-    const alpacaConfig = await getAlpacaConfig(userId);
-    if (!alpacaConfig?.hasValidKeys) {
-      return res.status(403).json({
-        status: 'fail',
-        message: alpacaConfig?.error || 'Invalid Alpaca credentials',
-      });
-    }
-
-    const tradingKeys = alpacaConfig.getTradingKeys();
-    const dataKeys = alpacaConfig.getDataKeys();
-
-    const [positionsResponse, accountResponse] = await Promise.all([
-      tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
-        headers: {
-          'APCA-API-KEY-ID': tradingKeys.keyId,
-          'APCA-API-SECRET-KEY': tradingKeys.secretKey,
-        },
-      }),
-      tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/account`, {
-        headers: {
-          'APCA-API-KEY-ID': tradingKeys.keyId,
-          'APCA-API-SECRET-KEY': tradingKeys.secretKey,
-        },
-      }),
-    ]);
-
-    const accountCash = toNumber(accountResponse?.data?.cash, 0);
-    const positions = Array.isArray(positionsResponse.data) ? positionsResponse.data : [];
-
+    let accountCash = 0;
+    let positions = [];
     const positionMap = {};
     const priceCache = {};
+    let tradingKeys = null;
+    let dataKeys = null;
 
-    positions.forEach((position) => {
-      const symbol = sanitizeSymbol(position.symbol);
-      if (!symbol) {
-        return;
-      }
-      positionMap[symbol] = position;
-      const price = toNumber(position.current_price, toNumber(position.avg_entry_price, null));
-      if (price) {
-        priceCache[symbol] = price;
-      }
-    });
+    let alpacaConfig = null;
+    try {
+      alpacaConfig = await getAlpacaConfig(userId);
+    } catch (error) {
+      alpacaConfig = null;
+    }
+
+    if (alpacaConfig?.hasValidKeys) {
+      tradingKeys = alpacaConfig.getTradingKeys();
+      dataKeys = alpacaConfig.getDataKeys();
+
+      const [positionsResponse, accountResponse] = await Promise.all([
+        tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
+          headers: {
+            'APCA-API-KEY-ID': tradingKeys.keyId,
+            'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+          },
+        }),
+        tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/account`, {
+          headers: {
+            'APCA-API-KEY-ID': tradingKeys.keyId,
+            'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+          },
+        }),
+      ]);
+
+      accountCash = toNumber(accountResponse?.data?.cash, 0);
+      positions = Array.isArray(positionsResponse.data) ? positionsResponse.data : [];
+
+      positions.forEach((position) => {
+        const symbol = sanitizeSymbol(position.symbol);
+        if (!symbol) {
+          return;
+        }
+        positionMap[symbol] = position;
+        const price = toNumber(position.current_price, toNumber(position.avg_entry_price, null));
+        if (price) {
+          priceCache[symbol] = price;
+        }
+      });
+    }
 
     const rawPortfolios = await Portfolio.find({
       userId: String(userId),
@@ -3061,6 +3276,9 @@ exports.getPortfolios = async (req, res) => {
 
     const symbolsToFetch = new Set();
     rawPortfolios.forEach((portfolio) => {
+      if (String(portfolio?.provider || 'alpaca') === 'polymarket') {
+        return;
+      }
       (portfolio.stocks || []).forEach((stock) => {
         const symbol = sanitizeSymbol(stock.symbol);
         if (symbol && priceCache[symbol] == null) {
@@ -3075,7 +3293,7 @@ exports.getPortfolios = async (req, res) => {
       });
     });
 
-    if (symbolsToFetch.size) {
+    if (symbolsToFetch.size && dataKeys) {
       const headers = {
         'APCA-API-KEY-ID': dataKeys.keyId,
         'APCA-API-SECRET-KEY': dataKeys.secretKey,
@@ -3132,6 +3350,7 @@ exports.getPortfolios = async (req, res) => {
       });
     }
     const enhancedPortfolios = rawPortfolios.map((portfolio) => {
+      const provider = String(portfolio?.provider || 'alpaca');
       let normalizedTargets = normalizeTargetPositions(portfolio.targetPositions || []);
       if (!normalizedTargets.length) {
         normalizedTargets = normalizeTargetPositions(
@@ -3144,6 +3363,46 @@ exports.getPortfolios = async (req, res) => {
       }
 
       const stocks = (portfolio.stocks || []).map((stock) => {
+        if (provider === 'polymarket') {
+          const symbol = stock?.symbol ? String(stock.symbol).trim() : '';
+          const storedQuantity = stock.quantity !== undefined && stock.quantity !== null
+            ? toNumber(stock.quantity, 0)
+            : 0;
+          const storedAvgCost = stock.avgCost === null || stock.avgCost === undefined
+            ? null
+            : toNumber(stock.avgCost, null);
+          const storedCurrent = stock.currentPrice === null || stock.currentPrice === undefined
+            ? null
+            : toNumber(stock.currentPrice, null);
+          const hasPendingOrder = storedQuantity > 0 && (storedAvgCost === null || storedCurrent === null);
+
+          const quantity = storedQuantity;
+          const avgCost = hasPendingOrder
+            ? null
+            : storedAvgCost !== null
+              ? storedAvgCost
+              : storedCurrent;
+          const currentPrice = hasPendingOrder
+            ? null
+            : storedCurrent !== null
+              ? storedCurrent
+              : storedAvgCost;
+
+          return {
+            symbol: symbol || (stock?.asset_id ? String(stock.asset_id) : null),
+            market: stock?.market ? String(stock.market) : null,
+            asset_id: stock?.asset_id ? String(stock.asset_id) : null,
+            outcome: stock?.outcome ? String(stock.outcome) : null,
+            avgCost,
+            quantity,
+            currentPrice,
+            orderID: stock.orderID || null,
+            pendingQuantity: hasPendingOrder ? storedQuantity : 0,
+            pending: Boolean(hasPendingOrder),
+            currentTotal: currentPrice !== null ? quantity * currentPrice : null,
+          };
+        }
+
         const symbol = sanitizeSymbol(stock.symbol);
         const alpacaPosition = symbol ? positionMap[symbol] : null;
         const storedQuantity = stock.quantity !== undefined && stock.quantity !== null
@@ -3221,6 +3480,7 @@ exports.getPortfolios = async (req, res) => {
           : (initialInvestment > 0 ? (pnlValue / initialInvestment) * 100 : null);
 
       return {
+        provider,
         name: portfolio.name,
         strategy_id: portfolio.strategy_id,
         symphonyUrl: symphonyUrlByStrategyId.get(String(portfolio.strategy_id || '')) || null,
@@ -3813,6 +4073,7 @@ exports.getStrategies = async (req, res) => {
       strategies: strategies.map((strategy) => ({
         id: strategy.strategy_id,
         name: strategy.name,
+        provider: strategy.provider || 'alpaca',
         symphonyUrl: strategy.symphonyUrl || null,
         recurrence: strategy.recurrence,
         strategy: strategy.strategy,

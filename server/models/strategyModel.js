@@ -9,6 +9,11 @@ const strategySchema = new Schema(
       index: true,
       default: null,
     },
+    provider: {
+      type: String,
+      index: true,
+      default: 'alpaca',
+    },
     name: {
       type: String,
       required: true,

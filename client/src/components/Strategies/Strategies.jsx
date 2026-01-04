@@ -65,6 +65,15 @@ const Strategies = () => {
   const [strategyName, setstrategyName] = useState("");
   const [symphonyUrl, setSymphonyUrl] = useState("");
   const [collaborativeCashLimit, setCollaborativeCashLimit] = useState("");
+  const [polymarketStrategyName, setPolymarketStrategyName] = useState("");
+  const [polymarketAddress, setPolymarketAddress] = useState("");
+  const [polymarketCashLimit, setPolymarketCashLimit] = useState("");
+  const [polymarketApiKey, setPolymarketApiKey] = useState("");
+  const [polymarketSecret, setPolymarketSecret] = useState("");
+  const [polymarketPassphrase, setPolymarketPassphrase] = useState("");
+  const [polymarketRecurrence, setPolymarketRecurrence] = useState("every_minute");
+  const [polymarketSchedule, setPolymarketSchedule] = useState(null);
+  const [polymarketResponseReceived, setPolymarketResponseReceived] = useState(false);
   const [responseReceived, setResponseReceived] = useState(false);
   const { userData, setUserData } = useContext(UserContext);
   const authToken = userData?.token;
@@ -195,7 +204,7 @@ const Strategies = () => {
       sourceType: item.sourceType || "template",
     }));
     const portfolios = savedStrategies
-      .filter((item) => !item.isAIFund)
+      .filter((item) => !item.isAIFund && item.provider !== "polymarket")
       .map((item) => ({
         ...item,
         sourceType: "portfolio",
@@ -447,6 +456,7 @@ const Strategies = () => {
 
   const handleChange = (event, newValue) => {
     setValue(newValue);
+    setError(null);
   };
 
 
@@ -620,17 +630,83 @@ const Strategies = () => {
 
 
 
-return (
-  <Container sx={{ pt: 8, pb: 8 }}>
-    <Typography variant="subtitle1">Add a trading strategy for automated trading</Typography>
+  const handlePolymarketSubmit = async () => {
+    if (!polymarketStrategyName || !polymarketStrategyName.trim()) {
+      setError("Please provide a strategy name.");
+      return;
+    }
+
+    if (!polymarketAddress || !polymarketAddress.trim()) {
+      setError("Please provide a Polymarket address.");
+      return;
+    }
+
+    if (!polymarketCashLimit || Number(polymarketCashLimit) <= 0) {
+      setError("Please provide a positive cash limit.");
+      return;
+    }
+
+    if (!polymarketApiKey || !polymarketSecret || !polymarketPassphrase) {
+      setError("Please provide Polymarket apiKey, secret, and passphrase.");
+      return;
+    }
+
+    if (!authToken || !userId) {
+      setError("Please log in again.");
+      return;
+    }
+
+    setError(null);
+    setPolymarketResponseReceived(false);
+    setPolymarketSchedule(null);
+    setLoading(true);
+
+    const headers = {
+      "x-auth-token": authToken,
+    };
+    const url = config.base_url + "/api/strategies/polymarket/";
+
+    try {
+      const payload = {
+        userID: userId,
+        strategyName: polymarketStrategyName,
+        address: polymarketAddress,
+        cashLimit: polymarketCashLimit,
+        apiKey: polymarketApiKey,
+        secret: polymarketSecret,
+        passphrase: polymarketPassphrase,
+        recurrence: polymarketRecurrence,
+      };
+
+      const response = await Axios.post(url, payload, { headers });
+      if (response.status === 200 && response.data?.status === "success") {
+        setPolymarketResponseReceived(true);
+        setPolymarketSchedule(response.data.schedule || null);
+        await fetchStrategies();
+      } else {
+        setError(response.data?.message || "Failed to create Polymarket strategy.");
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message || "Failed to create Polymarket strategy.");
+      setPolymarketSchedule(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+
+	return (
+	  <Container sx={{ pt: 8, pb: 8 }}>
+	    <Typography variant="subtitle1">Add a trading strategy for automated trading</Typography>
 
     <br />
     <br />
 
-    <Tabs value={value} onChange={handleChange} aria-label="strategy tabs">
-      <Tab label="AI Fund Strategy" />
-      <Tab label="Collaborative Strategy" />
-    </Tabs>
+	    <Tabs value={value} onChange={handleChange} aria-label="strategy tabs">
+	      <Tab label="AI Fund Strategy" />
+	      <Tab label="Collaborative Strategy" />
+	      <Tab label="Polymarket Strategy" />
+	    </Tabs>
     {value === 0 && (
       <StyledPaper>
         <Box>
@@ -1189,11 +1265,121 @@ return (
 
         )}
 
-    </Box>
-    </StyledPaper>
-    )}
+	    </Box>
+	    </StyledPaper>
+	    )}
 
-  </Container>
+	    {value === 2 && (
+	      <StyledPaper>
+	        <Box>
+	          <Title>Polymarket strategy</Title>
+	          <Typography color="textSecondary" align="left">
+	            Copy trades from a Polymarket account into a paper portfolio.
+	          </Typography>
+
+	          {loading ? (
+	            <Box sx={{ mt: 2 }}>
+	              <CircularProgress size={24} />
+	            </Box>
+	          ) : polymarketResponseReceived ? (
+	            <Box sx={{ mt: 2 }}>
+	              <Typography variant="h6">Polymarket strategy successfully added.</Typography>
+	              {polymarketSchedule && (
+	                <Typography variant="body2" sx={{ mt: 1 }}>
+	                  Frequency: {formatRecurrenceLabel(polymarketSchedule.recurrence)} · Next sync:{" "}
+	                  {formatDateTime(polymarketSchedule.nextRebalanceAt)}
+	                </Typography>
+	              )}
+	              <Typography variant="body2" sx={{ mt: 2 }}>
+	                Note: If Polymarket requests are geo-blocked from your region, you may need a VPN/proxy.
+	              </Typography>
+	            </Box>
+	          ) : (
+	            <Box sx={{ mt: 2 }}>
+	              {error && (
+	                <Typography color="error" sx={{ mb: 2 }}>
+	                  {error}
+	                </Typography>
+	              )}
+
+	              <TextField
+	                variant="outlined"
+	                label="Strategy name"
+	                value={polymarketStrategyName}
+	                onChange={(e) => setPolymarketStrategyName(e.target.value)}
+	                fullWidth
+	                margin="normal"
+	              />
+	              <TextField
+	                variant="outlined"
+	                label="Polymarket address (0x...)"
+	                value={polymarketAddress}
+	                onChange={(e) => setPolymarketAddress(e.target.value)}
+	                fullWidth
+	                margin="normal"
+	              />
+	              <TextField
+	                variant="outlined"
+	                label="Cash limit (virtual USDC)"
+	                value={polymarketCashLimit}
+	                onChange={(e) => setPolymarketCashLimit(e.target.value)}
+	                fullWidth
+	                margin="normal"
+	              />
+	              <TextField
+	                variant="outlined"
+	                label="Polymarket apiKey"
+	                value={polymarketApiKey}
+	                onChange={(e) => setPolymarketApiKey(e.target.value)}
+	                fullWidth
+	                margin="normal"
+	              />
+	              <TextField
+	                variant="outlined"
+	                type="password"
+	                label="Polymarket secret"
+	                value={polymarketSecret}
+	                onChange={(e) => setPolymarketSecret(e.target.value)}
+	                fullWidth
+	                margin="normal"
+	              />
+	              <TextField
+	                variant="outlined"
+	                type="password"
+	                label="Polymarket passphrase"
+	                value={polymarketPassphrase}
+	                onChange={(e) => setPolymarketPassphrase(e.target.value)}
+	                fullWidth
+	                margin="normal"
+	              />
+	              <TextField
+	                select
+	                variant="outlined"
+	                label="Sync frequency"
+	                value={polymarketRecurrence}
+	                onChange={(e) => setPolymarketRecurrence(e.target.value)}
+	                fullWidth
+	                margin="normal"
+	              >
+	                {RECURRENCE_OPTIONS.map((option) => (
+	                  <MenuItem key={option.value} value={option.value}>
+	                    {option.label}
+	                  </MenuItem>
+	                ))}
+	              </TextField>
+
+	              <Box sx={{ mt: 2 }}>
+	                <Button variant="contained" color="primary" onClick={handlePolymarketSubmit}>
+	                  Create this strategy
+	                </Button>
+	              </Box>
+	            </Box>
+	          )}
+	        </Box>
+	      </StyledPaper>
+	    )}
+
+	  </Container>
 );
 };
 
