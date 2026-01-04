@@ -5,7 +5,7 @@ const { getAlpacaConfig } = require('../config/alpacaConfig');
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('./strategyLogger');
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
-const { syncPolymarketPortfolio } = require('./polymarketCopyService');
+const { syncPolymarketPortfolio, summarizeProxyMeta } = require('./polymarketCopyService');
 
 const TOLERANCE = 0.01;
 const FRACTIONAL_QTY_DECIMALS = 6;
@@ -2125,17 +2125,21 @@ const runDueRebalances = async () => {
           }
         } catch (error) {
           console.error(`[Rebalance] Failed for portfolio ${portfolio._id}:`, error.message);
+          const provider = String(portfolio.provider || 'alpaca');
           await recordStrategyLog({
             strategyId: portfolio.strategy_id,
             userId: portfolio.userId,
             strategyName: portfolio.name,
             level: 'error',
-            message: String(portfolio.provider || 'alpaca') === 'polymarket'
+            message: provider === 'polymarket'
               ? 'Polymarket sync failed'
               : 'Portfolio rebalance failed',
             details: {
-              provider: String(portfolio.provider || 'alpaca'),
+              provider,
               error: error.message,
+              ...(provider === 'polymarket'
+                ? { request: summarizeProxyMeta(error?.polymarketProxyMeta) }
+                : {}),
             },
           });
         }

@@ -28,7 +28,7 @@ const {
   fetchNextMarketSessionAfter,
   alignToRebalanceWindowStart,
 } = require('../services/rebalanceService');
-const { syncPolymarketPortfolio, isValidHexAddress } = require('../services/polymarketCopyService');
+const { syncPolymarketPortfolio, isValidHexAddress, summarizeProxyMeta } = require('../services/polymarketCopyService');
 const { runEquityBackfill, TASK_NAME: EQUITY_BACKFILL_TASK } = require('../services/equityBackfillService');
 const {
   addSubscriber,
@@ -2263,6 +2263,7 @@ exports.createPolymarketCopyTrader = async (req, res) => {
           details: {
             provider: 'polymarket',
             mode: initialMode,
+            request: summarizeProxyMeta(error?.polymarketProxyMeta),
             error: String(error?.message || error),
           },
         });

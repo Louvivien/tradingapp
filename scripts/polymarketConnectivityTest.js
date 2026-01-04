@@ -43,6 +43,14 @@ const PROXY_URLS_RAW = (() => {
   return values.join(',');
 })();
 
+const POLYMARKET_HTTP_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.POLYMARKET_HTTP_TIMEOUT_MS || process.env.POLYMARKET_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return 15000;
+  }
+  return Math.max(1000, Math.min(Math.floor(raw), 120000));
+})();
+
 const API_KEY = String(process.env.POLYMARKET_API_KEY || process.env.CLOB_API_KEY || '').trim();
 const SECRET = String(process.env.POLYMARKET_SECRET || process.env.CLOB_SECRET || '').trim();
 const PASSPHRASE = String(process.env.POLYMARKET_PASSPHRASE || process.env.CLOB_PASS_PHRASE || '').trim();
@@ -167,7 +175,7 @@ const shouldRetryWithAnotherProxy = (error) => {
   if (!Number.isFinite(status) || status <= 0) {
     return true;
   }
-  if (status === 401 || status === 403 || status === 407) {
+  if (status === 403 || status === 407) {
     return true;
   }
   if (status === 429) {
@@ -180,12 +188,39 @@ const shouldRetryWithAnotherProxy = (error) => {
 };
 
 const axiosGetWithProxyFallback = async (url, config = {}) => {
+  const timeout = config.timeout ? config.timeout : POLYMARKET_HTTP_TIMEOUT_MS;
+
+  const axiosGetWithHardTimeout = async (requestConfig) => {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller
+      ? setTimeout(() => {
+        try {
+          controller.abort();
+        } catch (error) {
+          // ignore
+        }
+      }, timeout)
+      : null;
+
+    try {
+      return await Axios.get(url, {
+        ...requestConfig,
+        timeout,
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+  };
+
   if (!PROXY_POOL.length) {
-    return { response: await Axios.get(url, { ...config, proxy: false }), proxy: null };
+    return { response: await axiosGetWithHardTimeout({ ...config, proxy: false }), proxy: null };
   }
 
   const attemptDirect = async () => ({
-    response: await Axios.get(url, { ...config, proxy: false }),
+    response: await axiosGetWithHardTimeout({ ...config, proxy: false }),
     proxy: null,
   });
 
@@ -195,7 +230,7 @@ const axiosGetWithProxyFallback = async (url, config = {}) => {
     for (const idx of order) {
       const proxy = PROXY_POOL[idx];
       try {
-        const response = await Axios.get(url, {
+        const response = await axiosGetWithHardTimeout({
           ...config,
           proxy: false,
           httpAgent: proxy.agent,
@@ -259,9 +294,7 @@ const fetchClobServerTime = async () => {
   const { response, proxy } = await axiosGetWithProxyFallback(`${CLOB_HOST}/time`, {
     params: buildGeoParams(),
   });
-  if (proxy) {
-    console.log('[Polymarket Test] /time via proxy:', formatProxyForLog(proxy));
-  }
+  console.log('[Polymarket Test] /time via:', proxy ? `proxy ${formatProxyForLog(proxy)}` : 'direct');
   const ts = Math.floor(Number(response?.data));
   if (!Number.isFinite(ts) || ts <= 0) {
     throw new Error('Unable to parse /time response.');
@@ -312,6 +345,7 @@ const main = async () => {
   console.log('[Polymarket Test] Host:', CLOB_HOST);
   console.log('[Polymarket Test] Geo token set:', GEO_BLOCK_TOKEN ? 'yes' : 'no');
   console.log('[Polymarket Test] Proxy pool:', PROXY_POOL.length ? `${PROXY_POOL.length} configured (first=${formatProxyForLog(PROXY_POOL[0])})` : 'no');
+  console.log('[Polymarket Test] Timeout:', `${POLYMARKET_HTTP_TIMEOUT_MS}ms`);
   console.log('[Polymarket Test] Maker address:', maker);
 
   const timeTs = await fetchClobServerTime();
@@ -324,9 +358,7 @@ const main = async () => {
         headers,
         params: buildGeoParams(params),
       });
-      if (usedProxy) {
-        console.log(`[Polymarket Test] ${label} via proxy:`, formatProxyForLog(usedProxy));
-      }
+      console.log(`[Polymarket Test] ${label} via:`, usedProxy ? `proxy ${formatProxyForLog(usedProxy)}` : 'direct');
       return { ok: true, status: response.status, data: response.data };
     } catch (error) {
       const status = Number(error?.response?.status);
