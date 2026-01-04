@@ -2099,6 +2099,37 @@ exports.createPolymarketCopyTrader = async (req, res) => {
       });
     }
 
+    const authAddressEnv = String(
+      process.env.POLYMARKET_AUTH_ADDRESS || process.env.POLYMARKET_ADDRESS || ''
+    ).trim();
+    const usingEnvCreds = !(apiKeyInput || secretInput || passphraseInput);
+    if (usingEnvCreds) {
+      if (!authAddressEnv) {
+        return res.status(400).json({
+          status: 'fail',
+          message:
+            'POLYMARKET_AUTH_ADDRESS is required when using server .env Polymarket keys. Set it to the wallet address that generated your POLYMARKET_API_KEY.',
+        });
+      }
+      if (!isValidHexAddress(authAddressEnv)) {
+        return res.status(400).json({
+          status: 'fail',
+          message: 'POLYMARKET_AUTH_ADDRESS is set but invalid (expected 0x…).',
+        });
+      }
+    }
+
+    const backfillRequested = (() => {
+      if (req.body.backfill === true) {
+        return true;
+      }
+      if (req.body.backfill === false || req.body.backfill === null || req.body.backfill === undefined) {
+        return false;
+      }
+      const normalized = String(req.body.backfill || '').trim().toLowerCase();
+      return normalized === 'true' || normalized === '1' || normalized === 'yes';
+    })();
+
     const encryptionKey = String(process.env.ENCRYPTION_KEY || process.env.CryptoJS_secret_key || '').trim();
     const encryptIfPossible = (value) => {
       const raw = String(value || '').trim();
@@ -2155,6 +2186,9 @@ exports.createPolymarketCopyTrader = async (req, res) => {
       stocks: [],
       polymarket: {
         address,
+        authAddress: authAddressEnv || null,
+        backfillPending: backfillRequested,
+        backfilledAt: null,
         // If the user provided explicit keys, store them encrypted; otherwise rely on server env vars.
         apiKey: apiKeyInput ? encryptIfPossible(apiKey) : null,
         secret: secretInput ? encryptIfPossible(secret) : null,
@@ -2177,6 +2211,7 @@ exports.createPolymarketCopyTrader = async (req, res) => {
         nextRebalanceAt: portfolio.nextRebalanceAt,
         cashLimit,
         address,
+        backfill: backfillRequested,
       },
     });
 
@@ -2184,7 +2219,7 @@ exports.createPolymarketCopyTrader = async (req, res) => {
     try {
       const fresh = await Portfolio.findOne({ strategy_id, userId: userKey });
       if (fresh) {
-        await syncPolymarketPortfolio(fresh);
+        await syncPolymarketPortfolio(fresh, { mode: backfillRequested ? 'backfill' : 'incremental' });
       }
     } catch (error) {
       await recordStrategyLog({
@@ -3180,12 +3215,12 @@ exports.rebalanceNow = async (req, res) => {
       });
     }
 
-    await rebalanceNow({ strategyId, userId });
+    const requestedMode = String(req.body?.mode || '').trim().toLowerCase();
+    await rebalanceNow({ strategyId, userId, mode: requestedMode });
 
     const latestLog = await StrategyLog.findOne({
       strategy_id: String(strategyId),
       userId: String(userId),
-      message: 'Portfolio rebalanced',
     })
       .sort({ createdAt: -1 })
       .lean();

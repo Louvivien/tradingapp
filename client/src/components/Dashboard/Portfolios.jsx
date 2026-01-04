@@ -482,6 +482,58 @@ const deleteStrategy = async (strategyId) => {
     }
   };
 
+  const handlePolymarketBackfill = async (portfolio, event) => {
+    if (event?.stopPropagation) {
+      event.stopPropagation();
+    }
+    if (!portfolio?.strategy_id || !userData?.user?.id || !userData?.token) {
+      return;
+    }
+
+    const strategyId = portfolio.strategy_id;
+    const confirm = window.confirm(
+      `Backfill Polymarket trades for "${portfolio.name}"?\n\nThis will reset the paper portfolio to your cash limit and replay historical trades to approximate current positions.`
+    );
+    if (!confirm) {
+      return;
+    }
+
+    setResendStatus((prev) => ({
+      ...prev,
+      [strategyId]: { loading: true, message: null, error: false },
+    }));
+
+    try {
+      const url = `${config.base_url}/api/strategies/rebalance-now/${userData.user.id}/${strategyId}`;
+      const headers = {
+        "x-auth-token": userData.token,
+      };
+      const response = await Axios.post(url, { mode: "backfill" }, { headers });
+      const message =
+        response?.data?.log?.message ||
+        response?.data?.message ||
+        "Polymarket backfill complete.";
+
+      setResendStatus((prev) => ({
+        ...prev,
+        [strategyId]: { loading: false, message, error: false },
+      }));
+
+      if (typeof refreshPortfolios === "function") {
+        await refreshPortfolios();
+      }
+    } catch (error) {
+      setResendStatus((prev) => ({
+        ...prev,
+        [strategyId]: {
+          loading: false,
+          message: error.response?.data?.message || error.message || "Polymarket backfill failed.",
+          error: true,
+        },
+      }));
+    }
+  };
+
   const openResendModal = (portfolio, event) => {
     if (event?.stopPropagation) {
       event.stopPropagation();
@@ -673,6 +725,17 @@ const deleteStrategy = async (strategyId) => {
                     disabled={!!resendStatus[portfolio.strategy_id]?.loading}
                   >
                     {resendStatus[portfolio.strategy_id]?.loading ? 'Resending…' : 'Resend Orders'}
+                  </Button>
+                )}
+                {portfolio.provider === "polymarket" && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    sx={{ ml: 1 }}
+                    onClick={(event) => handlePolymarketBackfill(portfolio, event)}
+                    disabled={!!resendStatus[portfolio.strategy_id]?.loading}
+                  >
+                    {resendStatus[portfolio.strategy_id]?.loading ? "Backfilling…" : "Backfill"}
                   </Button>
                 )}
 

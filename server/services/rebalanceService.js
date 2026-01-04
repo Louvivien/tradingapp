@@ -2150,7 +2150,7 @@ const runDueRebalances = async () => {
   }
 };
 
-const rebalanceNow = async ({ strategyId, userId }) => withRebalanceLock(async () => {
+const rebalanceNow = async ({ strategyId, userId, mode = null }) => withRebalanceLock(async () => {
   if (!strategyId || !userId) {
     throw new Error('strategyId and userId are required');
   }
@@ -2162,7 +2162,8 @@ const rebalanceNow = async ({ strategyId, userId }) => withRebalanceLock(async (
   portfolio.nextRebalanceManual = true;
   const provider = String(portfolio.provider || 'alpaca');
   if (provider === 'polymarket') {
-    await syncPolymarketPortfolio(portfolio);
+    const normalizedMode = String(mode || '').trim().toLowerCase();
+    await syncPolymarketPortfolio(portfolio, { mode: normalizedMode === 'backfill' ? 'backfill' : 'incremental' });
   } else {
     await rebalancePortfolio(portfolio);
   }

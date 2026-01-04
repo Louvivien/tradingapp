@@ -12,6 +12,13 @@ const ENCRYPTION_KEY = String(process.env.ENCRYPTION_KEY || process.env.CryptoJS
 const INITIAL_CURSOR = 'MA==';
 const END_CURSOR = 'LTE=';
 const MAX_TRADES_PER_SYNC = 2500;
+const MAX_TRADES_PER_BACKFILL = (() => {
+  const parsed = Number(process.env.POLYMARKET_BACKFILL_MAX_TRADES);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 10000;
+  }
+  return Math.max(1, Math.min(Math.floor(parsed), 50000));
+})();
 
 const toNumber = (value, fallback = null) => {
   const num = Number(value);
@@ -202,7 +209,35 @@ const isTradeAfterAnchor = (tradeTime, anchorTime) => {
   return String(tradeTime || '') > String(anchorTime || '');
 };
 
-const syncPolymarketPortfolio = async (portfolio) => {
+const formatAxiosError = (error) => {
+  const status = Number(error?.response?.status);
+  const payload = error?.response?.data;
+  const apiMessage = (() => {
+    if (!payload) {
+      return null;
+    }
+    if (typeof payload === 'string') {
+      return payload.trim() || null;
+    }
+    if (payload?.error) {
+      return String(payload.error).trim() || null;
+    }
+    if (payload?.message) {
+      return String(payload.message).trim() || null;
+    }
+    try {
+      return JSON.stringify(payload);
+    } catch (stringifyError) {
+      return null;
+    }
+  })();
+  if (Number.isFinite(status) && status > 0) {
+    return apiMessage ? `Request failed with status code ${status} (${apiMessage})` : `Request failed with status code ${status}`;
+  }
+  return String(error?.message || 'Request failed');
+};
+
+const syncPolymarketPortfolio = async (portfolio, options = {}) => {
   if (!portfolio) {
     throw new Error('Portfolio is required.');
   }
@@ -212,20 +247,38 @@ const syncPolymarketPortfolio = async (portfolio) => {
   }
 
   const poly = portfolio.polymarket || {};
+  const requestedMode = String(options?.mode || '').trim().toLowerCase();
+  const mode = requestedMode === 'backfill'
+    ? 'backfill'
+    : poly.backfillPending
+      ? 'backfill'
+      : 'incremental';
+  const resetPortfolio = mode === 'backfill' ? options?.reset !== false : false;
   const address = String(poly.address || '').trim();
-  const apiKey = decryptIfEncrypted(poly.apiKey) ||
-    decryptIfEncrypted(process.env.POLYMARKET_API_KEY || process.env.CLOB_API_KEY);
-  const secret = decryptIfEncrypted(poly.secret) ||
-    decryptIfEncrypted(process.env.POLYMARKET_SECRET || process.env.CLOB_SECRET);
-  const passphrase = decryptIfEncrypted(poly.passphrase) ||
-    decryptIfEncrypted(process.env.POLYMARKET_PASSPHRASE || process.env.CLOB_PASS_PHRASE);
+  const storedApiKey = decryptIfEncrypted(poly.apiKey);
+  const storedSecret = decryptIfEncrypted(poly.secret);
+  const storedPassphrase = decryptIfEncrypted(poly.passphrase);
+  const usingStoredCreds = Boolean(storedApiKey || storedSecret || storedPassphrase);
+
+  const apiKey = storedApiKey || decryptIfEncrypted(process.env.POLYMARKET_API_KEY || process.env.CLOB_API_KEY);
+  const secret = storedSecret || decryptIfEncrypted(process.env.POLYMARKET_SECRET || process.env.CLOB_SECRET);
+  const passphrase =
+    storedPassphrase || decryptIfEncrypted(process.env.POLYMARKET_PASSPHRASE || process.env.CLOB_PASS_PHRASE);
+
+  const authAddressStored = poly.authAddress ? String(poly.authAddress).trim() : '';
   const authAddressEnv = String(
     process.env.POLYMARKET_AUTH_ADDRESS || process.env.POLYMARKET_ADDRESS || ''
   ).trim();
-  if (authAddressEnv && !isValidHexAddress(authAddressEnv)) {
-    throw new Error('POLYMARKET_AUTH_ADDRESS is set but invalid.');
+  const authAddressCandidate = authAddressStored || authAddressEnv || (usingStoredCreds ? address : '');
+  if (!authAddressCandidate) {
+    throw new Error(
+      'Polymarket auth address is required to use CLOB L2 credentials. Set POLYMARKET_AUTH_ADDRESS (the wallet address that generated your POLYMARKET_API_KEY).'
+    );
   }
-  const authAddress = authAddressEnv || address;
+  if (!isValidHexAddress(authAddressCandidate)) {
+    throw new Error('POLYMARKET_AUTH_ADDRESS (or portfolio.polymarket.authAddress) is set but invalid.');
+  }
+  const authAddress = authAddressCandidate;
 
   if (!isValidHexAddress(address)) {
     throw new Error('Polymarket address is missing or invalid.');
@@ -248,53 +301,87 @@ const syncPolymarketPortfolio = async (portfolio) => {
   let foundAnchor = false;
   const pendingTrades = [];
 
-  while (nextCursor !== END_CURSOR && pendingTrades.length < MAX_TRADES_PER_SYNC && !foundLastTrade) {
-    const page = await fetchTradesPage({
-      authAddress,
-      apiKey,
-      secret,
-      passphrase,
-      makerAddress: address,
-      nextCursor,
-    });
+  const fetchPage = async (cursor) => {
+    try {
+      return await fetchTradesPage({
+        authAddress,
+        apiKey,
+        secret,
+        passphrase,
+        makerAddress: address,
+        nextCursor: cursor,
+      });
+    } catch (error) {
+      throw new Error(formatAxiosError(error));
+    }
+  };
 
-    const trades = Array.isArray(page?.data) ? page.data : [];
-    for (const trade of trades) {
-      const id = trade?.id ? String(trade.id) : null;
-      if (!id) {
-        continue;
+  if (mode === 'backfill') {
+    while (nextCursor !== END_CURSOR && pendingTrades.length < MAX_TRADES_PER_BACKFILL) {
+      const page = await fetchPage(nextCursor);
+      const trades = Array.isArray(page?.data) ? page.data : [];
+      if (!trades.length) {
+        break;
       }
-      if (lastTradeId) {
-        if (id === lastTradeId) {
-          foundLastTrade = true;
+      for (const trade of trades) {
+        if (pendingTrades.length >= MAX_TRADES_PER_BACKFILL) {
+          break;
+        }
+        const id = trade?.id ? String(trade.id) : null;
+        if (!id) {
+          continue;
+        }
+        pendingTrades.push(trade);
+      }
+
+      const cursor = page?.next_cursor ? String(page.next_cursor) : null;
+      if (!cursor || cursor === nextCursor) {
+        break;
+      }
+      nextCursor = cursor;
+    }
+  } else {
+    while (nextCursor !== END_CURSOR && pendingTrades.length < MAX_TRADES_PER_SYNC && !foundLastTrade) {
+      const page = await fetchPage(nextCursor);
+
+      const trades = Array.isArray(page?.data) ? page.data : [];
+      for (const trade of trades) {
+        const id = trade?.id ? String(trade.id) : null;
+        if (!id) {
+          continue;
+        }
+        if (lastTradeId) {
+          if (id === lastTradeId) {
+            foundLastTrade = true;
+            break;
+          }
+          pendingTrades.push(trade);
+          continue;
+        }
+
+        const matchTime = trade?.match_time ? String(trade.match_time) : null;
+        if (!matchTime) {
+          continue;
+        }
+        if (anchorMatchTime && !isTradeAfterAnchor(matchTime, anchorMatchTime)) {
+          foundAnchor = true;
           break;
         }
         pendingTrades.push(trade);
-        continue;
       }
 
-      const matchTime = trade?.match_time ? String(trade.match_time) : null;
-      if (!matchTime) {
-        continue;
-      }
-      if (anchorMatchTime && !isTradeAfterAnchor(matchTime, anchorMatchTime)) {
-        foundAnchor = true;
+      const cursor = page?.next_cursor ? String(page.next_cursor) : null;
+      if (!cursor || cursor === nextCursor) {
         break;
       }
-      pendingTrades.push(trade);
-    }
-
-    const cursor = page?.next_cursor ? String(page.next_cursor) : null;
-    if (!cursor || cursor === nextCursor) {
-      break;
-    }
-    nextCursor = cursor;
-    if (!lastTradeId && foundAnchor) {
-      break;
+      nextCursor = cursor;
+      if (!lastTradeId && foundAnchor) {
+        break;
+      }
     }
   }
 
-  if (!lastTradeId) {
+  if (mode !== 'backfill' && !lastTradeId) {
     // Persist the anchor so we can copy the first trade that happens after setup.
     portfolio.polymarket = {
       ...(portfolio.polymarket || {}),
@@ -304,23 +391,63 @@ const syncPolymarketPortfolio = async (portfolio) => {
   }
 
   if (!pendingTrades.length) {
+    if (mode === 'backfill') {
+      portfolio.polymarket = {
+        ...(portfolio.polymarket || {}),
+        backfillPending: false,
+        backfilledAt: now.toISOString(),
+      };
+    }
     portfolio.lastRebalancedAt = now;
     portfolio.nextRebalanceAt = computeNextRebalanceAt(normalizeRecurrence(portfolio.recurrence), now);
     await portfolio.save();
-    return { processed: 0, waitingForTrades: !lastTradeId };
+    return { processed: 0, mode, waitingForTrades: mode === 'incremental' ? !lastTradeId : false };
   }
 
   const processedTrades = pendingTrades.slice().reverse();
   const holdingsByAssetId = new Map();
-  (portfolio.stocks || []).forEach((stock) => {
-    const assetId = stock?.asset_id ? String(stock.asset_id) : stock?.symbol ? String(stock.symbol) : null;
-    if (!assetId) {
-      return;
-    }
-    holdingsByAssetId.set(assetId, stock);
-  });
+  if (!resetPortfolio) {
+    (portfolio.stocks || []).forEach((stock) => {
+      const assetId = stock?.asset_id ? String(stock.asset_id) : stock?.symbol ? String(stock.symbol) : null;
+      if (!assetId) {
+        return;
+      }
+      holdingsByAssetId.set(assetId, stock);
+    });
+  }
 
-  let cash = toNumber(portfolio.retainedCash, toNumber(portfolio.cashBuffer, 0));
+  const pickNumber = (value) => {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const startingCash = (() => {
+    const retainedCash = pickNumber(portfolio.retainedCash);
+    const cashBuffer = pickNumber(portfolio.cashBuffer) ?? 0;
+
+    if (!resetPortfolio) {
+      return retainedCash ?? cashBuffer;
+    }
+
+    const cashLimit = pickNumber(portfolio.cashLimit);
+    if (cashLimit !== null) {
+      return cashLimit;
+    }
+    const budget = pickNumber(portfolio.budget);
+    if (budget !== null) {
+      return budget;
+    }
+    const initialInvestment = pickNumber(portfolio.initialInvestment);
+    if (initialInvestment !== null) {
+      return initialInvestment;
+    }
+    return retainedCash ?? cashBuffer;
+  })();
+
+  let cash = Number.isFinite(startingCash) ? startingCash : 0;
   const marketCache = new Map();
   const ensureMarket = async (conditionId) => {
     const key = String(conditionId || '').trim();
@@ -561,6 +688,14 @@ const syncPolymarketPortfolio = async (portfolio) => {
       ...(portfolio.polymarket || {}),
       lastTradeId: String(newest.id),
       lastTradeMatchTime: newest.match_time ? String(newest.match_time) : null,
+      backfillPending: mode === 'backfill' ? false : Boolean(portfolio.polymarket?.backfillPending),
+      backfilledAt: mode === 'backfill' ? now.toISOString() : (portfolio.polymarket?.backfilledAt || null),
+    };
+  } else if (mode === 'backfill') {
+    portfolio.polymarket = {
+      ...(portfolio.polymarket || {}),
+      backfillPending: false,
+      backfilledAt: now.toISOString(),
     };
   }
 
@@ -573,18 +708,24 @@ const syncPolymarketPortfolio = async (portfolio) => {
   portfolio.lastPerformanceComputedAt = now;
   await portfolio.save();
 
+  const maxLogTrades = mode === 'backfill' ? 200 : 500;
   await recordStrategyLog({
     strategyId: portfolio.strategy_id,
     userId: portfolio.userId,
     strategyName: portfolio.name,
-    message: 'Polymarket copy-trader synced',
+    message: mode === 'backfill' ? 'Polymarket copy-trader backfilled' : 'Polymarket copy-trader synced',
     details: {
       provider: 'polymarket',
+      mode,
       address,
+      startingCash,
       processedTrades: processedTrades.length,
-      buys: tradeSummary.buys,
-      sells: tradeSummary.sells,
+      buys: tradeSummary.buys.slice(0, maxLogTrades),
+      sells: tradeSummary.sells.slice(0, maxLogTrades),
       skipped: tradeSummary.skipped.slice(0, 50),
+      buyCount: tradeSummary.buys.length,
+      sellCount: tradeSummary.sells.length,
+      skippedCount: tradeSummary.skipped.length,
       cash: portfolio.retainedCash,
       positions: updatedStocks.map((pos) => ({
         market: pos.market,
@@ -599,6 +740,7 @@ const syncPolymarketPortfolio = async (portfolio) => {
 
   return {
     processed: processedTrades.length,
+    mode,
     buys: tradeSummary.buys.length,
     sells: tradeSummary.sells.length,
     skipped: tradeSummary.skipped.length,

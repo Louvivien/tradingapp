@@ -152,6 +152,20 @@ const portfolioSchema = new Schema({
       default: null,
       trim: true,
     },
+    authAddress: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+    backfillPending: {
+      type: Boolean,
+      default: false,
+    },
+    backfilledAt: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     apiKey: {
       type: String,
       default: null,
