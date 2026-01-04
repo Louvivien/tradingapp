@@ -68,9 +68,6 @@ const Strategies = () => {
   const [polymarketStrategyName, setPolymarketStrategyName] = useState("");
   const [polymarketAddress, setPolymarketAddress] = useState("");
   const [polymarketCashLimit, setPolymarketCashLimit] = useState("");
-  const [polymarketApiKey, setPolymarketApiKey] = useState("");
-  const [polymarketSecret, setPolymarketSecret] = useState("");
-  const [polymarketPassphrase, setPolymarketPassphrase] = useState("");
   const [polymarketRecurrence, setPolymarketRecurrence] = useState("every_minute");
   const [polymarketSchedule, setPolymarketSchedule] = useState(null);
   const [polymarketResponseReceived, setPolymarketResponseReceived] = useState(false);
@@ -646,15 +643,6 @@ const Strategies = () => {
       return;
     }
 
-    const apiKeyValue = String(polymarketApiKey || "").trim();
-    const secretValue = String(polymarketSecret || "").trim();
-    const passphraseValue = String(polymarketPassphrase || "").trim();
-    const providedAnyCredential = Boolean(apiKeyValue || secretValue || passphraseValue);
-    if (providedAnyCredential && !(apiKeyValue && secretValue && passphraseValue)) {
-      setError("Provide apiKey, secret, and passphrase together (or leave all blank to use server .env keys).");
-      return;
-    }
-
     if (!authToken || !userId) {
       setError("Please log in again.");
       return;
@@ -678,11 +666,6 @@ const Strategies = () => {
         cashLimit: polymarketCashLimit,
         recurrence: polymarketRecurrence,
       };
-      if (providedAnyCredential) {
-        payload.apiKey = apiKeyValue;
-        payload.secret = secretValue;
-        payload.passphrase = passphraseValue;
-      }
 
       const response = await Axios.post(url, payload, { headers });
       if (response.status === 200 && response.data?.status === "success") {
@@ -1333,34 +1316,8 @@ const Strategies = () => {
 	                margin="normal"
 	              />
 	              <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
-	                Leave apiKey / secret / passphrase blank to use the server `.env` Polymarket keys.
+	                Uses the server Polymarket keys from `tradingapp/server/config/.env`.
 	              </Typography>
-	              <TextField
-	                variant="outlined"
-	                label="Polymarket apiKey (optional override)"
-	                value={polymarketApiKey}
-	                onChange={(e) => setPolymarketApiKey(e.target.value)}
-	                fullWidth
-	                margin="normal"
-	              />
-	              <TextField
-	                variant="outlined"
-	                type="password"
-	                label="Polymarket secret (optional override)"
-	                value={polymarketSecret}
-	                onChange={(e) => setPolymarketSecret(e.target.value)}
-	                fullWidth
-	                margin="normal"
-	              />
-	              <TextField
-	                variant="outlined"
-	                type="password"
-	                label="Polymarket passphrase (optional override)"
-	                value={polymarketPassphrase}
-	                onChange={(e) => setPolymarketPassphrase(e.target.value)}
-	                fullWidth
-	                margin="normal"
-	              />
 	              <TextField
 	                select
 	                variant="outlined"
