@@ -1,13 +1,27 @@
+const path = require("path");
+const fs = require('fs');
+const dotenv = require("dotenv");
+
+// Load environment variables from .env file when available; otherwise rely on existing env vars (useful for Render)
+const envPath = path.resolve(__dirname, './config/.env');
+console.log(`[Config] Loading environment variables from: ${envPath}`);
+if (fs.existsSync(envPath)) {
+  const result = dotenv.config({ path: envPath });
+  if (result.error) {
+    console.error('[Config Error] Failed to load .env file:', result.error);
+    process.exit(1);
+  }
+} else {
+  console.warn('[Config] .env file not found. Falling back to environment variables provided at runtime.');
+}
+
 const express = require("express");
 const mongoose = require("mongoose");
-const dotenv = require("dotenv");
 const cookieParser = require("cookie-parser");
-const path = require("path");
 const cors = require("cors");
 const cron = require('node-cron');
 const { spawn } = require('child_process');
 const { startProxies, scheduleNewsFromStocksList, scheduleSentimentVertex, schedulePortfolioRebalances } = require('./scheduler');
-const fs = require('fs');
 const { getAlpacaConfig } = require('./config/alpacaConfig');
 
 const readyStateLabels = {
@@ -34,20 +48,6 @@ mongoose.connection.on('disconnecting', () => logConnectionState('Event: disconn
 
 const app = express();
 const port = process.env.PORT || 3000;
-const {getStrategies} = require("./controllers/strategiesController");
-
-// Load environment variables from .env file when available; otherwise rely on existing env vars (useful for Render)
-const envPath = path.resolve(__dirname, './config/.env');
-console.log(`[Config] Loading environment variables from: ${envPath}`);
-if (fs.existsSync(envPath)) {
-  const result = dotenv.config({ path: envPath });
-  if (result.error) {
-    console.error('[Config Error] Failed to load .env file:', result.error);
-    process.exit(1);
-  }
-} else {
-  console.warn('[Config] .env file not found. Falling back to environment variables provided at runtime.');
-}
 
 // Validate required environment variables
 const requiredEnvVars = [

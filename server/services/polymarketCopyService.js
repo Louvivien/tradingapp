@@ -7,6 +7,12 @@ const { recordStrategyLog } = require('./strategyLogger');
 const CLOB_HOST = String(process.env.POLYMARKET_CLOB_HOST || 'https://clob.polymarket.com').replace(/\/+$/, '');
 const GEO_BLOCK_TOKEN =
   (process.env.POLYMARKET_GEO_BLOCK_TOKEN || process.env.GEO_BLOCK_TOKEN || '').trim() || null;
+const CLOB_PROXY_URL = String(
+  process.env.POLYMARKET_PROXY_URL ||
+  process.env.POLYMARKET_HTTP_PROXY ||
+  process.env.POLYMARKET_PROXY ||
+  ''
+).trim() || null;
 const ENCRYPTION_KEY = String(process.env.ENCRYPTION_KEY || process.env.CryptoJS_secret_key || '').trim() || null;
 
 const INITIAL_CURSOR = 'MA==';
@@ -41,6 +47,37 @@ const buildGeoParams = (params = {}) => {
   }
   return { ...params, geo_block_token: GEO_BLOCK_TOKEN };
 };
+
+const parseAxiosProxyConfig = (proxyUrl) => {
+  const raw = String(proxyUrl || '').trim();
+  if (!raw) {
+    return null;
+  }
+  let parsed;
+  try {
+    parsed = new URL(raw);
+  } catch (error) {
+    throw new Error('POLYMARKET_PROXY_URL is invalid. Expected format: http://user:pass@host:port');
+  }
+  const protocol = String(parsed.protocol || '').replace(':', '');
+  if (protocol !== 'http' && protocol !== 'https') {
+    throw new Error('POLYMARKET_PROXY_URL must use http:// or https://');
+  }
+  const host = String(parsed.hostname || '').trim();
+  if (!host) {
+    throw new Error('POLYMARKET_PROXY_URL must include a hostname.');
+  }
+  const port = parsed.port ? Number(parsed.port) : protocol === 'https' ? 443 : 80;
+  if (!Number.isFinite(port) || port <= 0) {
+    throw new Error('POLYMARKET_PROXY_URL port is invalid.');
+  }
+  const username = parsed.username ? decodeURIComponent(parsed.username) : null;
+  const password = parsed.password ? decodeURIComponent(parsed.password) : null;
+  const auth = username ? { username, password: password || '' } : undefined;
+  return { protocol, host, port, auth };
+};
+
+const getAxiosProxyConfig = () => parseAxiosProxyConfig(CLOB_PROXY_URL);
 
 const sanitizeBase64Secret = (secret) => {
   return String(secret || '')
@@ -87,7 +124,11 @@ const buildPolyHmacSignature = ({ secret, timestamp, method, requestPath, body }
 };
 
 const fetchClobServerTime = async () => {
-  const response = await Axios.get(`${CLOB_HOST}/time`, { params: buildGeoParams() });
+  const proxy = getAxiosProxyConfig();
+  const response = await Axios.get(`${CLOB_HOST}/time`, {
+    params: buildGeoParams(),
+    ...(proxy ? { proxy } : {}),
+  });
   const ts = Math.floor(toNumber(response?.data, NaN));
   if (!Number.isFinite(ts) || ts <= 0) {
     throw new Error('Unable to fetch Polymarket server time.');
@@ -130,7 +171,12 @@ const fetchTradesPage = async ({ authAddress, apiKey, secret, passphrase, makerA
     maker_address: makerAddress,
   });
 
-  const response = await Axios.get(`${CLOB_HOST}${endpoint}`, { headers, params });
+  const proxy = getAxiosProxyConfig();
+  const response = await Axios.get(`${CLOB_HOST}${endpoint}`, {
+    headers,
+    params,
+    ...(proxy ? { proxy } : {}),
+  });
   return response?.data || null;
 };
 
@@ -142,8 +188,10 @@ const fetchMarket = async (conditionId) => {
   if (!cleaned) {
     return null;
   }
+  const proxy = getAxiosProxyConfig();
   const response = await Axios.get(`${CLOB_HOST}/markets/${cleaned}`, {
     params: buildGeoParams(),
+    ...(proxy ? { proxy } : {}),
   });
   return response?.data || null;
 };
@@ -232,6 +280,12 @@ const formatAxiosError = (error) => {
     }
   })();
   if (Number.isFinite(status) && status > 0) {
+    if (status === 401 && apiMessage && apiMessage.toLowerCase().includes('unauthorized')) {
+      const hint = CLOB_PROXY_URL || GEO_BLOCK_TOKEN
+        ? ''
+        : ' (check POLYMARKET_AUTH_ADDRESS + keys; France may require POLYMARKET_PROXY_URL or POLYMARKET_GEO_BLOCK_TOKEN)';
+      return `Request failed with status code ${status} (${apiMessage})${hint}`;
+    }
     return apiMessage ? `Request failed with status code ${status} (${apiMessage})` : `Request failed with status code ${status}`;
   }
   return String(error?.message || 'Request failed');
