@@ -47,6 +47,13 @@ const POLYMARKET_PROGRESS_LOG_EVERY_TRADES = (() => {
   }
   return Math.max(100, Math.min(Math.floor(raw), 20000));
 })();
+const POLYMARKET_PROGRESS_LOG_EVERY_PAGES = (() => {
+  const raw = Number(process.env.POLYMARKET_PROGRESS_LOG_EVERY_PAGES);
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return 10;
+  }
+  return Math.max(1, Math.min(Math.floor(raw), 200));
+})();
 const ENCRYPTION_KEY = String(process.env.ENCRYPTION_KEY || process.env.CryptoJS_secret_key || '').trim() || null;
 
 const INITIAL_CURSOR = 'MA==';
@@ -225,8 +232,32 @@ const axiosGetWithProxyFallback = async (url, config = {}) => {
     timeout,
   };
 
+  const axiosGetWithHardTimeout = async (requestConfig) => {
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timer = controller
+      ? setTimeout(() => {
+        try {
+          controller.abort();
+        } catch (error) {
+          // ignore
+        }
+      }, timeout)
+      : null;
+
+    try {
+      return await Axios.get(url, {
+        ...requestConfig,
+        ...(controller ? { signal: controller.signal } : {}),
+      });
+    } finally {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    }
+  };
+
   const attemptDirect = async () =>
-    Axios.get(url, {
+    axiosGetWithHardTimeout({
       ...baseConfig,
       proxy: false,
     });
@@ -237,7 +268,7 @@ const axiosGetWithProxyFallback = async (url, config = {}) => {
     for (const idx of order) {
       const proxy = proxyPool[idx];
       try {
-        const response = await Axios.get(url, {
+        const response = await axiosGetWithHardTimeout({
           ...baseConfig,
           proxy: false,
           httpAgent: proxy.agent,
@@ -598,7 +629,50 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
   if (mode === 'backfill') {
     while (nextCursor !== END_CURSOR && pendingTrades.length < MAX_TRADES_PER_BACKFILL) {
       pagesFetched += 1;
-      const page = await fetchPage(nextCursor);
+      const shouldLogPage = pagesFetched === 1 || pagesFetched % POLYMARKET_PROGRESS_LOG_EVERY_PAGES === 0;
+      const cursorBefore = nextCursor;
+      if (shouldLogPage) {
+        const proxyActiveNow = proxyPool.length
+          ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
+          : null;
+        void recordStrategyLog({
+          strategyId: portfolio.strategy_id,
+          userId: portfolio.userId,
+          strategyName: portfolio.name,
+          message: 'Polymarket backfill fetching trades page',
+          details: {
+            provider: 'polymarket',
+            mode,
+            page: pagesFetched,
+            cursor: cursorBefore,
+            tradesCollected: pendingTrades.length,
+            proxyActive: proxyActiveNow,
+          },
+        });
+      }
+
+      let page;
+      try {
+        page = await fetchPage(cursorBefore);
+      } catch (error) {
+        await recordStrategyLog({
+          strategyId: portfolio.strategy_id,
+          userId: portfolio.userId,
+          strategyName: portfolio.name,
+          level: 'warn',
+          message: 'Polymarket backfill failed fetching trades page',
+          details: {
+            provider: 'polymarket',
+            mode,
+            page: pagesFetched,
+            cursor: cursorBefore,
+            tradesCollected: pendingTrades.length,
+            error: String(error?.message || error),
+          },
+        });
+        throw error;
+      }
+
       const trades = Array.isArray(page?.data) ? page.data : [];
       if (!trades.length) {
         break;
@@ -619,6 +693,27 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
         break;
       }
       nextCursor = cursor;
+
+      if (shouldLogPage) {
+        const proxyActiveNow = proxyPool.length
+          ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
+          : null;
+        void recordStrategyLog({
+          strategyId: portfolio.strategy_id,
+          userId: portfolio.userId,
+          strategyName: portfolio.name,
+          message: 'Polymarket backfill fetched trades page',
+          details: {
+            provider: 'polymarket',
+            mode,
+            page: pagesFetched,
+            tradesInPage: trades.length,
+            tradesCollected: pendingTrades.length,
+            nextCursor,
+            proxyActive: proxyActiveNow,
+          },
+        });
+      }
 
       if (pendingTrades.length >= nextProgressLogAt) {
         const proxyActiveNow = proxyPool.length
