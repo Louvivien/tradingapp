@@ -1,18 +1,45 @@
 const crypto = require('crypto');
 const Axios = require('axios');
 const CryptoJS = require('crypto-js');
+const HttpsProxyAgentImport = require('https-proxy-agent');
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('./strategyLogger');
+
+const HttpsProxyAgent = HttpsProxyAgentImport?.HttpsProxyAgent || HttpsProxyAgentImport;
 
 const CLOB_HOST = String(process.env.POLYMARKET_CLOB_HOST || 'https://clob.polymarket.com').replace(/\/+$/, '');
 const GEO_BLOCK_TOKEN =
   (process.env.POLYMARKET_GEO_BLOCK_TOKEN || process.env.GEO_BLOCK_TOKEN || '').trim() || null;
-const CLOB_PROXY_URL = String(
-  process.env.POLYMARKET_PROXY_URL ||
-  process.env.POLYMARKET_HTTP_PROXY ||
-  process.env.POLYMARKET_PROXY ||
-  ''
-).trim() || null;
+const CLOB_PROXY_URLS_RAW = (() => {
+  const values = [];
+  const pushValue = (value) => {
+    const raw = String(value || '').trim();
+    if (raw) {
+      values.push(raw);
+    }
+  };
+
+  pushValue(process.env.POLYMARKET_PROXY_URLS);
+  pushValue(process.env.POLYMARKET_PROXY_URL);
+  pushValue(process.env.POLYMARKET_HTTP_PROXY);
+  pushValue(process.env.POLYMARKET_PROXY);
+
+  const numbered = Object.keys(process.env || {})
+    .filter((key) => /^POLYMARKET_PROXY_URL_\d+$/.test(key))
+    .sort((a, b) => Number(a.split('_').pop()) - Number(b.split('_').pop()))
+    .map((key) => process.env[key]);
+  numbered.forEach(pushValue);
+
+  return values.join(',');
+})();
+const PROXY_MODE = String(process.env.POLYMARKET_PROXY_MODE || 'always').trim().toLowerCase();
+const POLYMARKET_HTTP_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.POLYMARKET_HTTP_TIMEOUT_MS || process.env.POLYMARKET_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return 15000;
+  }
+  return Math.max(1000, Math.min(Math.floor(raw), 120000));
+})();
 const ENCRYPTION_KEY = String(process.env.ENCRYPTION_KEY || process.env.CryptoJS_secret_key || '').trim() || null;
 
 const INITIAL_CURSOR = 'MA==';
@@ -48,36 +75,188 @@ const buildGeoParams = (params = {}) => {
   return { ...params, geo_block_token: GEO_BLOCK_TOKEN };
 };
 
-const parseAxiosProxyConfig = (proxyUrl) => {
+const splitProxyList = (raw) => {
+  const input = String(raw || '').trim();
+  if (!input) {
+    return [];
+  }
+  return input
+    .split(/[\s,]+/)
+    .map((entry) => String(entry || '').trim())
+    .filter(Boolean);
+};
+
+const normalizeProxyUrl = (proxyUrl) => {
+  const raw = String(proxyUrl || '').trim();
+  if (!raw) {
+    return null;
+  }
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) {
+    return raw;
+  }
+  // Accept host:port entries for convenience.
+  return `http://${raw}`;
+};
+
+const parseProxyUrl = (proxyUrl) => {
   const raw = String(proxyUrl || '').trim();
   if (!raw) {
     return null;
   }
   let parsed;
   try {
-    parsed = new URL(raw);
+    parsed = new URL(normalizeProxyUrl(raw));
   } catch (error) {
-    throw new Error('POLYMARKET_PROXY_URL is invalid. Expected format: http://user:pass@host:port');
+    throw new Error('Polymarket proxy entry is invalid. Expected format: host:port or http://user:pass@host:port');
   }
   const protocol = String(parsed.protocol || '').replace(':', '');
   if (protocol !== 'http' && protocol !== 'https') {
-    throw new Error('POLYMARKET_PROXY_URL must use http:// or https://');
+    throw new Error('Polymarket proxy must use http:// or https://');
   }
   const host = String(parsed.hostname || '').trim();
   if (!host) {
-    throw new Error('POLYMARKET_PROXY_URL must include a hostname.');
+    throw new Error('Polymarket proxy must include a hostname.');
   }
   const port = parsed.port ? Number(parsed.port) : protocol === 'https' ? 443 : 80;
   if (!Number.isFinite(port) || port <= 0) {
-    throw new Error('POLYMARKET_PROXY_URL port is invalid.');
+    throw new Error('Polymarket proxy port is invalid.');
   }
-  const username = parsed.username ? decodeURIComponent(parsed.username) : null;
-  const password = parsed.password ? decodeURIComponent(parsed.password) : null;
-  const auth = username ? { username, password: password || '' } : undefined;
-  return { protocol, host, port, auth };
+
+  const normalized = new URL(parsed.toString());
+  normalized.protocol = `${protocol}:`;
+  normalized.hostname = host;
+  normalized.port = String(port);
+  normalized.pathname = '/';
+  normalized.search = '';
+  normalized.hash = '';
+  return normalized.toString();
 };
 
-const getAxiosProxyConfig = () => parseAxiosProxyConfig(CLOB_PROXY_URL);
+let cachedProxyPool = null;
+const getProxyPool = () => {
+  if (cachedProxyPool !== null) {
+    return cachedProxyPool;
+  }
+
+  const rawEntries = splitProxyList(CLOB_PROXY_URLS_RAW);
+  const pool = [];
+  const seen = new Set();
+
+  rawEntries.forEach((entry) => {
+    try {
+      const proxyUrl = parseProxyUrl(entry);
+      if (!proxyUrl || seen.has(proxyUrl)) {
+        return;
+      }
+      seen.add(proxyUrl);
+      pool.push({
+        url: proxyUrl,
+        agent: new HttpsProxyAgent(proxyUrl),
+      });
+    } catch (error) {
+      // Ignore invalid proxy entries so they don't crash the server.
+    }
+  });
+
+  cachedProxyPool = pool;
+  return cachedProxyPool;
+};
+
+const shouldRetryWithAnotherProxy = (error) => {
+  const status = Number(error?.response?.status);
+  if (!Number.isFinite(status) || status <= 0) {
+    return true;
+  }
+  if (status === 401 || status === 403 || status === 407) {
+    return true;
+  }
+  if (status === 429) {
+    return true;
+  }
+  if (status >= 500 && status <= 599) {
+    return true;
+  }
+  return false;
+};
+
+const proxyState = {
+  activeIndex: 0,
+};
+
+const buildProxyAttemptOrder = (count) => {
+  if (!count) {
+    return [];
+  }
+  const start = ((proxyState.activeIndex % count) + count) % count;
+  return Array.from({ length: count }, (_, offset) => (start + offset) % count);
+};
+
+const axiosGetWithProxyFallback = async (url, config = {}) => {
+  const proxyPool = getProxyPool();
+  const timeout = config.timeout ? config.timeout : POLYMARKET_HTTP_TIMEOUT_MS;
+  const baseConfig = {
+    ...config,
+    timeout,
+  };
+
+  const attemptDirect = async () =>
+    Axios.get(url, {
+      ...baseConfig,
+      proxy: false,
+    });
+
+  const attemptProxies = async () => {
+    const order = buildProxyAttemptOrder(proxyPool.length);
+    let lastError = null;
+    for (const idx of order) {
+      const proxy = proxyPool[idx];
+      try {
+        const response = await Axios.get(url, {
+          ...baseConfig,
+          proxy: false,
+          httpAgent: proxy.agent,
+          httpsAgent: proxy.agent,
+        });
+        proxyState.activeIndex = idx;
+        return response;
+      } catch (error) {
+        lastError = error;
+        if (!shouldRetryWithAnotherProxy(error)) {
+          throw error;
+        }
+      }
+    }
+    if (lastError) {
+      throw lastError;
+    }
+    throw new Error('Polymarket request failed.');
+  };
+
+  if (!proxyPool.length || PROXY_MODE === 'off' || PROXY_MODE === 'direct') {
+    return attemptDirect();
+  }
+
+  if (PROXY_MODE === 'fallback') {
+    try {
+      return await attemptDirect();
+    } catch (error) {
+      if (!shouldRetryWithAnotherProxy(error)) {
+        throw error;
+      }
+    }
+    return attemptProxies();
+  }
+
+  // Default: proxy-first, then direct as a last resort.
+  try {
+    return await attemptProxies();
+  } catch (error) {
+    if (!shouldRetryWithAnotherProxy(error)) {
+      throw error;
+    }
+  }
+  return attemptDirect();
+};
 
 const sanitizeBase64Secret = (secret) => {
   return String(secret || '')
@@ -124,10 +303,8 @@ const buildPolyHmacSignature = ({ secret, timestamp, method, requestPath, body }
 };
 
 const fetchClobServerTime = async () => {
-  const proxy = getAxiosProxyConfig();
-  const response = await Axios.get(`${CLOB_HOST}/time`, {
+  const response = await axiosGetWithProxyFallback(`${CLOB_HOST}/time`, {
     params: buildGeoParams(),
-    ...(proxy ? { proxy } : {}),
   });
   const ts = Math.floor(toNumber(response?.data, NaN));
   if (!Number.isFinite(ts) || ts <= 0) {
@@ -171,11 +348,9 @@ const fetchTradesPage = async ({ authAddress, apiKey, secret, passphrase, makerA
     maker_address: makerAddress,
   });
 
-  const proxy = getAxiosProxyConfig();
-  const response = await Axios.get(`${CLOB_HOST}${endpoint}`, {
+  const response = await axiosGetWithProxyFallback(`${CLOB_HOST}${endpoint}`, {
     headers,
     params,
-    ...(proxy ? { proxy } : {}),
   });
   return response?.data || null;
 };
@@ -188,10 +363,8 @@ const fetchMarket = async (conditionId) => {
   if (!cleaned) {
     return null;
   }
-  const proxy = getAxiosProxyConfig();
-  const response = await Axios.get(`${CLOB_HOST}/markets/${cleaned}`, {
+  const response = await axiosGetWithProxyFallback(`${CLOB_HOST}/markets/${cleaned}`, {
     params: buildGeoParams(),
-    ...(proxy ? { proxy } : {}),
   });
   return response?.data || null;
 };
@@ -281,7 +454,7 @@ const formatAxiosError = (error) => {
   })();
   if (Number.isFinite(status) && status > 0) {
     if (status === 401 && apiMessage && apiMessage.toLowerCase().includes('unauthorized')) {
-      const hint = CLOB_PROXY_URL || GEO_BLOCK_TOKEN
+      const hint = (getProxyPool().length > 0) || GEO_BLOCK_TOKEN
         ? ''
         : ' (check POLYMARKET_AUTH_ADDRESS + keys; France may require POLYMARKET_PROXY_URL or POLYMARKET_GEO_BLOCK_TOKEN)';
       return `Request failed with status code ${status} (${apiMessage})${hint}`;
