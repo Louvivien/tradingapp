@@ -115,6 +115,7 @@ Server env vars (in `tradingapp/server/config/.env`):
 - CLOB L2 creds (only needed if forcing `clob-l2`): `POLYMARKET_API_KEY`, `POLYMARKET_SECRET`, `POLYMARKET_PASSPHRASE`, `POLYMARKET_AUTH_ADDRESS`
 - Data API options (optional): `POLYMARKET_DATA_API_HOST`, `POLYMARKET_DATA_API_TAKER_ONLY`, `POLYMARKET_DATA_API_USER_AGENT`
 - Proxies (optional): `POLYMARKET_PROXY_URLS`, `POLYMARKET_PROXY_MODE`
+- CLOB auth retry cooldown in `auto` mode (optional, default 1h): `POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS`
 
 Smoke test:
 ```sh

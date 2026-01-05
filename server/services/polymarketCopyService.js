@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const net = require('net');
 const Axios = require('axios');
 const CryptoJS = require('crypto-js');
 const HttpsProxyAgentImport = require('https-proxy-agent');
@@ -64,6 +65,13 @@ const POLYMARKET_PROGRESS_LOG_EVERY_PAGES = (() => {
   return Math.max(1, Math.min(Math.floor(raw), 200));
 })();
 const ENCRYPTION_KEY = String(process.env.ENCRYPTION_KEY || process.env.CryptoJS_secret_key || '').trim() || null;
+const POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS = (() => {
+  const raw = Number(process.env.POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS);
+  if (!Number.isFinite(raw)) {
+    return 60 * 60 * 1000;
+  }
+  return Math.max(0, Math.min(Math.floor(raw), 24 * 60 * 60 * 1000));
+})();
 
 const INITIAL_CURSOR = 'MA==';
 const END_CURSOR = 'LTE=';
@@ -121,6 +129,29 @@ const normalizeProxyUrl = (proxyUrl) => {
   return `http://${raw}`;
 };
 
+const isValidProxyHost = (host) => {
+  const value = String(host || '').trim();
+  if (!value) {
+    return false;
+  }
+  if (value === 'localhost') {
+    return true;
+  }
+  if (net.isIP(value)) {
+    return true;
+  }
+  if (!/^[a-zA-Z0-9.-]+$/.test(value)) {
+    return false;
+  }
+  if (value.startsWith('.') || value.endsWith('.') || value.startsWith('-') || value.endsWith('-')) {
+    return false;
+  }
+  if (value.includes('..')) {
+    return false;
+  }
+  return true;
+};
+
 const parseProxyUrl = (proxyUrl) => {
   const raw = String(proxyUrl || '').trim();
   if (!raw) {
@@ -139,6 +170,9 @@ const parseProxyUrl = (proxyUrl) => {
   const host = String(parsed.hostname || '').trim();
   if (!host) {
     throw new Error('Polymarket proxy must include a hostname.');
+  }
+  if (!isValidProxyHost(host)) {
+    throw new Error('Polymarket proxy hostname is invalid.');
   }
   const port = parsed.port ? Number(parsed.port) : protocol === 'https' ? 443 : 80;
   if (!Number.isFinite(port) || port <= 0) {
@@ -743,7 +777,23 @@ const isPolymarketAuthFailure = (error) => {
   return false;
 };
 
-const syncPolymarketPortfolio = async (portfolio, options = {}) => {
+const clobAuthFailureState = {
+  disabledUntilMs: 0,
+};
+
+const isClobAuthTemporarilyDisabled = () =>
+  POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS > 0 && Date.now() < clobAuthFailureState.disabledUntilMs;
+
+const noteClobAuthFailure = () => {
+  if (POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS <= 0) {
+    clobAuthFailureState.disabledUntilMs = 0;
+    return null;
+  }
+  clobAuthFailureState.disabledUntilMs = Date.now() + POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS;
+  return new Date(clobAuthFailureState.disabledUntilMs).toISOString();
+};
+
+const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   if (!portfolio) {
     throw new Error('Portfolio is required.');
   }
@@ -1104,7 +1154,10 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
     if (tradesSourceSetting === 'clob-l2') {
       return 'clob-l2';
     }
-    return hasClobCredentials ? 'clob-l2' : 'data-api';
+    if (hasClobCredentials && !isClobAuthTemporarilyDisabled()) {
+      return 'clob-l2';
+    }
+    return 'data-api';
   })();
 
   let tradeSourceUsed = initialTradeSource;
@@ -1117,6 +1170,7 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
   } catch (error) {
     if (tradesSourceSetting === 'auto' && tradeSourceUsed === 'clob-l2' && isPolymarketAuthFailure(error)) {
       tradeSourceUsed = 'data-api';
+      const nextRetryAt = noteClobAuthFailure();
       await recordStrategyLog({
         strategyId: portfolio.strategy_id,
         userId: portfolio.userId,
@@ -1128,6 +1182,8 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
           mode,
           address,
           error: String(error?.message || error),
+          clobRetryAfterMs: POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS || 0,
+          clobNextRetryAt: nextRetryAt,
         },
       });
       const collected = await collectTrades(tradeSourceUsed);
@@ -1354,6 +1410,7 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
       holdingsByAssetId.set(assetId, entry);
       tradeSummary.buys.push({
         id: tradeId,
+        symbol,
         assetId,
         outcome,
         size,
@@ -1408,6 +1465,7 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
 
       tradeSummary.sells.push({
         id: tradeId,
+        symbol,
         assetId,
         outcome,
         size,
@@ -1530,6 +1588,44 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
 	    sells: tradeSummary.sells.length,
 	    skipped: tradeSummary.skipped.length,
 	  };
+};
+
+const polymarketSyncInFlight = new Map();
+
+const syncPolymarketPortfolio = async (portfolio, options = {}) => {
+  if (!portfolio) {
+    return await syncPolymarketPortfolioInternal(portfolio, options);
+  }
+  const provider = String(portfolio.provider || 'alpaca');
+  if (provider !== 'polymarket') {
+    return await syncPolymarketPortfolioInternal(portfolio, options);
+  }
+
+  const lockKey = portfolio?._id
+    ? String(portfolio._id)
+    : `${String(portfolio.userId || '')}:${String(portfolio.strategy_id || '')}`;
+
+  if (!lockKey) {
+    return await syncPolymarketPortfolioInternal(portfolio, options);
+  }
+
+  const inFlight = polymarketSyncInFlight.get(lockKey);
+  if (inFlight) {
+    if (options?.skipIfLocked) {
+      return { skipped: true, reason: 'sync_in_progress' };
+    }
+    return await inFlight;
+  }
+
+  const run = syncPolymarketPortfolioInternal(portfolio, options);
+  polymarketSyncInFlight.set(lockKey, run);
+  try {
+    return await run;
+  } finally {
+    if (polymarketSyncInFlight.get(lockKey) === run) {
+      polymarketSyncInFlight.delete(lockKey);
+    }
+  }
 };
 
 module.exports = {

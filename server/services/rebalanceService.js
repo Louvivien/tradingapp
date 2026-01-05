@@ -2119,7 +2119,7 @@ const runDueRebalances = async () => {
         try {
           const provider = String(portfolio.provider || 'alpaca');
           if (provider === 'polymarket') {
-            await syncPolymarketPortfolio(portfolio);
+            await syncPolymarketPortfolio(portfolio, { skipIfLocked: true });
           } else {
             await rebalancePortfolio(portfolio);
           }
