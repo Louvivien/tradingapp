@@ -107,6 +107,21 @@ npm run start
 
 Code explanation: [Video](https://www.loom.com/share/2411f7d34ea1491ab22c166957e107de) 
 
+## Polymarket (Copy Trader)
+The Polymarket “copy trader (paper)” strategy syncs trades for a given wallet address.
+
+Server env vars (in `tradingapp/server/config/.env`):
+- Trade source: `POLYMARKET_TRADES_SOURCE=auto|clob-l2|data-api` (default: `auto`, falls back to `data-api` if CLOB auth fails)
+- CLOB L2 creds (only needed if forcing `clob-l2`): `POLYMARKET_API_KEY`, `POLYMARKET_SECRET`, `POLYMARKET_PASSPHRASE`, `POLYMARKET_AUTH_ADDRESS`
+- Data API options (optional): `POLYMARKET_DATA_API_HOST`, `POLYMARKET_DATA_API_TAKER_ONLY`, `POLYMARKET_DATA_API_USER_AGENT`
+- Proxies (optional): `POLYMARKET_PROXY_URLS`, `POLYMARKET_PROXY_MODE`
+
+Smoke test:
+```sh
+cd tradingapp/server
+node scripts/polymarket_smoke_test.js 0xYourWalletAddress
+```
+
 ## Strategy Evaluation Parity (Composer/defsymphony)
 The server evaluates defsymphony strategies locally. To keep results aligned with Composer, the defaults are:
 - RSI: Wilder (`COMPOSER_RSI_METHOD=wilder`)

@@ -8,8 +8,17 @@ const { recordStrategyLog } = require('./strategyLogger');
 const HttpsProxyAgent = HttpsProxyAgentImport?.HttpsProxyAgent || HttpsProxyAgentImport;
 
 const CLOB_HOST = String(process.env.POLYMARKET_CLOB_HOST || 'https://clob.polymarket.com').replace(/\/+$/, '');
+const DATA_API_HOST = String(process.env.POLYMARKET_DATA_API_HOST || 'https://data-api.polymarket.com').replace(
+  /\/+$/,
+  ''
+);
 const GEO_BLOCK_TOKEN =
   (process.env.POLYMARKET_GEO_BLOCK_TOKEN || process.env.GEO_BLOCK_TOKEN || '').trim() || null;
+const POLYMARKET_TRADES_SOURCE = String(process.env.POLYMARKET_TRADES_SOURCE || 'auto').trim().toLowerCase();
+const POLYMARKET_DATA_API_TAKER_ONLY_DEFAULT = String(process.env.POLYMARKET_DATA_API_TAKER_ONLY ?? 'false')
+  .trim()
+  .toLowerCase();
+const POLYMARKET_DATA_API_USER_AGENT = String(process.env.POLYMARKET_DATA_API_USER_AGENT || 'tradingapp/1.0').trim();
 const CLOB_PROXY_URLS_RAW = (() => {
   const values = [];
   const pushValue = (value) => {
@@ -505,6 +514,110 @@ const fetchTradesPage = async ({ authAddress, apiKey, secret, passphrase, makerA
   return { page: response?.data || null, meta };
 };
 
+const buildDataApiTradeId = (trade) => {
+  const tx = trade?.transactionHash ? String(trade.transactionHash).trim() : '';
+  const asset = trade?.asset ? String(trade.asset).trim() : '';
+  const conditionId = trade?.conditionId ? String(trade.conditionId).trim() : '';
+  const side = trade?.side ? String(trade.side).trim().toUpperCase() : '';
+  const ts = trade?.timestamp !== undefined && trade?.timestamp !== null ? String(trade.timestamp).trim() : '';
+  const price = trade?.price !== undefined && trade?.price !== null ? String(trade.price) : '';
+  const size = trade?.size !== undefined && trade?.size !== null ? String(trade.size) : '';
+
+  const parts = [tx, conditionId, asset, side, ts, price, size].filter(Boolean);
+  if (!parts.length) {
+    return null;
+  }
+  // Keep stable across calls; also de-dupes identical trades returned twice.
+  return `data-api:${parts.join(':')}`;
+};
+
+const normalizeDataApiTrade = (trade) => {
+  if (!trade || typeof trade !== 'object') {
+    return null;
+  }
+  const id = buildDataApiTradeId(trade);
+  const assetId = trade?.asset ? String(trade.asset).trim() : null;
+  const conditionId = trade?.conditionId ? String(trade.conditionId).trim() : null;
+  const side = trade?.side ? String(trade.side).trim().toUpperCase() : null;
+  const outcome = trade?.outcome ? String(trade.outcome).trim() : null;
+  const matchTime = trade?.timestamp !== undefined && trade?.timestamp !== null ? String(trade.timestamp).trim() : null;
+  const size = trade?.size !== undefined && trade?.size !== null ? Number(trade.size) : null;
+  const price = trade?.price !== undefined && trade?.price !== null ? Number(trade.price) : null;
+
+  if (!id || !assetId || !conditionId || !side || !matchTime || !Number.isFinite(size) || !Number.isFinite(price)) {
+    return null;
+  }
+
+  return {
+    id,
+    asset_id: assetId,
+    market: conditionId,
+    outcome,
+    side,
+    size,
+    price,
+    match_time: matchTime,
+    _polymarketSource: 'data-api',
+  };
+};
+
+const parseBooleanEnvDefault = (value, fallback = false) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+    return true;
+  }
+  if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+    return false;
+  }
+  return fallback;
+};
+
+const fetchDataApiTradesPage = async ({ userAddress, offset, limit, takerOnly }) => {
+  const normalizedUser = String(userAddress || '').trim();
+  if (!isValidHexAddress(normalizedUser)) {
+    throw new Error('Polymarket address is missing or invalid.');
+  }
+
+  const cleanedOffset = Number.isFinite(Number(offset)) && Number(offset) >= 0 ? Math.floor(Number(offset)) : 0;
+  const cleanedLimit = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.floor(Number(limit)) : 100;
+  const maxLimit = 10000;
+  const finalLimit = Math.max(1, Math.min(cleanedLimit, maxLimit));
+
+  const takerOnlyFlag = parseBooleanEnvDefault(takerOnly, false);
+
+  const { response, meta } = await axiosGetWithProxyFallback(`${DATA_API_HOST}/trades`, {
+    headers: POLYMARKET_DATA_API_USER_AGENT ? { 'User-Agent': POLYMARKET_DATA_API_USER_AGENT } : undefined,
+    params: {
+      user: normalizedUser,
+      limit: finalLimit,
+      offset: cleanedOffset,
+      takerOnly: takerOnlyFlag,
+    },
+  });
+
+  const data = Array.isArray(response?.data) ? response.data : [];
+  const normalizedTrades = [];
+  const seen = new Set();
+  for (const raw of data) {
+    const mapped = normalizeDataApiTrade(raw);
+    if (!mapped?.id || seen.has(mapped.id)) {
+      continue;
+    }
+    seen.add(mapped.id);
+    normalizedTrades.push(mapped);
+  }
+  return { trades: normalizedTrades, meta, nextOffset: cleanedOffset + finalLimit, requestedLimit: finalLimit };
+};
+
 const fetchMarket = async (conditionId) => {
   if (!conditionId) {
     return null;
@@ -614,6 +727,22 @@ const formatAxiosError = (error) => {
   return String(error?.message || 'Request failed');
 };
 
+const isPolymarketAuthFailure = (error) => {
+  const status = Number(error?.status || error?.response?.status);
+  if (status === 401 || status === 403) {
+    return true;
+  }
+  const message = String(error?.message || '').toLowerCase();
+  if (message.includes('unauthorized') || message.includes('invalid api key')) {
+    return true;
+  }
+  const apiError = String(error?.response?.data?.error || error?.response?.data?.message || '').toLowerCase();
+  if (apiError.includes('unauthorized') || apiError.includes('invalid api key')) {
+    return true;
+  }
+  return false;
+};
+
 const syncPolymarketPortfolio = async (portfolio, options = {}) => {
   if (!portfolio) {
     throw new Error('Portfolio is required.');
@@ -651,22 +780,26 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
     process.env.POLYMARKET_AUTH_ADDRESS || process.env.POLYMARKET_ADDRESS || ''
   ).trim();
   const authAddressCandidate = authAddressStored || authAddressEnv || (usingStoredCreds ? address : '');
-  if (!authAddressCandidate) {
-    throw new Error(
-      'Polymarket auth address is required to use CLOB L2 credentials. Set POLYMARKET_AUTH_ADDRESS (the wallet address that generated your POLYMARKET_API_KEY).'
-    );
-  }
-  if (!isValidHexAddress(authAddressCandidate)) {
-    throw new Error('POLYMARKET_AUTH_ADDRESS (or portfolio.polymarket.authAddress) is set but invalid.');
-  }
-  const authAddress = authAddressCandidate;
+  const hasAuthAddress = Boolean(authAddressCandidate && isValidHexAddress(authAddressCandidate));
+  const authAddress = hasAuthAddress ? authAddressCandidate : null;
+  const hasClobCredentials = Boolean(apiKey && secret && passphrase && authAddress);
 
   if (!isValidHexAddress(address)) {
     throw new Error('Polymarket address is missing or invalid.');
   }
-  if (!apiKey || !secret || !passphrase) {
+  const tradesSourceSetting = (() => {
+    const raw = POLYMARKET_TRADES_SOURCE;
+    if (raw === 'clob' || raw === 'l2' || raw === 'clob-l2') {
+      return 'clob-l2';
+    }
+    if (raw === 'data' || raw === 'data-api' || raw === 'data_api') {
+      return 'data-api';
+    }
+    return 'auto';
+  })();
+  if (tradesSourceSetting === 'clob-l2' && !hasClobCredentials) {
     throw new Error(
-      'Polymarket credentials are required (apiKey, secret, passphrase). Provide them in the strategy or set POLYMARKET_* env vars.'
+      'Polymarket CLOB L2 credentials are required. Set POLYMARKET_API_KEY, POLYMARKET_SECRET, POLYMARKET_PASSPHRASE, and POLYMARKET_AUTH_ADDRESS.'
     );
   }
 
@@ -697,186 +830,311 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
     });
   }
 
-  let nextCursor = INITIAL_CURSOR;
-  let foundLastTrade = false;
-  let foundAnchor = false;
-  const pendingTrades = [];
-  let pagesFetched = 0;
-  let nextProgressLogAt = POLYMARKET_PROGRESS_LOG_EVERY_TRADES;
+  const dataApiTakerOnly = parseBooleanEnvDefault(POLYMARKET_DATA_API_TAKER_ONLY_DEFAULT, false);
 
-  const fetchPage = async (cursor) => {
-    try {
-      return await fetchTradesPage({
-        authAddress,
-        apiKey,
-        secret,
-        passphrase,
-        makerAddress: address,
-        nextCursor: cursor,
-      });
-    } catch (error) {
-      const wrapped = new Error(formatAxiosError(error));
-      if (error && typeof error === 'object' && error.polymarketProxyMeta) {
-        wrapped.polymarketProxyMeta = error.polymarketProxyMeta;
+  const collectTrades = async (tradeSource) => {
+    const pendingTrades = [];
+    const seenTradeIds = new Set();
+    let pagesFetched = 0;
+    let nextProgressLogAt = POLYMARKET_PROGRESS_LOG_EVERY_TRADES;
+    let foundLastTrade = false;
+    let foundAnchor = false;
+
+    const pushTrade = (trade) => {
+      const id = trade?.id ? String(trade.id) : null;
+      if (!id || seenTradeIds.has(id)) {
+        return;
       }
-      throw wrapped;
-    }
-  };
+      seenTradeIds.add(id);
+      pendingTrades.push(trade);
+    };
 
-  if (mode === 'backfill') {
-    while (nextCursor !== END_CURSOR && pendingTrades.length < MAX_TRADES_PER_BACKFILL) {
-      pagesFetched += 1;
-      const shouldLogPage = pagesFetched === 1 || pagesFetched % POLYMARKET_PROGRESS_LOG_EVERY_PAGES === 0;
-      const cursorBefore = nextCursor;
-      if (shouldLogPage) {
-        const proxyActiveNow = proxyPool.length
-          ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
-          : null;
-        void recordStrategyLog({
-          strategyId: portfolio.strategy_id,
-          userId: portfolio.userId,
-          strategyName: portfolio.name,
-          message: 'Polymarket backfill fetching trades page',
-          details: {
-            provider: 'polymarket',
-            mode,
-            page: pagesFetched,
-            cursor: cursorBefore,
-            tradesCollected: pendingTrades.length,
-            proxyActive: proxyActiveNow,
-          },
-        });
-      }
-
-      let fetched;
+    const fetchClobPage = async (cursor) => {
       try {
-        fetched = await fetchPage(cursorBefore);
-      } catch (error) {
-        await recordStrategyLog({
-          strategyId: portfolio.strategy_id,
-          userId: portfolio.userId,
-          strategyName: portfolio.name,
-          level: 'warn',
-          message: 'Polymarket backfill failed fetching trades page',
-          details: {
-            provider: 'polymarket',
-            mode,
-            page: pagesFetched,
-            cursor: cursorBefore,
-            tradesCollected: pendingTrades.length,
-            request: summarizeProxyMeta(error?.polymarketProxyMeta),
-            error: String(error?.message || error),
-          },
+        return await fetchTradesPage({
+          authAddress,
+          apiKey,
+          secret,
+          passphrase,
+          makerAddress: address,
+          nextCursor: cursor,
         });
-        throw error;
+      } catch (error) {
+        const wrapped = new Error(formatAxiosError(error));
+        const status = Number(error?.response?.status);
+        if (Number.isFinite(status)) {
+          wrapped.status = status;
+        }
+        if (error && typeof error === 'object' && error.polymarketProxyMeta) {
+          wrapped.polymarketProxyMeta = error.polymarketProxyMeta;
+        }
+        throw wrapped;
       }
+    };
 
-      const page = fetched?.page;
-      const requestMeta = fetched?.meta;
-      const trades = Array.isArray(page?.data) ? page.data : [];
-      if (!trades.length) {
-        break;
-      }
-      for (const trade of trades) {
-        if (pendingTrades.length >= MAX_TRADES_PER_BACKFILL) {
+    let nextToken = tradeSource === 'data-api' ? 0 : INITIAL_CURSOR;
+    if (tradeSource === 'clob-l2' && !hasClobCredentials) {
+      const err = new Error(
+        'Polymarket CLOB L2 credentials are missing/invalid. Set POLYMARKET_API_KEY, POLYMARKET_SECRET, POLYMARKET_PASSPHRASE, and POLYMARKET_AUTH_ADDRESS.'
+      );
+      err.status = 401;
+      throw err;
+    }
+
+    if (mode === 'backfill') {
+      while (nextToken !== null && pendingTrades.length < MAX_TRADES_PER_BACKFILL) {
+        pagesFetched += 1;
+        const shouldLogPage = pagesFetched === 1 || pagesFetched % POLYMARKET_PROGRESS_LOG_EVERY_PAGES === 0;
+        const cursorBefore = nextToken;
+        if (shouldLogPage) {
+          const proxyActiveNow = proxyPool.length
+            ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
+            : null;
+          void recordStrategyLog({
+            strategyId: portfolio.strategy_id,
+            userId: portfolio.userId,
+            strategyName: portfolio.name,
+            message: 'Polymarket backfill fetching trades page',
+            details: {
+              provider: 'polymarket',
+              mode,
+              tradeSource,
+              page: pagesFetched,
+              cursor: tradeSource === 'data-api' ? `offset:${cursorBefore}` : cursorBefore,
+              tradesCollected: pendingTrades.length,
+              proxyActive: proxyActiveNow,
+            },
+          });
+        }
+
+        let trades = [];
+        let requestMeta = null;
+        let requestedLimit = null;
+        try {
+          if (tradeSource === 'data-api') {
+            const remaining = Math.max(0, MAX_TRADES_PER_BACKFILL - pendingTrades.length);
+            requestedLimit = Math.max(1, Math.min(remaining, 10000));
+            const fetched = await fetchDataApiTradesPage({
+              userAddress: address,
+              offset: cursorBefore,
+              limit: requestedLimit,
+              takerOnly: dataApiTakerOnly,
+            });
+            trades = Array.isArray(fetched?.trades) ? fetched.trades : [];
+            requestMeta = fetched?.meta;
+            requestedLimit = fetched?.requestedLimit ?? requestedLimit;
+            const nextOffset =
+              fetched?.nextOffset !== undefined && fetched?.nextOffset !== null ? Number(fetched.nextOffset) : null;
+            nextToken = Number.isFinite(nextOffset) ? nextOffset : null;
+          } else {
+            const fetched = await fetchClobPage(cursorBefore);
+            const page = fetched?.page;
+            trades = Array.isArray(page?.data) ? page.data : [];
+            requestMeta = fetched?.meta;
+            const cursor = page?.next_cursor ? String(page.next_cursor) : null;
+            if (!cursor || cursor === cursorBefore || cursor === END_CURSOR) {
+              nextToken = null;
+            } else {
+              nextToken = cursor;
+            }
+          }
+        } catch (error) {
+          await recordStrategyLog({
+            strategyId: portfolio.strategy_id,
+            userId: portfolio.userId,
+            strategyName: portfolio.name,
+            level: 'warn',
+            message: 'Polymarket backfill failed fetching trades page',
+            details: {
+              provider: 'polymarket',
+              mode,
+              tradeSource,
+              page: pagesFetched,
+              cursor: tradeSource === 'data-api' ? `offset:${cursorBefore}` : cursorBefore,
+              tradesCollected: pendingTrades.length,
+              request: summarizeProxyMeta(error?.polymarketProxyMeta),
+              error: String(error?.message || error),
+            },
+          });
+          throw error;
+        }
+
+        if (!trades.length) {
           break;
         }
-        const id = trade?.id ? String(trade.id) : null;
-        if (!id) {
-          continue;
-        }
-        pendingTrades.push(trade);
-      }
-
-      const cursor = page?.next_cursor ? String(page.next_cursor) : null;
-      if (!cursor || cursor === nextCursor) {
-        break;
-      }
-      nextCursor = cursor;
-
-      if (shouldLogPage) {
-        const proxyActiveNow = proxyPool.length
-          ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
-          : null;
-        void recordStrategyLog({
-          strategyId: portfolio.strategy_id,
-          userId: portfolio.userId,
-          strategyName: portfolio.name,
-          message: 'Polymarket backfill fetched trades page',
-          details: {
-            provider: 'polymarket',
-            mode,
-            page: pagesFetched,
-            tradesInPage: trades.length,
-            tradesCollected: pendingTrades.length,
-            nextCursor,
-            proxyActive: proxyActiveNow,
-            request: summarizeProxyMeta(requestMeta),
-          },
-        });
-      }
-
-      if (pendingTrades.length >= nextProgressLogAt) {
-        const proxyActiveNow = proxyPool.length
-          ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
-          : null;
-        void recordStrategyLog({
-          strategyId: portfolio.strategy_id,
-          userId: portfolio.userId,
-          strategyName: portfolio.name,
-          message: 'Polymarket backfill downloading trades',
-          details: {
-            provider: 'polymarket',
-            mode,
-            tradesCollected: pendingTrades.length,
-            pagesFetched,
-            nextCursor,
-            proxyActive: proxyActiveNow,
-          },
-        });
-        nextProgressLogAt += POLYMARKET_PROGRESS_LOG_EVERY_TRADES;
-      }
-    }
-  } else {
-    while (nextCursor !== END_CURSOR && pendingTrades.length < MAX_TRADES_PER_SYNC && !foundLastTrade) {
-      pagesFetched += 1;
-      const fetched = await fetchPage(nextCursor);
-      const page = fetched?.page;
-
-      const trades = Array.isArray(page?.data) ? page.data : [];
-      for (const trade of trades) {
-        const id = trade?.id ? String(trade.id) : null;
-        if (!id) {
-          continue;
-        }
-        if (lastTradeId) {
-          if (id === lastTradeId) {
-            foundLastTrade = true;
+        for (const trade of trades) {
+          if (pendingTrades.length >= MAX_TRADES_PER_BACKFILL) {
             break;
           }
-          pendingTrades.push(trade);
-          continue;
+          pushTrade(trade);
         }
 
-        const matchTime = trade?.match_time ? String(trade.match_time) : null;
-        if (!matchTime) {
-          continue;
+        if (tradeSource === 'data-api' && requestedLimit !== null && trades.length < requestedLimit) {
+          nextToken = null;
         }
-        if (anchorMatchTime && !isTradeAfterAnchor(matchTime, anchorMatchTime)) {
-          foundAnchor = true;
+
+        if (shouldLogPage) {
+          const proxyActiveNow = proxyPool.length
+            ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
+            : null;
+          void recordStrategyLog({
+            strategyId: portfolio.strategy_id,
+            userId: portfolio.userId,
+            strategyName: portfolio.name,
+            message: 'Polymarket backfill fetched trades page',
+            details: {
+              provider: 'polymarket',
+              mode,
+              tradeSource,
+              page: pagesFetched,
+              tradesInPage: trades.length,
+              tradesCollected: pendingTrades.length,
+              nextCursor:
+                tradeSource === 'data-api'
+                  ? nextToken === null
+                    ? null
+                    : `offset:${nextToken}`
+                  : nextToken,
+              proxyActive: proxyActiveNow,
+              request: summarizeProxyMeta(requestMeta),
+            },
+          });
+        }
+
+        if (pendingTrades.length >= nextProgressLogAt) {
+          const proxyActiveNow = proxyPool.length
+            ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
+            : null;
+          void recordStrategyLog({
+            strategyId: portfolio.strategy_id,
+            userId: portfolio.userId,
+            strategyName: portfolio.name,
+            message: 'Polymarket backfill downloading trades',
+            details: {
+              provider: 'polymarket',
+              mode,
+              tradeSource,
+              tradesCollected: pendingTrades.length,
+              pagesFetched,
+              nextCursor:
+                tradeSource === 'data-api'
+                  ? nextToken === null
+                    ? null
+                    : `offset:${nextToken}`
+                  : nextToken,
+              proxyActive: proxyActiveNow,
+            },
+          });
+          nextProgressLogAt += POLYMARKET_PROGRESS_LOG_EVERY_TRADES;
+        }
+      }
+    } else {
+      while (nextToken !== null && pendingTrades.length < MAX_TRADES_PER_SYNC && !foundLastTrade) {
+        pagesFetched += 1;
+
+        let trades = [];
+        let requestedLimit = null;
+        if (tradeSource === 'data-api') {
+          const remaining = Math.max(0, MAX_TRADES_PER_SYNC - pendingTrades.length);
+          requestedLimit = Math.max(1, Math.min(remaining, 10000));
+          const fetched = await fetchDataApiTradesPage({
+            userAddress: address,
+            offset: nextToken,
+            limit: requestedLimit,
+            takerOnly: dataApiTakerOnly,
+          });
+          trades = Array.isArray(fetched?.trades) ? fetched.trades : [];
+          const nextOffset =
+            fetched?.nextOffset !== undefined && fetched?.nextOffset !== null ? Number(fetched.nextOffset) : null;
+          nextToken = Number.isFinite(nextOffset) ? nextOffset : null;
+          requestedLimit = fetched?.requestedLimit ?? requestedLimit;
+          if (requestedLimit !== null && trades.length < requestedLimit) {
+            nextToken = null;
+          }
+        } else {
+          const fetched = await fetchClobPage(nextToken);
+          const page = fetched?.page;
+          trades = Array.isArray(page?.data) ? page.data : [];
+          const cursor = page?.next_cursor ? String(page.next_cursor) : null;
+          if (!cursor || cursor === nextToken || cursor === END_CURSOR) {
+            nextToken = null;
+          } else {
+            nextToken = cursor;
+          }
+        }
+
+        for (const trade of trades) {
+          const id = trade?.id ? String(trade.id) : null;
+          if (!id) {
+            continue;
+          }
+          if (lastTradeId) {
+            if (id === lastTradeId) {
+              foundLastTrade = true;
+              break;
+            }
+            pushTrade(trade);
+            continue;
+          }
+
+          const matchTime = trade?.match_time ? String(trade.match_time) : null;
+          if (!matchTime) {
+            continue;
+          }
+          if (anchorMatchTime && !isTradeAfterAnchor(matchTime, anchorMatchTime)) {
+            foundAnchor = true;
+            break;
+          }
+          pushTrade(trade);
+        }
+
+        if (!lastTradeId && foundAnchor) {
           break;
         }
-        pendingTrades.push(trade);
       }
+    }
 
-      const cursor = page?.next_cursor ? String(page.next_cursor) : null;
-      if (!cursor || cursor === nextCursor) {
-        break;
-      }
-      nextCursor = cursor;
-      if (!lastTradeId && foundAnchor) {
-        break;
-      }
+    return { pendingTrades, pagesFetched };
+  };
+
+  const initialTradeSource = (() => {
+    if (tradesSourceSetting === 'data-api') {
+      return 'data-api';
+    }
+    if (tradesSourceSetting === 'clob-l2') {
+      return 'clob-l2';
+    }
+    return hasClobCredentials ? 'clob-l2' : 'data-api';
+  })();
+
+  let tradeSourceUsed = initialTradeSource;
+  let pendingTrades = [];
+  let pagesFetched = 0;
+  try {
+    const collected = await collectTrades(tradeSourceUsed);
+    pendingTrades = collected.pendingTrades;
+    pagesFetched = collected.pagesFetched;
+  } catch (error) {
+    if (tradesSourceSetting === 'auto' && tradeSourceUsed === 'clob-l2' && isPolymarketAuthFailure(error)) {
+      tradeSourceUsed = 'data-api';
+      await recordStrategyLog({
+        strategyId: portfolio.strategy_id,
+        userId: portfolio.userId,
+        strategyName: portfolio.name,
+        level: 'warn',
+        message: 'Polymarket CLOB auth failed; falling back to data-api trades endpoint',
+        details: {
+          provider: 'polymarket',
+          mode,
+          address,
+          error: String(error?.message || error),
+        },
+      });
+      const collected = await collectTrades(tradeSourceUsed);
+      pendingTrades = collected.pendingTrades;
+      pagesFetched = collected.pagesFetched;
+    } else {
+      throw error;
     }
   }
 
@@ -1232,20 +1490,22 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
   await portfolio.save();
 
   const maxLogTrades = mode === 'backfill' ? 200 : 500;
-  await recordStrategyLog({
-    strategyId: portfolio.strategy_id,
-    userId: portfolio.userId,
-    strategyName: portfolio.name,
-    message: mode === 'backfill' ? 'Polymarket copy-trader backfilled' : 'Polymarket copy-trader synced',
-    details: {
-      provider: 'polymarket',
-      mode,
-      address,
-      startingCash,
-      processedTrades: processedTrades.length,
-      buys: tradeSummary.buys.slice(0, maxLogTrades),
-      sells: tradeSummary.sells.slice(0, maxLogTrades),
-      skipped: tradeSummary.skipped.slice(0, 50),
+	  await recordStrategyLog({
+	    strategyId: portfolio.strategy_id,
+	    userId: portfolio.userId,
+	    strategyName: portfolio.name,
+	    message: mode === 'backfill' ? 'Polymarket copy-trader backfilled' : 'Polymarket copy-trader synced',
+	    details: {
+	      provider: 'polymarket',
+	      mode,
+	      tradeSource: tradeSourceUsed,
+	      address,
+	      pagesFetched,
+	      startingCash,
+	      processedTrades: processedTrades.length,
+	      buys: tradeSummary.buys.slice(0, maxLogTrades),
+	      sells: tradeSummary.sells.slice(0, maxLogTrades),
+	      skipped: tradeSummary.skipped.slice(0, 50),
       buyCount: tradeSummary.buys.length,
       sellCount: tradeSummary.sells.length,
       skippedCount: tradeSummary.skipped.length,
@@ -1261,13 +1521,15 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
     },
   });
 
-  return {
-    processed: processedTrades.length,
-    mode,
-    buys: tradeSummary.buys.length,
-    sells: tradeSummary.sells.length,
-    skipped: tradeSummary.skipped.length,
-  };
+	  return {
+	    processed: processedTrades.length,
+	    mode,
+	    tradeSource: tradeSourceUsed,
+	    pagesFetched,
+	    buys: tradeSummary.buys.length,
+	    sells: tradeSummary.sells.length,
+	    skipped: tradeSummary.skipped.length,
+	  };
 };
 
 module.exports = {

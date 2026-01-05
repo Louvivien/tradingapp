@@ -2091,7 +2091,11 @@ exports.createPolymarketCopyTrader = async (req, res) => {
     const secret = secretInput || secretEnv;
     const passphrase = passphraseInput || passphraseEnv;
 
-    if (!apiKey || !secret || !passphrase) {
+    const tradesSourceSetting = String(process.env.POLYMARKET_TRADES_SOURCE || 'auto').trim().toLowerCase();
+    const requiresClobCreds =
+      tradesSourceSetting === 'clob' || tradesSourceSetting === 'l2' || tradesSourceSetting === 'clob-l2';
+
+    if (requiresClobCreds && (!apiKey || !secret || !passphrase)) {
       return res.status(400).json({
         status: 'fail',
         message:
@@ -2103,7 +2107,7 @@ exports.createPolymarketCopyTrader = async (req, res) => {
       process.env.POLYMARKET_AUTH_ADDRESS || process.env.POLYMARKET_ADDRESS || ''
     ).trim();
     const usingEnvCreds = !(apiKeyInput || secretInput || passphraseInput);
-    if (usingEnvCreds) {
+    if (requiresClobCreds && usingEnvCreds) {
       if (!authAddressEnv) {
         return res.status(400).json({
           status: 'fail',
