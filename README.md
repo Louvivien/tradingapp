@@ -114,7 +114,6 @@ Server env vars (in `tradingapp/server/config/.env`):
 - Trade source: `POLYMARKET_TRADES_SOURCE=auto|clob-l2|data-api` (default: `auto`, falls back to `data-api` if CLOB auth fails)
 - CLOB L2 creds (only needed if forcing `clob-l2`): `POLYMARKET_API_KEY`, `POLYMARKET_SECRET`, `POLYMARKET_PASSPHRASE`, `POLYMARKET_AUTH_ADDRESS`
 - Data API options (optional): `POLYMARKET_DATA_API_HOST`, `POLYMARKET_DATA_API_TAKER_ONLY`, `POLYMARKET_DATA_API_USER_AGENT`
-- Proxies (optional): `POLYMARKET_PROXY_URLS`, `POLYMARKET_PROXY_MODE`
 - CLOB auth retry cooldown in `auto` mode (optional, default 1h): `POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS`
 
 Smoke test:
@@ -122,6 +121,21 @@ Smoke test:
 cd tradingapp/server
 node scripts/polymarket_smoke_test.js 0xYourWalletAddress
 ```
+
+Fix `401 Unauthorized/Invalid api key` (regenerate CLOB L2 creds):
+```sh
+cd tradingapp/server
+
+# Option A: provide the wallet private key via env (recommended to run locally)
+POLYMARKET_PRIVATE_KEY=0x... node scripts/polymarket_create_or_derive_api_key.js
+
+# Option B: read the private key from a file (first non-empty line)
+POLYMARKET_PRIVATE_KEY_FILE=/path/to/private_key.txt node scripts/polymarket_create_or_derive_api_key.js
+```
+
+Notes:
+- The script writes `POLYMARKET_API_KEY`, `POLYMARKET_SECRET`, `POLYMARKET_PASSPHRASE`, `POLYMARKET_AUTH_ADDRESS` into `tradingapp/server/config/.env` (and creates a `*.bak.*` backup by default).
+- It never prints full secrets to stdout (only status + lengths).
 
 ## Strategy Evaluation Parity (Composer/defsymphony)
 The server evaluates defsymphony strategies locally. To keep results aligned with Composer, the defaults are:

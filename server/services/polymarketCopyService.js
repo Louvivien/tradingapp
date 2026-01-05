@@ -1,12 +1,8 @@
 const crypto = require('crypto');
-const net = require('net');
 const Axios = require('axios');
 const CryptoJS = require('crypto-js');
-const HttpsProxyAgentImport = require('https-proxy-agent');
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('./strategyLogger');
-
-const HttpsProxyAgent = HttpsProxyAgentImport?.HttpsProxyAgent || HttpsProxyAgentImport;
 
 const CLOB_HOST = String(process.env.POLYMARKET_CLOB_HOST || 'https://clob.polymarket.com').replace(/\/+$/, '');
 const DATA_API_HOST = String(process.env.POLYMARKET_DATA_API_HOST || 'https://data-api.polymarket.com').replace(
@@ -20,29 +16,6 @@ const POLYMARKET_DATA_API_TAKER_ONLY_DEFAULT = String(process.env.POLYMARKET_DAT
   .trim()
   .toLowerCase();
 const POLYMARKET_DATA_API_USER_AGENT = String(process.env.POLYMARKET_DATA_API_USER_AGENT || 'tradingapp/1.0').trim();
-const CLOB_PROXY_URLS_RAW = (() => {
-  const values = [];
-  const pushValue = (value) => {
-    const raw = String(value || '').trim();
-    if (raw) {
-      values.push(raw);
-    }
-  };
-
-  pushValue(process.env.POLYMARKET_PROXY_URLS);
-  pushValue(process.env.POLYMARKET_PROXY_URL);
-  pushValue(process.env.POLYMARKET_HTTP_PROXY);
-  pushValue(process.env.POLYMARKET_PROXY);
-
-  const numbered = Object.keys(process.env || {})
-    .filter((key) => /^POLYMARKET_PROXY_URL_\d+$/.test(key))
-    .sort((a, b) => Number(a.split('_').pop()) - Number(b.split('_').pop()))
-    .map((key) => process.env[key]);
-  numbered.forEach(pushValue);
-
-  return values.join(',');
-})();
-const PROXY_MODE = String(process.env.POLYMARKET_PROXY_MODE || 'always').trim().toLowerCase();
 const POLYMARKET_HTTP_TIMEOUT_MS = (() => {
   const raw = Number(process.env.POLYMARKET_HTTP_TIMEOUT_MS || process.env.POLYMARKET_TIMEOUT_MS);
   if (!Number.isFinite(raw) || raw <= 0) {
@@ -106,348 +79,30 @@ const buildGeoParams = (params = {}) => {
   return { ...params, geo_block_token: GEO_BLOCK_TOKEN };
 };
 
-const splitProxyList = (raw) => {
-  const input = String(raw || '').trim();
-  if (!input) {
-    return [];
-  }
-  return input
-    .split(/[\s,]+/)
-    .map((entry) => String(entry || '').trim())
-    .filter(Boolean);
-};
-
-const normalizeProxyUrl = (proxyUrl) => {
-  const raw = String(proxyUrl || '').trim();
-  if (!raw) {
-    return null;
-  }
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) {
-    return raw;
-  }
-  // Accept host:port entries for convenience.
-  return `http://${raw}`;
-};
-
-const isValidProxyHost = (host) => {
-  const value = String(host || '').trim();
-  if (!value) {
-    return false;
-  }
-  if (value === 'localhost') {
-    return true;
-  }
-  if (net.isIP(value)) {
-    return true;
-  }
-  if (!/^[a-zA-Z0-9.-]+$/.test(value)) {
-    return false;
-  }
-  if (value.startsWith('.') || value.endsWith('.') || value.startsWith('-') || value.endsWith('-')) {
-    return false;
-  }
-  if (value.includes('..')) {
-    return false;
-  }
-  return true;
-};
-
-const parseProxyUrl = (proxyUrl) => {
-  const raw = String(proxyUrl || '').trim();
-  if (!raw) {
-    return null;
-  }
-  let parsed;
-  try {
-    parsed = new URL(normalizeProxyUrl(raw));
-  } catch (error) {
-    throw new Error('Polymarket proxy entry is invalid. Expected format: host:port or http://user:pass@host:port');
-  }
-  const protocol = String(parsed.protocol || '').replace(':', '');
-  if (protocol !== 'http' && protocol !== 'https') {
-    throw new Error('Polymarket proxy must use http:// or https://');
-  }
-  const host = String(parsed.hostname || '').trim();
-  if (!host) {
-    throw new Error('Polymarket proxy must include a hostname.');
-  }
-  if (!isValidProxyHost(host)) {
-    throw new Error('Polymarket proxy hostname is invalid.');
-  }
-  const port = parsed.port ? Number(parsed.port) : protocol === 'https' ? 443 : 80;
-  if (!Number.isFinite(port) || port <= 0) {
-    throw new Error('Polymarket proxy port is invalid.');
-  }
-
-  const normalized = new URL(parsed.toString());
-  normalized.protocol = `${protocol}:`;
-  normalized.hostname = host;
-  normalized.port = String(port);
-  normalized.pathname = '/';
-  normalized.search = '';
-  normalized.hash = '';
-  return normalized.toString();
-};
-
-const sanitizeUrlForLog = (url) => {
-  const raw = String(url || '').trim();
-  if (!raw) {
-    return null;
-  }
-  try {
-    const parsed = new URL(raw);
-    parsed.username = '';
-    parsed.password = '';
-    parsed.pathname = '';
-    parsed.search = '';
-    parsed.hash = '';
-    return `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
-  } catch (error) {
-    return raw;
-  }
-};
-
-let cachedProxyPool = null;
-const getProxyPool = () => {
-  if (cachedProxyPool !== null) {
-    return cachedProxyPool;
-  }
-
-  const rawEntries = splitProxyList(CLOB_PROXY_URLS_RAW);
-  const pool = [];
-  const seen = new Set();
-
-  rawEntries.forEach((entry) => {
-    try {
-      const proxyUrl = parseProxyUrl(entry);
-      if (!proxyUrl || seen.has(proxyUrl)) {
-        return;
-      }
-      seen.add(proxyUrl);
-      pool.push({
-        url: proxyUrl,
-        display: sanitizeUrlForLog(proxyUrl),
-        agent: new HttpsProxyAgent(proxyUrl),
-      });
-    } catch (error) {
-      // Ignore invalid proxy entries so they don't crash the server.
-    }
-  });
-
-  cachedProxyPool = pool;
-  return cachedProxyPool;
-};
-
-const shouldRetryWithAnotherProxy = (error) => {
-  const status = Number(error?.response?.status);
-  if (!Number.isFinite(status) || status <= 0) {
-    return true;
-  }
-  // 401 is almost always an auth/keys problem; switching proxies will not fix it.
-  if (status === 403 || status === 407) {
-    return true;
-  }
-  if (status === 429) {
-    return true;
-  }
-  if (status >= 500 && status <= 599) {
-    return true;
-  }
-  return false;
-};
-
-const proxyState = {
-  activeIndex: 0,
-};
-
-const buildProxyAttemptOrder = (count) => {
-  if (!count) {
-    return [];
-  }
-  const start = ((proxyState.activeIndex % count) + count) % count;
-  return Array.from({ length: count }, (_, offset) => (start + offset) % count);
-};
-
-const extractAxiosErrorDetails = (error) => {
-  const status = Number(error?.response?.status);
-  const code = error?.code ? String(error.code) : null;
-  const message = String(error?.message || 'Request failed');
-  const apiError = error?.response?.data?.error
-    ? String(error.response.data.error)
-    : error?.response?.data?.message
-      ? String(error.response.data.message)
-      : null;
-
-  return {
-    status: Number.isFinite(status) ? status : null,
-    code,
-    message,
-    apiError,
-  };
-};
-
-const attachProxyMetaToError = (error, meta) => {
-  if (error && typeof error === 'object') {
-    error.polymarketProxyMeta = meta;
-  }
-  return error;
-};
-
-const summarizeProxyMeta = (meta) => {
-  if (!meta) {
-    return null;
-  }
-  return {
-    proxyMode: meta.proxyMode,
-    proxyCount: meta.proxyCount,
-    used: meta.used,
-    proxyUsed: meta.proxyUsed || null,
-    attempts: meta.attempts,
-    proxyAttempts: meta.proxyAttempts,
-    directAttempts: meta.directAttempts,
-    triedProxies: Array.isArray(meta.triedProxies) ? meta.triedProxies.slice(0, 5) : [],
-    lastError: meta.lastError || null,
-  };
-};
-
-const axiosGetWithProxyFallback = async (url, config = {}) => {
-  const proxyPool = getProxyPool();
+const axiosGet = async (url, config = {}) => {
   const timeout = config.timeout ? config.timeout : POLYMARKET_HTTP_TIMEOUT_MS;
-  const baseConfig = {
-    ...config,
-    timeout,
-  };
-
-  const meta = {
-    proxyMode: PROXY_MODE,
-    proxyCount: proxyPool.length,
-    used: null,
-    proxyUsed: null,
-    proxyIndex: null,
-    attempts: 0,
-    proxyAttempts: 0,
-    directAttempts: 0,
-    triedProxies: [],
-    lastError: null,
-  };
-
-  const axiosGetWithHardTimeout = async (requestConfig) => {
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = controller
-      ? setTimeout(() => {
-        try {
-          controller.abort();
-        } catch (error) {
-          // ignore
-        }
-      }, timeout)
-      : null;
-
-    try {
-      return await Axios.get(url, {
-        ...requestConfig,
-        ...(controller ? { signal: controller.signal } : {}),
-      });
-    } finally {
-      if (timer) {
-        clearTimeout(timer);
-      }
-    }
-  };
-
-  const attemptDirect = async () =>
-    axiosGetWithHardTimeout({
-      ...baseConfig,
-      proxy: false,
-    });
-
-  const attemptProxies = async () => {
-    const order = buildProxyAttemptOrder(proxyPool.length);
-    let lastError = null;
-    for (const idx of order) {
-      const proxy = proxyPool[idx];
-      meta.attempts += 1;
-      meta.proxyAttempts += 1;
-      const display = proxy?.display || null;
-      if (display && !meta.triedProxies.includes(display) && meta.triedProxies.length < 25) {
-        meta.triedProxies.push(display);
-      }
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller
+    ? setTimeout(() => {
       try {
-        const response = await axiosGetWithHardTimeout({
-          ...baseConfig,
-          proxy: false,
-          httpAgent: proxy.agent,
-          httpsAgent: proxy.agent,
-        });
-        proxyState.activeIndex = idx;
-        meta.used = 'proxy';
-        meta.proxyUsed = display;
-        meta.proxyIndex = idx;
-        return { response, meta };
+        controller.abort();
       } catch (error) {
-        lastError = error;
-        meta.lastError = {
-          via: 'proxy',
-          proxy: display,
-          ...extractAxiosErrorDetails(error),
-        };
-        if (!shouldRetryWithAnotherProxy(error)) {
-          throw attachProxyMetaToError(error, meta);
-        }
+        // ignore
       }
-    }
-    if (lastError) {
-      throw attachProxyMetaToError(lastError, meta);
-    }
-    throw attachProxyMetaToError(new Error('Polymarket request failed.'), meta);
-  };
+    }, timeout)
+    : null;
 
-  if (!proxyPool.length || PROXY_MODE === 'off' || PROXY_MODE === 'direct') {
-    try {
-      meta.attempts += 1;
-      meta.directAttempts += 1;
-      const response = await attemptDirect();
-      meta.used = 'direct';
-      return { response, meta };
-    } catch (error) {
-      meta.lastError = { via: 'direct', proxy: null, ...extractAxiosErrorDetails(error) };
-      throw attachProxyMetaToError(error, meta);
-    }
-  }
-
-  if (PROXY_MODE === 'fallback') {
-    try {
-      meta.attempts += 1;
-      meta.directAttempts += 1;
-      const response = await attemptDirect();
-      meta.used = 'direct';
-      return { response, meta };
-    } catch (error) {
-      meta.lastError = { via: 'direct', proxy: null, ...extractAxiosErrorDetails(error) };
-      if (!shouldRetryWithAnotherProxy(error)) {
-        throw attachProxyMetaToError(error, meta);
-      }
-    }
-    return attemptProxies();
-  }
-
-  // Default: proxy-first, then direct as a last resort.
   try {
-    return await attemptProxies();
-  } catch (error) {
-    if (!shouldRetryWithAnotherProxy(error)) {
-      throw attachProxyMetaToError(error, meta);
+    return await Axios.get(url, {
+      ...config,
+      timeout,
+      proxy: false,
+      ...(controller ? { signal: controller.signal } : {}),
+    });
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
     }
-  }
-  try {
-    meta.attempts += 1;
-    meta.directAttempts += 1;
-    const response = await attemptDirect();
-    meta.used = 'direct';
-    return { response, meta };
-  } catch (error) {
-    meta.lastError = { via: 'direct', proxy: null, ...extractAxiosErrorDetails(error) };
-    throw attachProxyMetaToError(error, meta);
   }
 };
 
@@ -496,9 +151,7 @@ const buildPolyHmacSignature = ({ secret, timestamp, method, requestPath, body }
 };
 
 const fetchClobServerTime = async () => {
-  const { response } = await axiosGetWithProxyFallback(`${CLOB_HOST}/time`, {
-    params: buildGeoParams(),
-  });
+  const response = await axiosGet(`${CLOB_HOST}/time`, { params: buildGeoParams() });
   const ts = Math.floor(toNumber(response?.data, NaN));
   if (!Number.isFinite(ts) || ts <= 0) {
     throw new Error('Unable to fetch Polymarket server time.');
@@ -541,11 +194,8 @@ const fetchTradesPage = async ({ authAddress, apiKey, secret, passphrase, makerA
     maker_address: makerAddress,
   });
 
-  const { response, meta } = await axiosGetWithProxyFallback(`${CLOB_HOST}${endpoint}`, {
-    headers,
-    params,
-  });
-  return { page: response?.data || null, meta };
+  const response = await axiosGet(`${CLOB_HOST}${endpoint}`, { headers, params });
+  return { page: response?.data || null };
 };
 
 const buildDataApiTradeId = (trade) => {
@@ -628,7 +278,7 @@ const fetchDataApiTradesPage = async ({ userAddress, offset, limit, takerOnly })
 
   const takerOnlyFlag = parseBooleanEnvDefault(takerOnly, false);
 
-  const { response, meta } = await axiosGetWithProxyFallback(`${DATA_API_HOST}/trades`, {
+  const response = await axiosGet(`${DATA_API_HOST}/trades`, {
     headers: POLYMARKET_DATA_API_USER_AGENT ? { 'User-Agent': POLYMARKET_DATA_API_USER_AGENT } : undefined,
     params: {
       user: normalizedUser,
@@ -649,7 +299,7 @@ const fetchDataApiTradesPage = async ({ userAddress, offset, limit, takerOnly })
     seen.add(mapped.id);
     normalizedTrades.push(mapped);
   }
-  return { trades: normalizedTrades, meta, nextOffset: cleanedOffset + finalLimit, requestedLimit: finalLimit };
+  return { trades: normalizedTrades, nextOffset: cleanedOffset + finalLimit, requestedLimit: finalLimit };
 };
 
 const fetchMarket = async (conditionId) => {
@@ -660,9 +310,7 @@ const fetchMarket = async (conditionId) => {
   if (!cleaned) {
     return null;
   }
-  const { response } = await axiosGetWithProxyFallback(`${CLOB_HOST}/markets/${cleaned}`, {
-    params: buildGeoParams(),
-  });
+  const response = await axiosGet(`${CLOB_HOST}/markets/${cleaned}`, { params: buildGeoParams() });
   return response?.data || null;
 };
 
@@ -751,9 +399,9 @@ const formatAxiosError = (error) => {
   })();
   if (Number.isFinite(status) && status > 0) {
     if (status === 401 && apiMessage && apiMessage.toLowerCase().includes('unauthorized')) {
-      const hint = (getProxyPool().length > 0) || GEO_BLOCK_TOKEN
+      const hint = GEO_BLOCK_TOKEN
         ? ''
-        : ' (check POLYMARKET_AUTH_ADDRESS + keys; France may require POLYMARKET_PROXY_URL or POLYMARKET_GEO_BLOCK_TOKEN)';
+        : ' (check POLYMARKET_AUTH_ADDRESS + keys; France may require POLYMARKET_GEO_BLOCK_TOKEN)';
       return `Request failed with status code ${status} (${apiMessage})${hint}`;
     }
     return apiMessage ? `Request failed with status code ${status} (${apiMessage})` : `Request failed with status code ${status}`;
@@ -811,10 +459,6 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       : 'incremental';
   const resetPortfolio = mode === 'backfill' ? options?.reset !== false : false;
   const address = String(poly.address || '').trim();
-  const proxyPool = getProxyPool();
-  const proxyActive = proxyPool.length
-    ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
-    : null;
   const storedApiKey = decryptIfEncrypted(poly.apiKey);
   const storedSecret = decryptIfEncrypted(poly.secret);
   const storedPassphrase = decryptIfEncrypted(poly.passphrase);
@@ -871,9 +515,6 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         mode,
         address,
         resetPortfolio,
-        proxyMode: PROXY_MODE,
-        proxyCount: proxyPool.length,
-        proxyActive,
         timeoutMs: POLYMARKET_HTTP_TIMEOUT_MS,
         maxTrades: MAX_TRADES_PER_BACKFILL,
       },
@@ -915,9 +556,6 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         if (Number.isFinite(status)) {
           wrapped.status = status;
         }
-        if (error && typeof error === 'object' && error.polymarketProxyMeta) {
-          wrapped.polymarketProxyMeta = error.polymarketProxyMeta;
-        }
         throw wrapped;
       }
     };
@@ -937,9 +575,6 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         const shouldLogPage = pagesFetched === 1 || pagesFetched % POLYMARKET_PROGRESS_LOG_EVERY_PAGES === 0;
         const cursorBefore = nextToken;
         if (shouldLogPage) {
-          const proxyActiveNow = proxyPool.length
-            ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
-            : null;
           void recordStrategyLog({
             strategyId: portfolio.strategy_id,
             userId: portfolio.userId,
@@ -952,13 +587,11 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
               page: pagesFetched,
               cursor: tradeSource === 'data-api' ? `offset:${cursorBefore}` : cursorBefore,
               tradesCollected: pendingTrades.length,
-              proxyActive: proxyActiveNow,
             },
           });
         }
 
         let trades = [];
-        let requestMeta = null;
         let requestedLimit = null;
         try {
           if (tradeSource === 'data-api') {
@@ -971,7 +604,6 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
               takerOnly: dataApiTakerOnly,
             });
             trades = Array.isArray(fetched?.trades) ? fetched.trades : [];
-            requestMeta = fetched?.meta;
             requestedLimit = fetched?.requestedLimit ?? requestedLimit;
             const nextOffset =
               fetched?.nextOffset !== undefined && fetched?.nextOffset !== null ? Number(fetched.nextOffset) : null;
@@ -980,7 +612,6 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
             const fetched = await fetchClobPage(cursorBefore);
             const page = fetched?.page;
             trades = Array.isArray(page?.data) ? page.data : [];
-            requestMeta = fetched?.meta;
             const cursor = page?.next_cursor ? String(page.next_cursor) : null;
             if (!cursor || cursor === cursorBefore || cursor === END_CURSOR) {
               nextToken = null;
@@ -1002,7 +633,6 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
               page: pagesFetched,
               cursor: tradeSource === 'data-api' ? `offset:${cursorBefore}` : cursorBefore,
               tradesCollected: pendingTrades.length,
-              request: summarizeProxyMeta(error?.polymarketProxyMeta),
               error: String(error?.message || error),
             },
           });
@@ -1024,9 +654,6 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         }
 
         if (shouldLogPage) {
-          const proxyActiveNow = proxyPool.length
-            ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
-            : null;
           void recordStrategyLog({
             strategyId: portfolio.strategy_id,
             userId: portfolio.userId,
@@ -1045,16 +672,11 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
                     ? null
                     : `offset:${nextToken}`
                   : nextToken,
-              proxyActive: proxyActiveNow,
-              request: summarizeProxyMeta(requestMeta),
             },
           });
         }
 
         if (pendingTrades.length >= nextProgressLogAt) {
-          const proxyActiveNow = proxyPool.length
-            ? proxyPool[Math.max(0, Math.min(proxyState.activeIndex, proxyPool.length - 1))]?.display
-            : null;
           void recordStrategyLog({
             strategyId: portfolio.strategy_id,
             userId: portfolio.userId,
@@ -1072,7 +694,6 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
                     ? null
                     : `offset:${nextToken}`
                   : nextToken,
-              proxyActive: proxyActiveNow,
             },
           });
           nextProgressLogAt += POLYMARKET_PROGRESS_LOG_EVERY_TRADES;
@@ -1631,5 +1252,4 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
 module.exports = {
   syncPolymarketPortfolio,
   isValidHexAddress,
-  summarizeProxyMeta,
 };

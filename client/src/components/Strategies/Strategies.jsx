@@ -1284,7 +1284,7 @@ const Strategies = () => {
 	                </Typography>
 	              )}
 	              <Typography variant="body2" sx={{ mt: 2 }}>
-	                Note: If Polymarket requests are geo-blocked from your region, you may need a VPN/proxy.
+	                Note: If Polymarket requests are geo-blocked from your region, you may need a VPN (or a geo-block token).
 	              </Typography>
 	            </Box>
 	          ) : (

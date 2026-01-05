@@ -85,6 +85,10 @@ server/config/googlecredentials.json
 client/.env
 server/config/.env
 
+# dotenv backups
+server/config/.env.bak*
+client/.env.bak*
+
 
 
 

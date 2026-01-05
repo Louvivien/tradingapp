@@ -5,7 +5,7 @@ const { getAlpacaConfig } = require('../config/alpacaConfig');
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('./strategyLogger');
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
-const { syncPolymarketPortfolio, summarizeProxyMeta } = require('./polymarketCopyService');
+const { syncPolymarketPortfolio } = require('./polymarketCopyService');
 
 const TOLERANCE = 0.01;
 const FRACTIONAL_QTY_DECIMALS = 6;
@@ -2137,9 +2137,6 @@ const runDueRebalances = async () => {
             details: {
               provider,
               error: error.message,
-              ...(provider === 'polymarket'
-                ? { request: summarizeProxyMeta(error?.polymarketProxyMeta) }
-                : {}),
             },
           });
         }

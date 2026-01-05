@@ -28,7 +28,7 @@ const {
   fetchNextMarketSessionAfter,
   alignToRebalanceWindowStart,
 } = require('../services/rebalanceService');
-const { syncPolymarketPortfolio, isValidHexAddress, summarizeProxyMeta } = require('../services/polymarketCopyService');
+const { syncPolymarketPortfolio, isValidHexAddress } = require('../services/polymarketCopyService');
 const { runEquityBackfill, TASK_NAME: EQUITY_BACKFILL_TASK } = require('../services/equityBackfillService');
 const {
   addSubscriber,
@@ -2232,7 +2232,7 @@ exports.createPolymarketCopyTrader = async (req, res) => {
       },
     });
 
-    // Run the initial sync asynchronously so the UI isn't blocked by a long backfill/proxy retries.
+    // Run the initial sync asynchronously so the UI isn't blocked by a long backfill/retries.
     setImmediate(async () => {
       try {
         const fresh = await Portfolio.findOne({ strategy_id, userId: userKey });
@@ -2264,14 +2264,13 @@ exports.createPolymarketCopyTrader = async (req, res) => {
           strategyName: rawName,
           level: 'warn',
           message: 'Polymarket initial sync failed',
-          details: {
-            provider: 'polymarket',
-            mode: initialMode,
-            request: summarizeProxyMeta(error?.polymarketProxyMeta),
-            error: String(error?.message || error),
-          },
-        });
-      }
+	          details: {
+	            provider: 'polymarket',
+	            mode: initialMode,
+	            error: String(error?.message || error),
+	          },
+	        });
+	      }
     });
 
     return res.status(200).json({

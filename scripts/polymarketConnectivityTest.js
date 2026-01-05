@@ -6,10 +6,7 @@ const { createRequire } = require('module');
 
 const serverRequire = createRequire(path.resolve(__dirname, '../server/package.json'));
 const dotenv = serverRequire('dotenv');
-const Axios = serverRequire('axios');
-const HttpsProxyAgentImport = serverRequire('https-proxy-agent');
-
-const HttpsProxyAgent = HttpsProxyAgentImport?.HttpsProxyAgent || HttpsProxyAgentImport;
+const axios = serverRequire('axios');
 
 dotenv.config({ path: path.resolve(__dirname, '../server/config/.env') });
 
@@ -19,29 +16,6 @@ const CLOB_HOST = String(process.env.POLYMARKET_CLOB_HOST || process.env.CLOB_AP
 
 const GEO_BLOCK_TOKEN =
   (process.env.POLYMARKET_GEO_BLOCK_TOKEN || process.env.GEO_BLOCK_TOKEN || '').trim() || null;
-
-const PROXY_URLS_RAW = (() => {
-  const values = [];
-  const pushValue = (value) => {
-    const raw = String(value || '').trim();
-    if (raw) {
-      values.push(raw);
-    }
-  };
-
-  pushValue(process.env.POLYMARKET_PROXY_URLS);
-  pushValue(process.env.POLYMARKET_PROXY_URL);
-  pushValue(process.env.POLYMARKET_HTTP_PROXY);
-  pushValue(process.env.POLYMARKET_PROXY);
-
-  const numbered = Object.keys(process.env || {})
-    .filter((key) => /^POLYMARKET_PROXY_URL_\d+$/.test(key))
-    .sort((a, b) => Number(a.split('_').pop()) - Number(b.split('_').pop()))
-    .map((key) => process.env[key]);
-  numbered.forEach(pushValue);
-
-  return values.join(',');
-})();
 
 const POLYMARKET_HTTP_TIMEOUT_MS = (() => {
   const raw = Number(process.env.POLYMARKET_HTTP_TIMEOUT_MS || process.env.POLYMARKET_TIMEOUT_MS);
@@ -67,199 +41,31 @@ const buildGeoParams = (params = {}) => {
   return { ...params, geo_block_token: GEO_BLOCK_TOKEN };
 };
 
-const splitProxyList = (raw) => {
-  const input = String(raw || '').trim();
-  if (!input) {
-    return [];
-  }
-  return input
-    .split(/[\s,]+/)
-    .map((entry) => String(entry || '').trim())
-    .filter(Boolean);
-};
-
-const normalizeProxyUrl = (proxyUrl) => {
-  const raw = String(proxyUrl || '').trim();
-  if (!raw) {
-    return null;
-  }
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) {
-    return raw;
-  }
-  return `http://${raw}`;
-};
-
-const parseProxyUrl = (proxyUrl) => {
-  const raw = String(proxyUrl || '').trim();
-  if (!raw) return null;
-
-  let parsed;
-  try {
-    parsed = new URL(normalizeProxyUrl(raw));
-  } catch (error) {
-    throw new Error('Polymarket proxy entry is invalid. Expected format: host:port or http://user:pass@host:port');
-  }
-
-  const protocol = String(parsed.protocol || '').replace(':', '');
-  if (protocol !== 'http' && protocol !== 'https') {
-    throw new Error('Polymarket proxy must use http:// or https://');
-  }
-
-  const host = String(parsed.hostname || '').trim();
-  if (!host) {
-    throw new Error('Polymarket proxy must include a hostname.');
-  }
-
-  const port = parsed.port ? Number(parsed.port) : protocol === 'https' ? 443 : 80;
-  if (!Number.isFinite(port) || port <= 0) {
-    throw new Error('Polymarket proxy port is invalid.');
-  }
-
-  const normalized = new URL(parsed.toString());
-  normalized.protocol = `${protocol}:`;
-  normalized.hostname = host;
-  normalized.port = String(port);
-  normalized.pathname = '/';
-  normalized.search = '';
-  normalized.hash = '';
-  return normalized.toString();
-};
-
-const buildProxyPool = () => {
-  const rawEntries = splitProxyList(PROXY_URLS_RAW);
-  const pool = [];
-  const seen = new Set();
-  rawEntries.forEach((entry) => {
-    try {
-      const proxyUrl = parseProxyUrl(entry);
-      if (!proxyUrl || seen.has(proxyUrl)) {
-        return;
-      }
-      seen.add(proxyUrl);
-      pool.push({
-        url: proxyUrl,
-        agent: new HttpsProxyAgent(proxyUrl),
-      });
-    } catch (error) {
-      // ignore invalid proxy entries
-    }
-  });
-  return pool;
-};
-
-const PROXY_POOL = buildProxyPool();
-let activeProxyIndex = 0;
-
-const formatProxyForLog = (proxy) => {
-  if (!proxy) return 'no';
-  const raw = String(proxy.url || '').trim();
-  if (!raw) return 'no';
-  try {
-    const parsed = new URL(raw);
-    parsed.username = '';
-    parsed.password = '';
-    return `${parsed.protocol}//${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`;
-  } catch (error) {
-    return raw;
-  }
-};
-
-const buildProxyAttemptOrder = (count) => {
-  if (!count) return [];
-  const start = ((activeProxyIndex % count) + count) % count;
-  return Array.from({ length: count }, (_, offset) => (start + offset) % count);
-};
-
-const shouldRetryWithAnotherProxy = (error) => {
-  const status = Number(error?.response?.status);
-  if (!Number.isFinite(status) || status <= 0) {
-    return true;
-  }
-  if (status === 403 || status === 407) {
-    return true;
-  }
-  if (status === 429) {
-    return true;
-  }
-  if (status >= 500 && status <= 599) {
-    return true;
-  }
-  return false;
-};
-
-const axiosGetWithProxyFallback = async (url, config = {}) => {
+const axiosGet = async (url, config = {}) => {
   const timeout = config.timeout ? config.timeout : POLYMARKET_HTTP_TIMEOUT_MS;
-
-  const axiosGetWithHardTimeout = async (requestConfig) => {
-    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const timer = controller
-      ? setTimeout(() => {
-        try {
-          controller.abort();
-        } catch (error) {
-          // ignore
-        }
-      }, timeout)
-      : null;
-
-    try {
-      return await Axios.get(url, {
-        ...requestConfig,
-        timeout,
-        ...(controller ? { signal: controller.signal } : {}),
-      });
-    } finally {
-      if (timer) {
-        clearTimeout(timer);
-      }
-    }
-  };
-
-  if (!PROXY_POOL.length) {
-    return { response: await axiosGetWithHardTimeout({ ...config, proxy: false }), proxy: null };
-  }
-
-  const attemptDirect = async () => ({
-    response: await axiosGetWithHardTimeout({ ...config, proxy: false }),
-    proxy: null,
-  });
-
-  const attemptProxies = async () => {
-    const order = buildProxyAttemptOrder(PROXY_POOL.length);
-    let lastError = null;
-    for (const idx of order) {
-      const proxy = PROXY_POOL[idx];
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller
+    ? setTimeout(() => {
       try {
-        const response = await axiosGetWithHardTimeout({
-          ...config,
-          proxy: false,
-          httpAgent: proxy.agent,
-          httpsAgent: proxy.agent,
-        });
-        activeProxyIndex = idx;
-        return { response, proxy };
-      } catch (error) {
-        lastError = error;
-        if (!shouldRetryWithAnotherProxy(error)) {
-          throw error;
-        }
+        controller.abort();
+      } catch {
+        // ignore
       }
-    }
-    if (lastError) {
-      throw lastError;
-    }
-    throw new Error('Polymarket request failed.');
-  };
+    }, timeout)
+    : null;
 
   try {
-    return await attemptProxies();
-  } catch (error) {
-    if (!shouldRetryWithAnotherProxy(error)) {
-      throw error;
+    return await axios.get(url, {
+      ...config,
+      timeout,
+      proxy: false,
+      ...(controller ? { signal: controller.signal } : {}),
+    });
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
     }
   }
-
-  return attemptDirect();
 };
 
 const sanitizeBase64Secret = (secret) => {
@@ -291,10 +97,7 @@ const buildPolyHmacSignature = ({ secret, timestamp, method, requestPath, body }
 };
 
 const fetchClobServerTime = async () => {
-  const { response, proxy } = await axiosGetWithProxyFallback(`${CLOB_HOST}/time`, {
-    params: buildGeoParams(),
-  });
-  console.log('[Polymarket Test] /time via:', proxy ? `proxy ${formatProxyForLog(proxy)}` : 'direct');
+  const response = await axiosGet(`${CLOB_HOST}/time`, { params: buildGeoParams() });
   const ts = Math.floor(Number(response?.data));
   if (!Number.isFinite(ts) || ts <= 0) {
     throw new Error('Unable to parse /time response.');
@@ -344,7 +147,6 @@ const main = async () => {
 
   console.log('[Polymarket Test] Host:', CLOB_HOST);
   console.log('[Polymarket Test] Geo token set:', GEO_BLOCK_TOKEN ? 'yes' : 'no');
-  console.log('[Polymarket Test] Proxy pool:', PROXY_POOL.length ? `${PROXY_POOL.length} configured (first=${formatProxyForLog(PROXY_POOL[0])})` : 'no');
   console.log('[Polymarket Test] Timeout:', `${POLYMARKET_HTTP_TIMEOUT_MS}ms`);
   console.log('[Polymarket Test] Maker address:', maker);
 
@@ -354,11 +156,10 @@ const main = async () => {
   const safeRequest = async ({ label, endpoint, params }) => {
     const headers = await createL2Headers({ method: 'GET', requestPath: endpoint });
     try {
-      const { response, proxy: usedProxy } = await axiosGetWithProxyFallback(`${CLOB_HOST}${endpoint}`, {
+      const response = await axiosGet(`${CLOB_HOST}${endpoint}`, {
         headers,
         params: buildGeoParams(params),
       });
-      console.log(`[Polymarket Test] ${label} via:`, usedProxy ? `proxy ${formatProxyForLog(usedProxy)}` : 'direct');
       return { ok: true, status: response.status, data: response.data };
     } catch (error) {
       const status = Number(error?.response?.status);
@@ -375,13 +176,11 @@ const main = async () => {
     }
   };
 
-  // 1) Validate creds are accepted (do NOT print response body; it may include key metadata)
   const keysResp = await safeRequest({ label: 'GET /auth/api-keys', endpoint: '/auth/api-keys', params: {} });
   if (keysResp.ok) {
     console.log('[Polymarket Test] /auth/api-keys OK:', keysResp.status);
   }
 
-  // 2) Test trades endpoint for maker address (print only counts)
   const tradesResp = await safeRequest({
     label: 'GET /data/trades',
     endpoint: '/data/trades',
@@ -400,3 +199,4 @@ main().catch((error) => {
   console.error('[Polymarket Test] Unexpected error:', error?.message || error);
   process.exit(1);
 });
+

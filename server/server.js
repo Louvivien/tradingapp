@@ -19,9 +19,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
-const cron = require('node-cron');
-const { spawn } = require('child_process');
-const { startProxies, scheduleNewsFromStocksList, scheduleSentimentVertex, schedulePortfolioRebalances } = require('./scheduler');
+const { schedulePortfolioRebalances } = require('./scheduler');
 const { getAlpacaConfig } = require('./config/alpacaConfig');
 
 const readyStateLabels = {
