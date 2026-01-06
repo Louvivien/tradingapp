@@ -57,6 +57,7 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
     saving: false,
     error: null,
   });
+  const [portfolioFilter, setPortfolioFilter] = useState("all");
 
 
 
@@ -547,6 +548,17 @@ const deleteStrategy = async (strategyId) => {
     setStrategyToResend(null);
   };
 
+  const normalizedPortfolios = Array.isArray(portfolios) ? portfolios : [];
+  const visiblePortfolios = normalizedPortfolios.filter((portfolio) => {
+    const provider = String(portfolio?.provider || "alpaca").toLowerCase();
+    if (portfolioFilter === "polymarket") {
+      return provider === "polymarket";
+    }
+    if (portfolioFilter === "composer") {
+      return provider !== "polymarket";
+    }
+    return true;
+  });
 
   return (
     <React.Fragment>
@@ -567,7 +579,26 @@ const deleteStrategy = async (strategyId) => {
       )}
 
       <Collapse in={openStrategies}>
-        {portfolios.map((portfolio) => {
+        <Box sx={{ ml: 6, mt: 1, mb: 2, maxWidth: 260 }}>
+          <TextField
+            select
+            label="Filter"
+            size="small"
+            value={portfolioFilter}
+            onChange={(event) => setPortfolioFilter(event.target.value)}
+            fullWidth
+          >
+            <MenuItem value="all">All</MenuItem>
+            <MenuItem value="composer">Composer</MenuItem>
+            <MenuItem value="polymarket">Polymarket</MenuItem>
+          </TextField>
+        </Box>
+        {!visiblePortfolios.length ? (
+          <Typography variant="body2" color="textSecondary" sx={{ ml: 6, mb: 2 }}>
+            No portfolios match this filter.
+          </Typography>
+        ) : (
+          visiblePortfolios.map((portfolio) => {
           // console.log('Portfolio:', portfolio);
           
           // Calculate totals for each portfolio
@@ -1033,7 +1064,8 @@ const deleteStrategy = async (strategyId) => {
               </Collapse>
             </div>
           );
-        })}
+        })
+        )}
       </Collapse>
 
       <Modal
