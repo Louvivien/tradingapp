@@ -152,6 +152,10 @@ const portfolioSchema = new Schema({
       default: null,
       trim: true,
     },
+    sizeToBudget: {
+      type: Boolean,
+      default: false,
+    },
     authAddress: {
       type: String,
       default: null,
@@ -190,6 +194,29 @@ const portfolioSchema = new Schema({
       type: String,
       default: null,
       trim: true,
+    },
+    sizingState: {
+      makerCash: {
+        type: Number,
+        default: null,
+      },
+      holdings: {
+        type: [
+          {
+            market: { type: String, default: null },
+            asset_id: { type: String, default: null },
+            outcome: { type: String, default: null },
+            quantity: { type: Number, default: 0 },
+            currentPrice: { type: Number, default: null },
+          },
+        ],
+        default: [],
+      },
+      lastUpdatedAt: {
+        type: String,
+        default: null,
+        trim: true,
+      },
     },
   },
   budget: {

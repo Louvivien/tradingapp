@@ -2134,6 +2134,17 @@ exports.createPolymarketCopyTrader = async (req, res) => {
       return normalized === 'true' || normalized === '1' || normalized === 'yes';
     })();
 
+    const sizeToBudget = (() => {
+      if (req.body.sizeToBudget === true) {
+        return true;
+      }
+      if (req.body.sizeToBudget === false || req.body.sizeToBudget === null || req.body.sizeToBudget === undefined) {
+        return false;
+      }
+      const normalized = String(req.body.sizeToBudget || '').trim().toLowerCase();
+      return normalized === 'true' || normalized === '1' || normalized === 'yes';
+    })();
+
     const encryptionKey = String(process.env.ENCRYPTION_KEY || process.env.CryptoJS_secret_key || '').trim();
     const encryptIfPossible = (value) => {
       const raw = String(value || '').trim();
@@ -2190,6 +2201,7 @@ exports.createPolymarketCopyTrader = async (req, res) => {
       stocks: [],
       polymarket: {
         address,
+        sizeToBudget,
         authAddress: authAddressEnv || null,
         backfillPending: backfillRequested,
         backfilledAt: null,

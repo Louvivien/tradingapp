@@ -61,6 +61,20 @@ const MAX_TRADES_PER_BACKFILL = (() => {
   }
   return Math.max(1, Math.min(Math.floor(parsed), 50000));
 })();
+const POLYMARKET_LIVE_REBALANCE_MAX_ORDERS = (() => {
+  const parsed = Number(process.env.POLYMARKET_LIVE_REBALANCE_MAX_ORDERS);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 20;
+  }
+  return Math.max(1, Math.min(Math.floor(parsed), 200));
+})();
+const POLYMARKET_LIVE_REBALANCE_MIN_NOTIONAL = (() => {
+  const parsed = Number(process.env.POLYMARKET_LIVE_REBALANCE_MIN_NOTIONAL);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 1;
+  }
+  return Math.max(0.01, Math.min(parsed, 1000000));
+})();
 
 const toNumber = (value, fallback = null) => {
   const num = Number(value);
@@ -87,6 +101,26 @@ const normalizeTradesSourceSetting = (value) => {
 };
 
 const getTradesSourceSetting = () => normalizeTradesSourceSetting(process.env.POLYMARKET_TRADES_SOURCE || 'auto');
+
+const parseBoolean = (value, fallback = false) => {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) {
+    return fallback;
+  }
+  if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+    return true;
+  }
+  if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+    return false;
+  }
+  return fallback;
+};
 
 const computeHoldingsMarketValue = (stocks = []) => {
   if (!Array.isArray(stocks) || !stocks.length) {
@@ -546,6 +580,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   const hasAuthAddress = Boolean(authAddressCandidate && isValidHexAddress(authAddressCandidate));
   const authAddress = hasAuthAddress ? authAddressCandidate : null;
   const hasClobCredentials = Boolean(apiKey && secret && passphrase && authAddress);
+  const sizeToBudget = parseBoolean(poly.sizeToBudget, parseBoolean(process.env.POLYMARKET_SIZE_TO_BUDGET, false));
 
   if (!isValidHexAddress(address)) {
     throw new Error('Polymarket address is missing or invalid.');
@@ -1038,6 +1073,38 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     });
   }
 
+  const makerStateEnabled = sizeToBudget === true;
+  const makerHoldingsByAssetId = new Map();
+  let makerCash = 0;
+  let makerStateAvailable = false;
+  if (makerStateEnabled) {
+    if (!resetPortfolio) {
+      const state = poly?.sizingState || {};
+      const holdings = Array.isArray(state.holdings) ? state.holdings : [];
+      const storedCash = toNumber(state.makerCash, null);
+      if (Number.isFinite(storedCash) && holdings.length) {
+        makerCash = storedCash;
+        holdings.forEach((row) => {
+          const assetId = row?.asset_id ? String(row.asset_id) : null;
+          if (!assetId) {
+            return;
+          }
+          makerHoldingsByAssetId.set(assetId, {
+            market: row?.market ? String(row.market) : null,
+            asset_id: assetId,
+            outcome: row?.outcome ? String(row.outcome) : null,
+            quantity: toNumber(row?.quantity, 0),
+            currentPrice: toNumber(row?.currentPrice, null),
+          });
+        });
+        makerStateAvailable = true;
+      }
+    }
+    if (resetPortfolio) {
+      makerStateAvailable = true;
+    }
+  }
+
   const pickNumber = (value) => {
     if (value === null || value === undefined || value === '') {
       return null;
@@ -1093,7 +1160,24 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     buys: [],
     sells: [],
     skipped: [],
+    rebalance: [],
   };
+
+  if (makerStateEnabled && !makerStateAvailable) {
+    void recordStrategyLog({
+      strategyId: portfolio.strategy_id,
+      userId: portfolio.userId,
+      strategyName: portfolio.name,
+      level: 'warn',
+      message: 'Polymarket size-to-budget enabled but sizing state is missing; falling back to cash-capped copy',
+      details: {
+        provider: 'polymarket',
+        mode,
+        address,
+        hint: 'Run a backfill with reset to seed sizing state from full trade history.',
+      },
+    });
+  }
 
   const extractOrderMeta = (result) => {
     const response = result?.response;
@@ -1191,6 +1275,41 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       : `PM:${String(conditionId).slice(0, 10)}:${outcome || 'OUTCOME'}`;
 
     if (side === 'BUY') {
+      if (makerStateEnabled && makerStateAvailable) {
+        const cost = roundToDecimals(size * price, 6);
+        makerCash = roundToDecimals(makerCash - (cost ?? 0), 6);
+
+        const makerExisting = makerHoldingsByAssetId.get(assetId) || null;
+        const makerQty = makerExisting ? toNumber(makerExisting.quantity, 0) : 0;
+        const newMakerQty = roundToDecimals(makerQty + size, 6);
+        const makerEntry = makerExisting || {
+          market: conditionId,
+          asset_id: assetId,
+          outcome,
+          quantity: 0,
+          currentPrice: price,
+        };
+        makerEntry.market = makerEntry.market || conditionId;
+        makerEntry.asset_id = makerEntry.asset_id || assetId;
+        makerEntry.outcome = makerEntry.outcome || outcome;
+        makerEntry.currentPrice = toNumber(makerEntry.currentPrice, null) ?? price;
+        makerEntry.quantity = newMakerQty;
+        makerHoldingsByAssetId.set(assetId, makerEntry);
+
+        tradeSummary.buys.push({
+          id: tradeId,
+          symbol,
+          assetId,
+          outcome,
+          size,
+          price,
+          cost,
+        });
+        lastProcessedTrade = trade;
+        processedCount += 1;
+        continue;
+      }
+
       const maxAffordable = price > 0 ? cash / price : 0;
       if (maxAffordable <= 0) {
         tradeSummary.skipped.push({
@@ -1338,6 +1457,66 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       lastProcessedTrade = trade;
       processedCount += 1;
     } else if (side === 'SELL') {
+      if (makerStateEnabled && makerStateAvailable) {
+        const makerExisting = makerHoldingsByAssetId.get(assetId) || null;
+        const makerAvailable = makerExisting ? toNumber(makerExisting.quantity, 0) : 0;
+        if (!makerAvailable || makerAvailable <= 0) {
+          tradeSummary.skipped.push({
+            id: tradeId,
+            side,
+            assetId,
+            reason: 'no_maker_position',
+          });
+          lastProcessedTrade = trade;
+          processedCount += 1;
+          continue;
+        }
+        if (size > makerAvailable) {
+          size = makerAvailable;
+        }
+
+        size = roundToDecimals(size, 6);
+        if (!size || size <= 0) {
+          tradeSummary.skipped.push({
+            id: tradeId,
+            side,
+            assetId,
+            reason: 'no_maker_position',
+          });
+          lastProcessedTrade = trade;
+          processedCount += 1;
+          continue;
+        }
+
+        const proceeds = roundToDecimals(size * price, 6);
+        makerCash = roundToDecimals(makerCash + (proceeds ?? 0), 6);
+
+        const newMakerQty = roundToDecimals(makerAvailable - size, 6);
+        if (newMakerQty > 0) {
+          makerExisting.quantity = newMakerQty;
+          makerExisting.market = makerExisting.market || conditionId;
+          makerExisting.asset_id = makerExisting.asset_id || assetId;
+          makerExisting.outcome = makerExisting.outcome || outcome;
+          makerExisting.currentPrice = toNumber(makerExisting.currentPrice, null) ?? price;
+          makerHoldingsByAssetId.set(assetId, makerExisting);
+        } else {
+          makerHoldingsByAssetId.delete(assetId);
+        }
+
+        tradeSummary.sells.push({
+          id: tradeId,
+          symbol,
+          assetId,
+          outcome,
+          size,
+          price,
+          proceeds,
+        });
+        lastProcessedTrade = trade;
+        processedCount += 1;
+        continue;
+      }
+
       const available = currentQty;
       if (!available || available <= 0) {
         tradeSummary.skipped.push({
@@ -1485,44 +1664,303 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     }
   }
 
-  // Refresh current prices using market snapshots when possible.
-  for (const [assetId, entry] of holdingsByAssetId.entries()) {
-    const conditionId = entry?.market ? String(entry.market) : null;
-    if (!conditionId) {
-      continue;
+  let updatedStocks = [];
+  let sizingMeta = null;
+
+  const applySizing = async () => {
+    if (!makerStateEnabled || !makerStateAvailable) {
+      return false;
     }
-    const market = await ensureMarket(conditionId);
-    if (!market) {
-      continue;
-    }
-    const index = buildMarketTokenPriceIndex(market);
-    const tokenInfo = index.get(String(assetId));
-    if (tokenInfo && tokenInfo.price !== null) {
-      entry.currentPrice = tokenInfo.price;
-      if (!entry.outcome && tokenInfo.outcome) {
-        entry.outcome = tokenInfo.outcome;
+
+    // Refresh current prices for maker holdings.
+    for (const [assetId, entry] of makerHoldingsByAssetId.entries()) {
+      const conditionId = entry?.market ? String(entry.market) : null;
+      if (!conditionId) {
+        continue;
+      }
+      const market = await ensureMarket(conditionId);
+      if (!market) {
+        continue;
+      }
+      const index = buildMarketTokenPriceIndex(market);
+      const tokenInfo = index.get(String(assetId));
+      if (tokenInfo && tokenInfo.price !== null) {
+        entry.currentPrice = tokenInfo.price;
+        if (!entry.outcome && tokenInfo.outcome) {
+          entry.outcome = tokenInfo.outcome;
+        }
       }
     }
-    if (market?.question && entry?.symbol && entry.symbol.startsWith('PM:')) {
-      const question = String(market.question).trim();
-      if (question) {
-        entry.symbol = `PM: ${question.slice(0, 42)}${question.length > 42 ? '…' : ''} (${entry.outcome || 'Outcome'})`;
+
+    const makerHoldings = Array.from(makerHoldingsByAssetId.values());
+    const makerCashValue = Math.max(0, toNumber(makerCash, 0));
+    const makerHoldingsValue = makerHoldings.reduce((acc, pos) => {
+      const qty = Math.max(0, toNumber(pos.quantity, 0));
+      const price = toNumber(pos.currentPrice, null);
+      if (!qty || price === null) {
+        return acc;
+      }
+      return acc + qty * price;
+    }, 0);
+    const makerValue = makerCashValue + makerHoldingsValue;
+    const sizingBudget = (() => {
+      const cashLimit = pickNumber(portfolio.cashLimit);
+      if (cashLimit !== null) {
+        return Math.max(0, cashLimit);
+      }
+      const budget = pickNumber(portfolio.budget);
+      if (budget !== null) {
+        return Math.max(0, budget);
+      }
+      const initialInvestment = pickNumber(portfolio.initialInvestment);
+      if (initialInvestment !== null) {
+        return Math.max(0, initialInvestment);
+      }
+      return Math.max(0, toNumber(startingCash, 0));
+    })();
+    const scale = makerValue > 0 ? sizingBudget / makerValue : 0;
+
+    if (!Number.isFinite(scale) || scale <= 0) {
+      sizingMeta = { makerValue, sizingBudget, scale };
+      return false;
+    }
+
+    sizingMeta = { makerValue, sizingBudget, scale };
+    cash = roundToDecimals(makerCashValue * scale, 6) ?? 0;
+
+    updatedStocks = makerHoldings
+      .map((pos) => {
+        const market = pos.market ? String(pos.market) : null;
+        const asset_id = pos.asset_id ? String(pos.asset_id) : null;
+        const outcome = pos.outcome ? String(pos.outcome) : null;
+        const currentPrice = toNumber(pos.currentPrice, null);
+        const quantity = roundToDecimals(Math.max(0, toNumber(pos.quantity, 0)) * scale, 6) ?? 0;
+        if (!quantity || quantity <= 0) {
+          return null;
+        }
+        const symbol = `PM:${String(market || '').slice(0, 10)}:${outcome || 'OUTCOME'}`;
+        return {
+          symbol,
+          market,
+          asset_id,
+          outcome,
+          avgCost: currentPrice,
+          quantity,
+          currentPrice,
+          orderID: `poly-size-${String(asset_id || '').slice(-10)}`,
+        };
+      })
+      .filter(Boolean);
+
+    portfolio.polymarket = {
+      ...(portfolio.polymarket || {}),
+      sizingState: {
+        makerCash: makerCashValue,
+	        holdings: makerHoldings.map((pos) => ({
+	          market: pos.market ? String(pos.market) : null,
+	          asset_id: pos.asset_id ? String(pos.asset_id) : null,
+	          outcome: pos.outcome ? String(pos.outcome) : null,
+	          quantity: toNumber(pos.quantity, 0),
+	          currentPrice: toNumber(pos.currentPrice, null),
+	        })),
+        lastUpdatedAt: now.toISOString(),
+      },
+    };
+
+    return true;
+  };
+
+  const didSize = await applySizing();
+
+  if (!didSize) {
+    // Refresh current prices using market snapshots when possible.
+    for (const [assetId, entry] of holdingsByAssetId.entries()) {
+      const conditionId = entry?.market ? String(entry.market) : null;
+      if (!conditionId) {
+        continue;
+      }
+      const market = await ensureMarket(conditionId);
+      if (!market) {
+        continue;
+      }
+      const index = buildMarketTokenPriceIndex(market);
+      const tokenInfo = index.get(String(assetId));
+      if (tokenInfo && tokenInfo.price !== null) {
+        entry.currentPrice = tokenInfo.price;
+        if (!entry.outcome && tokenInfo.outcome) {
+          entry.outcome = tokenInfo.outcome;
+        }
+      }
+      if (market?.question && entry?.symbol && entry.symbol.startsWith('PM:')) {
+        const question = String(market.question).trim();
+        if (question) {
+          entry.symbol = `PM: ${question.slice(0, 42)}${question.length > 42 ? '…' : ''} (${entry.outcome || 'Outcome'})`;
+        }
       }
     }
+
+    updatedStocks = Array.from(holdingsByAssetId.values())
+      .map((entry) => ({
+        symbol: String(entry.symbol || '').trim() || `PM:${String(entry.asset_id || '').slice(-8)}`,
+        market: entry.market ? String(entry.market) : null,
+        asset_id: entry.asset_id ? String(entry.asset_id) : null,
+        outcome: entry.outcome ? String(entry.outcome) : null,
+        avgCost: toNumber(entry.avgCost, null),
+        quantity: toNumber(entry.quantity, 0),
+        currentPrice: toNumber(entry.currentPrice, null),
+        orderID: entry.orderID ? String(entry.orderID) : `poly-${String(entry.asset_id || '').slice(-10)}`,
+      }))
+      .filter((row) => row.quantity > 0);
   }
 
-  const updatedStocks = Array.from(holdingsByAssetId.values())
-    .map((entry) => ({
-      symbol: String(entry.symbol || '').trim() || `PM:${String(entry.asset_id || '').slice(-8)}`,
-      market: entry.market ? String(entry.market) : null,
-      asset_id: entry.asset_id ? String(entry.asset_id) : null,
-      outcome: entry.outcome ? String(entry.outcome) : null,
-      avgCost: toNumber(entry.avgCost, null),
-      quantity: toNumber(entry.quantity, 0),
-      currentPrice: toNumber(entry.currentPrice, null),
-      orderID: entry.orderID ? String(entry.orderID) : `poly-${String(entry.asset_id || '').slice(-10)}`,
-    }))
-    .filter((row) => row.quantity > 0);
+  const executeSizeToBudgetRebalance = async () => {
+    if (!executionEnabled || !makerStateEnabled || !didSize || liveExecutionAbort) {
+      return;
+    }
+    if (!updatedStocks.length && !holdingsByAssetId.size) {
+      return;
+    }
+
+    const targetByAssetId = new Map(
+      updatedStocks
+        .map((row) => {
+          const assetId = row?.asset_id ? String(row.asset_id) : null;
+          if (!assetId) {
+            return null;
+          }
+          return [assetId, row];
+        })
+        .filter(Boolean)
+    );
+
+    const candidates = [];
+    const assetIds = new Set([...holdingsByAssetId.keys(), ...targetByAssetId.keys()]);
+    for (const assetId of assetIds) {
+      const current = holdingsByAssetId.get(assetId) || null;
+      const target = targetByAssetId.get(assetId) || null;
+      const currentQty = Math.max(0, toNumber(current?.quantity, 0));
+      const targetQty = Math.max(0, toNumber(target?.quantity, 0));
+      const deltaQty = roundToDecimals(targetQty - currentQty, 6) ?? 0;
+      if (!deltaQty) {
+        continue;
+      }
+
+      const price = toNumber(target?.currentPrice, null) ?? toNumber(current?.currentPrice, null);
+      const notional = price !== null ? Math.abs(deltaQty) * price : null;
+      if (notional === null || !Number.isFinite(notional) || notional < POLYMARKET_LIVE_REBALANCE_MIN_NOTIONAL) {
+        continue;
+      }
+
+      candidates.push({
+        assetId,
+        market: target?.market || current?.market || null,
+        outcome: target?.outcome || current?.outcome || null,
+        price,
+        notional,
+        deltaQty,
+        side: deltaQty > 0 ? 'BUY' : 'SELL',
+      });
+    }
+
+    if (!candidates.length) {
+      return;
+    }
+
+    candidates.sort((a, b) => {
+      if (a.side !== b.side) {
+        return a.side === 'SELL' ? -1 : 1;
+      }
+      return b.notional - a.notional;
+    });
+
+    const orders = candidates.slice(0, POLYMARKET_LIVE_REBALANCE_MAX_ORDERS);
+    const symbolFor = ({ market, outcome, assetId }) =>
+      market ? `PM:${String(market).slice(0, 10)}:${outcome || 'OUTCOME'}` : `PM:${String(assetId).slice(0, 10)}`;
+
+    for (const order of orders) {
+      const amount = order.side === 'BUY'
+        ? roundToDecimals(order.notional, 6)
+        : roundToDecimals(Math.abs(order.deltaQty), 6);
+      if (!amount || amount <= 0) {
+        continue;
+      }
+
+      let execution = null;
+      try {
+        execution = await executePolymarketMarketOrder({
+          tokenID: order.assetId,
+          side: order.side,
+          amount,
+        });
+      } catch (error) {
+        if (isExecutionConfigError(error)) {
+          executionEnabled = false;
+          executionDisabledReason = formatAxiosError(error);
+          if (!liveExecutionConfigLogged) {
+            liveExecutionConfigLogged = true;
+            await recordStrategyLog({
+              strategyId: portfolio.strategy_id,
+              userId: portfolio.userId,
+              strategyName: portfolio.name,
+              level: 'error',
+              message: 'Polymarket live execution failed (configuration/auth error)',
+              details: {
+                provider: 'polymarket',
+                mode,
+                error: executionDisabledReason,
+              },
+            });
+          }
+          liveExecutionAbort = executionDisabledReason;
+          break;
+        } else if (isRetryableExecutionError(error)) {
+          liveExecutionAbort = String(formatAxiosError(error));
+          tradeSummary.rebalance.push({
+            symbol: symbolFor(order),
+            assetId: order.assetId,
+            side: order.side,
+            amount,
+            price: order.price,
+            notional: roundToDecimals(order.notional, 6),
+            reason: 'execution_retryable_error',
+            error: liveExecutionAbort,
+          });
+          break;
+        } else {
+          tradeSummary.rebalance.push({
+            symbol: symbolFor(order),
+            assetId: order.assetId,
+            side: order.side,
+            amount,
+            price: order.price,
+            notional: roundToDecimals(order.notional, 6),
+            reason: 'execution_failed',
+            error: String(formatAxiosError(error)),
+          });
+          continue;
+        }
+      }
+
+      const meta = extractOrderMeta(execution);
+      tradeSummary.rebalance.push({
+        symbol: symbolFor(order),
+        assetId: order.assetId,
+        side: order.side,
+        amount,
+        price: order.price,
+        notional: roundToDecimals(order.notional, 6),
+        execution: {
+          mode: execution.mode,
+          dryRun: execution.dryRun,
+          orderId: meta.orderId,
+          status: meta.status,
+          txHashes: meta.txHashes,
+        },
+      });
+    }
+  };
+
+  await executeSizeToBudgetRebalance();
 
   if (lastProcessedTrade?.id) {
     portfolio.polymarket = {
@@ -1574,18 +2012,23 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	      executionMode,
 	      executionEnabled,
 	      executionDisabledReason,
-	      executionAbort: liveExecutionAbort,
-	      hasClobCredentials,
-	      clobAuthCooldown: getClobAuthCooldownStatus(),
-	      address,
-	      pagesFetched,
-	      startingCash,
+		      executionAbort: liveExecutionAbort,
+		      hasClobCredentials,
+		      clobAuthCooldown: getClobAuthCooldownStatus(),
+		      sizeToBudget: makerStateEnabled,
+		      sizedToBudget: didSize,
+		      sizing: sizingMeta,
+		      address,
+		      pagesFetched,
+		      startingCash,
 	      processedTrades: processedCount,
 	      buys: tradeSummary.buys.slice(0, maxLogTrades),
 	      sells: tradeSummary.sells.slice(0, maxLogTrades),
+	      rebalance: tradeSummary.rebalance.slice(0, maxLogTrades),
 	      skipped: tradeSummary.skipped.slice(0, 50),
       buyCount: tradeSummary.buys.length,
       sellCount: tradeSummary.sells.length,
+      rebalanceCount: tradeSummary.rebalance.length,
       skippedCount: tradeSummary.skipped.length,
       cash: portfolio.retainedCash,
       positions: updatedStocks.map((pos) => ({

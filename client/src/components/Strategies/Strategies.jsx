@@ -71,6 +71,7 @@ const Strategies = () => {
   const [polymarketAddress, setPolymarketAddress] = useState("");
   const [polymarketCashLimit, setPolymarketCashLimit] = useState("");
   const [polymarketBackfill, setPolymarketBackfill] = useState(true);
+  const [polymarketSizeToBudget, setPolymarketSizeToBudget] = useState(true);
   const [polymarketRecurrence, setPolymarketRecurrence] = useState("every_minute");
   const [polymarketSchedule, setPolymarketSchedule] = useState(null);
   const [polymarketResponseReceived, setPolymarketResponseReceived] = useState(false);
@@ -668,6 +669,7 @@ const Strategies = () => {
         address: polymarketAddress,
         cashLimit: polymarketCashLimit,
         backfill: polymarketBackfill,
+        sizeToBudget: polymarketSizeToBudget,
         recurrence: polymarketRecurrence,
       };
 
@@ -1327,6 +1329,15 @@ const Strategies = () => {
 	                  />
 	                }
 	                label="Backfill past trades to import current positions"
+	              />
+	              <FormControlLabel
+	                control={
+	                  <Checkbox
+	                    checked={polymarketSizeToBudget}
+	                    onChange={(event) => setPolymarketSizeToBudget(event.target.checked)}
+	                  />
+	                }
+	                label="Size trades to my budget"
 	              />
 	              <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
 	                Uses the server Polymarket keys from `tradingapp/server/config/.env`.
