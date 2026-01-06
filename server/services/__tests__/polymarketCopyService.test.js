@@ -177,6 +177,68 @@ describe('polymarketCopyService', () => {
     expect(portfolio.retainedCash).toBeCloseTo(0, 6);
   });
 
+  it('bootstraps sizingState on first incremental sync when missing', async () => {
+    const makerAddress = '0x3333333333333333333333333333333333333333';
+
+    process.env.POLYMARKET_TRADES_SOURCE = 'data-api';
+    process.env.POLYMARKET_SIZE_TO_BUDGET_BOOTSTRAP = 'true';
+    process.env.POLYMARKET_SIZE_TO_BUDGET_BOOTSTRAP_MAX_TRADES = '2000';
+
+    const dataApi = nock('https://data-api.polymarket.com');
+    dataApi
+      .get('/trades')
+      .query(true)
+      .reply(200, [
+        {
+          transactionHash: '0x1111',
+          asset: 'asset-1',
+          conditionId: 'cond-1',
+          outcome: 'Yes',
+          side: 'BUY',
+          timestamp: 1700000001,
+          price: 0.5,
+          size: 10,
+        },
+      ]);
+
+    const clob = nock('https://clob.polymarket.com');
+    clob.get('/markets/cond-1').query(true).reply(200, {
+      tokens: [{ token_id: 'asset-1', price: 0.5, outcome: 'Yes' }],
+    });
+
+    const { syncPolymarketPortfolio } = require('../polymarketCopyService');
+
+    const portfolio = {
+      provider: 'polymarket',
+      userId: 'user-1',
+      strategy_id: 'strategy-1',
+      name: 'Polymarket Bootstrap',
+      recurrence: 'every_minute',
+      stocks: [],
+      retainedCash: 100,
+      cashBuffer: 100,
+      budget: 100,
+      cashLimit: 100,
+      initialInvestment: 100,
+      rebalanceCount: 0,
+      save: jest.fn(async () => {}),
+      polymarket: {
+        address: makerAddress,
+        sizeToBudget: true,
+        backfillPending: false,
+        lastTradeMatchTime: '1970-01-01T00:00:00.000Z',
+        lastTradeId: null,
+      },
+    };
+
+    const result = await syncPolymarketPortfolio(portfolio, { mode: 'incremental' });
+    expect(result.mode).toBe('backfill');
+    expect(portfolio.polymarket.backfillPending).toBe(false);
+    expect(portfolio.polymarket.sizingState).toBeTruthy();
+    expect(portfolio.stocks).toHaveLength(1);
+    expect(portfolio.stocks[0].quantity).toBeCloseTo(200, 6);
+  });
+
   it('executes a live rebalance when size-to-budget target changes', async () => {
     const executionModulePath = require.resolve('../polymarketExecutionService');
     jest.doMock(executionModulePath, () => ({

@@ -61,6 +61,19 @@ const MAX_TRADES_PER_BACKFILL = (() => {
   }
   return Math.max(1, Math.min(Math.floor(parsed), 50000));
 })();
+const POLYMARKET_SIZE_TO_BUDGET_BOOTSTRAP_ENABLED = (() => {
+  const raw = String(process.env.POLYMARKET_SIZE_TO_BUDGET_BOOTSTRAP ?? 'true').trim().toLowerCase();
+  if (!raw) return true;
+  if (raw === 'false' || raw === '0' || raw === 'no') return false;
+  return true;
+})();
+const POLYMARKET_SIZE_TO_BUDGET_BOOTSTRAP_MAX_TRADES = (() => {
+  const parsed = Number(process.env.POLYMARKET_SIZE_TO_BUDGET_BOOTSTRAP_MAX_TRADES);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 2000;
+  }
+  return Math.max(100, Math.min(Math.floor(parsed), MAX_TRADES_PER_BACKFILL));
+})();
 const POLYMARKET_LIVE_REBALANCE_MAX_ORDERS = (() => {
   const parsed = Number(process.env.POLYMARKET_LIVE_REBALANCE_MAX_ORDERS);
   if (!Number.isFinite(parsed) || parsed <= 0) {
@@ -593,16 +606,10 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 
   const poly = portfolio.polymarket || {};
   const requestedMode = String(options?.mode || '').trim().toLowerCase();
-  const mode = requestedMode === 'backfill'
-    ? 'backfill'
-    : poly.backfillPending
-      ? 'backfill'
-      : 'incremental';
 
   const executionMode = getPolymarketExecutionMode();
-  let executionEnabled = executionMode === 'live' && mode === 'incremental';
+  let executionEnabled = executionMode === 'live';
   let executionDisabledReason = null;
-  const resetPortfolio = mode === 'backfill' ? options?.reset !== false : false;
   const address = String(poly.address || '').trim();
   const storedApiKey = decryptIfEncrypted(poly.apiKey);
   const storedSecret = decryptIfEncrypted(poly.secret);
@@ -625,6 +632,31 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   const authAddress = hasAuthAddress ? authAddressCandidate : null;
   const hasClobCredentials = Boolean(apiKey && secret && passphrase && authAddress);
   const sizeToBudget = parseBoolean(poly.sizeToBudget, parseBoolean(process.env.POLYMARKET_SIZE_TO_BUDGET, false));
+
+  const sizingStateMissing = (() => {
+    if (!sizeToBudget || !POLYMARKET_SIZE_TO_BUDGET_BOOTSTRAP_ENABLED) {
+      return false;
+    }
+    const state = poly?.sizingState || null;
+    const holdings = Array.isArray(state?.holdings) ? state.holdings : [];
+    const makerCash = toNumber(state?.makerCash, null);
+    return !Number.isFinite(makerCash) || holdings.length === 0;
+  })();
+
+  const bootstrapBackfill =
+    sizingStateMissing && requestedMode !== 'backfill' && poly.backfillPending !== true;
+
+  const mode = requestedMode === 'backfill'
+    ? 'backfill'
+    : (poly.backfillPending || bootstrapBackfill)
+      ? 'backfill'
+      : 'incremental';
+
+  if (mode !== 'incremental') {
+    executionEnabled = false;
+  }
+
+  const resetPortfolio = mode === 'backfill' ? options?.reset !== false : false;
 
   if (!isValidHexAddress(address)) {
     throw new Error('Polymarket address is missing or invalid.');
@@ -735,6 +767,10 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     return stocks;
   };
 
+  const maxTradesBackfill = bootstrapBackfill
+    ? Math.min(MAX_TRADES_PER_BACKFILL, POLYMARKET_SIZE_TO_BUDGET_BOOTSTRAP_MAX_TRADES)
+    : MAX_TRADES_PER_BACKFILL;
+
   if (mode === 'backfill') {
     await recordStrategyLog({
       strategyId: portfolio.strategy_id,
@@ -747,7 +783,8 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         address,
         resetPortfolio,
         timeoutMs: POLYMARKET_HTTP_TIMEOUT_MS,
-        maxTrades: MAX_TRADES_PER_BACKFILL,
+        maxTrades: maxTradesBackfill,
+        bootstrap: bootstrapBackfill,
       },
     });
   }
@@ -801,7 +838,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     }
 
     if (mode === 'backfill') {
-      while (nextToken !== null && pendingTrades.length < MAX_TRADES_PER_BACKFILL) {
+      while (nextToken !== null && pendingTrades.length < maxTradesBackfill) {
         pagesFetched += 1;
         const shouldLogPage = pagesFetched === 1 || pagesFetched % POLYMARKET_PROGRESS_LOG_EVERY_PAGES === 0;
         const cursorBefore = nextToken;
@@ -826,7 +863,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         let requestedLimit = null;
         try {
           if (tradeSource === 'data-api') {
-            const remaining = Math.max(0, MAX_TRADES_PER_BACKFILL - pendingTrades.length);
+            const remaining = Math.max(0, maxTradesBackfill - pendingTrades.length);
             requestedLimit = Math.max(1, Math.min(remaining, 10000));
             const fetched = await fetchDataApiTradesPage({
               userAddress: address,
@@ -874,7 +911,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
           break;
         }
         for (const trade of trades) {
-          if (pendingTrades.length >= MAX_TRADES_PER_BACKFILL) {
+          if (pendingTrades.length >= maxTradesBackfill) {
             break;
           }
           pushTrade(trade);
@@ -1016,6 +1053,21 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   let pendingTrades = [];
   let pagesFetched = 0;
   try {
+    if (bootstrapBackfill) {
+      void recordStrategyLog({
+        strategyId: portfolio.strategy_id,
+        userId: portfolio.userId,
+        strategyName: portfolio.name,
+        message: 'Polymarket size-to-budget bootstrap backfill started',
+        details: {
+          provider: 'polymarket',
+          mode: 'backfill',
+          address,
+          reason: 'missing_sizing_state',
+          maxTrades: maxTradesBackfill,
+        },
+      });
+    }
     const collected = await collectTrades(tradeSourceUsed);
     pendingTrades = collected.pendingTrades;
     pagesFetched = collected.pagesFetched;
