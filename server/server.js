@@ -24,6 +24,11 @@ const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const { schedulePortfolioRebalances } = require('./scheduler');
 const { getAlpacaConfig } = require('./config/alpacaConfig');
+const {
+  getClobAuthCooldownStatus,
+  resetClobAuthCooldown,
+  normalizeTradesSourceSetting,
+} = require('./services/polymarketCopyService');
 
 mongoose.set('bufferCommands', false);
 
@@ -236,7 +241,8 @@ app.get("/api/health/polymarket", async (req, res) => {
   const authAddress = normalizeEnvValue(process.env.POLYMARKET_AUTH_ADDRESS || process.env.POLYMARKET_ADDRESS);
   const makerAddress = normalizeEnvValue(req.query.maker || process.env.POLYMARKET_TEST_MAKER_ADDRESS || authAddress);
 
-  const tradesSourceSetting = normalizeEnvValue(process.env.POLYMARKET_TRADES_SOURCE || "auto").toLowerCase();
+  const tradesSourceRaw = normalizeEnvValue(process.env.POLYMARKET_TRADES_SOURCE || "auto");
+  const tradesSourceSetting = normalizeTradesSourceSetting(tradesSourceRaw);
 
   const buildGeoParams = (params = {}) => {
     if (!geoToken) return params;
@@ -326,6 +332,10 @@ app.get("/api/health/polymarket", async (req, res) => {
       authAddressValid: isValidHexAddress(authAddress),
       makerAddress,
     },
+    copyTrader: {
+      clobAuthCooldown: getClobAuthCooldownStatus(),
+      clobAuthCooldownReset: false,
+    },
     clob: {
       host: clobHost,
       time: { ok: false, status: null, serverTime: null, latencyMs: null, error: null },
@@ -338,6 +348,17 @@ app.get("/api/health/polymarket", async (req, res) => {
     },
     durationMs: null,
   };
+
+  const shouldResetCooldown = (() => {
+    if (req.query.resetClobCooldown === true) return true;
+    const raw = normalizeEnvValue(req.query.resetClobCooldown).toLowerCase();
+    return raw === "true" || raw === "1" || raw === "yes";
+  })();
+  if (shouldResetCooldown && debugToken) {
+    resetClobAuthCooldown();
+    report.copyTrader.clobAuthCooldown = getClobAuthCooldownStatus();
+    report.copyTrader.clobAuthCooldownReset = true;
+  }
 
   try {
     const t0 = Date.now();

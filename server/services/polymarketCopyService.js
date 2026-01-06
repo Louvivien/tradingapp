@@ -11,7 +11,6 @@ const DATA_API_HOST = String(process.env.POLYMARKET_DATA_API_HOST || 'https://da
 );
 const GEO_BLOCK_TOKEN =
   (process.env.POLYMARKET_GEO_BLOCK_TOKEN || process.env.GEO_BLOCK_TOKEN || '').trim() || null;
-const POLYMARKET_TRADES_SOURCE = String(process.env.POLYMARKET_TRADES_SOURCE || 'auto').trim().toLowerCase();
 const POLYMARKET_DATA_API_TAKER_ONLY_DEFAULT = String(process.env.POLYMARKET_DATA_API_TAKER_ONLY ?? 'false')
   .trim()
   .toLowerCase();
@@ -61,6 +60,19 @@ const toNumber = (value, fallback = null) => {
   const num = Number(value);
   return Number.isFinite(num) ? num : fallback;
 };
+
+const normalizeTradesSourceSetting = (value) => {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw === 'clob' || raw === 'l2' || raw === 'clob-l2' || raw === 'clob_l2') {
+    return 'clob-l2';
+  }
+  if (raw === 'data' || raw === 'data-api' || raw === 'data_api') {
+    return 'data-api';
+  }
+  return 'auto';
+};
+
+const getTradesSourceSetting = () => normalizeTradesSourceSetting(process.env.POLYMARKET_TRADES_SOURCE || 'auto');
 
 const roundToDecimals = (value, decimals = 6) => {
   const num = toNumber(value, null);
@@ -432,6 +444,25 @@ const clobAuthFailureState = {
 const isClobAuthTemporarilyDisabled = () =>
   POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS > 0 && Date.now() < clobAuthFailureState.disabledUntilMs;
 
+const getClobAuthCooldownStatus = () => {
+  const cooldownMs = POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS;
+  const disabledUntilMs = Number(clobAuthFailureState.disabledUntilMs) || 0;
+  const now = Date.now();
+  const active = cooldownMs > 0 && disabledUntilMs > now;
+  const remainingMs = active ? disabledUntilMs - now : 0;
+  return {
+    cooldownMs,
+    active,
+    remainingMs,
+    disabledUntilMs: active ? disabledUntilMs : 0,
+    disabledUntil: active ? new Date(disabledUntilMs).toISOString() : null,
+  };
+};
+
+const resetClobAuthCooldown = () => {
+  clobAuthFailureState.disabledUntilMs = 0;
+};
+
 const noteClobAuthFailure = () => {
   if (POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS <= 0) {
     clobAuthFailureState.disabledUntilMs = 0;
@@ -473,7 +504,9 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   const authAddressEnv = String(
     process.env.POLYMARKET_AUTH_ADDRESS || process.env.POLYMARKET_ADDRESS || ''
   ).trim();
-  const authAddressCandidate = authAddressStored || authAddressEnv || (usingStoredCreds ? address : '');
+  const authAddressCandidate = usingStoredCreds
+    ? (authAddressStored || authAddressEnv || address)
+    : (authAddressEnv || authAddressStored || '');
   const hasAuthAddress = Boolean(authAddressCandidate && isValidHexAddress(authAddressCandidate));
   const authAddress = hasAuthAddress ? authAddressCandidate : null;
   const hasClobCredentials = Boolean(apiKey && secret && passphrase && authAddress);
@@ -481,16 +514,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   if (!isValidHexAddress(address)) {
     throw new Error('Polymarket address is missing or invalid.');
   }
-  const tradesSourceSetting = (() => {
-    const raw = POLYMARKET_TRADES_SOURCE;
-    if (raw === 'clob' || raw === 'l2' || raw === 'clob-l2') {
-      return 'clob-l2';
-    }
-    if (raw === 'data' || raw === 'data-api' || raw === 'data_api') {
-      return 'data-api';
-    }
-    return 'auto';
-  })();
+  const tradesSourceSetting = getTradesSourceSetting();
   if (tradesSourceSetting === 'clob-l2' && !hasClobCredentials) {
     throw new Error(
       'Polymarket CLOB L2 credentials are required. Set POLYMARKET_API_KEY, POLYMARKET_SECRET, POLYMARKET_PASSPHRASE, and POLYMARKET_AUTH_ADDRESS.'
@@ -1178,6 +1202,9 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	      provider: 'polymarket',
 	      mode,
 	      tradeSource: tradeSourceUsed,
+	      tradesSourceSetting,
+	      hasClobCredentials,
+	      clobAuthCooldown: getClobAuthCooldownStatus(),
 	      address,
 	      pagesFetched,
 	      startingCash,
@@ -1252,4 +1279,7 @@ const syncPolymarketPortfolio = async (portfolio, options = {}) => {
 module.exports = {
   syncPolymarketPortfolio,
   isValidHexAddress,
+  getClobAuthCooldownStatus,
+  resetClobAuthCooldown,
+  normalizeTradesSourceSetting,
 };
