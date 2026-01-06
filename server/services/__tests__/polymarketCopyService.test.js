@@ -356,7 +356,7 @@ describe('polymarketCopyService', () => {
       rebalanceCount: 0,
       save: jest.fn(async function () {
         expect(this.polymarket).toBeTruthy();
-        expect('sizingState' in this.polymarket).toBe(false);
+        expect(this.polymarket.sizingState).toEqual({});
       }),
       polymarket: {
         address: '0x3333333333333333333333333333333333333333',

@@ -165,9 +165,38 @@ const sanitizePolymarketSubdoc = (portfolio) => {
   if (!poly || typeof poly !== 'object') {
     return;
   }
-  if (poly.sizingState === undefined) {
-    delete poly.sizingState;
+  const hasSizingStateKey = Object.prototype.hasOwnProperty.call(poly, 'sizingState');
+  const sizingStateUndefinedViaToObject = (() => {
+    if (typeof poly.toObject !== 'function') {
+      return false;
+    }
+    try {
+      return poly.toObject()?.sizingState === undefined;
+    } catch {
+      return false;
+    }
+  })();
+
+  if (hasSizingStateKey && (poly.sizingState === undefined || sizingStateUndefinedViaToObject)) {
+    // Some environments end up persisting BSON `undefined` which Mongoose will later reject at save time.
+    // Coerce to an empty object so validation/casting succeeds even across schema variants.
+    if (typeof portfolio.set === 'function') {
+      portfolio.set('polymarket.sizingState', {});
+    } else {
+      poly.sizingState = {};
+    }
   }
+};
+
+const snapshotPolymarket = (poly) => {
+  if (!poly || typeof poly !== 'object') {
+    return {};
+  }
+  const base = typeof poly.toObject === 'function' ? poly.toObject() : { ...poly };
+  if (base.sizingState === undefined) {
+    delete base.sizingState;
+  }
+  return base;
 };
 
 const axiosGet = async (url, config = {}) => {
@@ -559,6 +588,8 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   if (provider !== 'polymarket') {
     return { skipped: true, reason: 'not_polymarket' };
   }
+
+  sanitizePolymarketSubdoc(portfolio);
 
   const poly = portfolio.polymarket || {};
   const requestedMode = String(options?.mode || '').trim().toLowerCase();
@@ -1018,7 +1049,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   if (mode !== 'backfill' && !lastTradeId) {
     // Persist the anchor so we can copy the first trade that happens after setup.
     portfolio.polymarket = {
-      ...(portfolio.polymarket || {}),
+      ...snapshotPolymarket(portfolio.polymarket),
       lastTradeMatchTime: anchorMatchTime,
       lastTradeId: null,
     };
@@ -1027,7 +1058,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   if (!pendingTrades.length) {
     if (mode === 'backfill') {
       portfolio.polymarket = {
-        ...(portfolio.polymarket || {}),
+        ...snapshotPolymarket(portfolio.polymarket),
         backfillPending: false,
         backfilledAt: now.toISOString(),
       };
@@ -1767,7 +1798,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       .filter(Boolean);
 
     portfolio.polymarket = {
-      ...(portfolio.polymarket || {}),
+      ...snapshotPolymarket(portfolio.polymarket),
       sizingState: {
         makerCash: makerCashValue,
 	        holdings: makerHoldings.map((pos) => ({
@@ -1978,7 +2009,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 
   if (lastProcessedTrade?.id) {
     portfolio.polymarket = {
-      ...(portfolio.polymarket || {}),
+      ...snapshotPolymarket(portfolio.polymarket),
       lastTradeId: String(lastProcessedTrade.id),
       lastTradeMatchTime: lastProcessedTrade.match_time ? String(lastProcessedTrade.match_time) : null,
       backfillPending: mode === 'backfill' ? false : Boolean(portfolio.polymarket?.backfillPending),
@@ -1986,7 +2017,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     };
   } else if (mode === 'backfill') {
     portfolio.polymarket = {
-      ...(portfolio.polymarket || {}),
+      ...snapshotPolymarket(portfolio.polymarket),
       backfillPending: false,
       backfilledAt: now.toISOString(),
     };
