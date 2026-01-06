@@ -1,8 +1,8 @@
 import React from "react";
 import { Line } from "react-chartjs-2";
-import Chart from 'chart.js/auto';
+import Chart from "chart.js/auto";
 
-const LineChartPort = ({ pastDataPeriod, stockInfo, duration, trendColors = false }) => {
+const LineChartPort = ({ pastDataPeriod, stockInfo, duration }) => {
   const formatDate = (date) => {
     var d = new Date(date),
       month = "" + (d.getMonth() + 1),
@@ -19,8 +19,6 @@ const LineChartPort = ({ pastDataPeriod, stockInfo, duration, trendColors = fals
   const history = hasValidData ? pastDataPeriod.history : [];
   const values = history.map(({ equity }) => equity);
   const baseLineColor = "rgba(0, 0, 255, 0.5)";
-  const upColor = "rgba(46, 204, 113, 0.9)";
-  const downColor = "rgba(231, 76, 60, 0.9)";
 
   const lineChart = hasValidData ? (
     <Line
@@ -33,29 +31,7 @@ const LineChartPort = ({ pastDataPeriod, stockInfo, duration, trendColors = fals
             borderColor: baseLineColor,
             fill: true,
             backgroundColor: "rgba(116, 185, 255, 0.2)",
-            ...(trendColors
-              ? {
-                  segment: {
-                    borderColor: (ctx) => {
-                      const y0 = ctx?.p0?.parsed?.y;
-                      const y1 = ctx?.p1?.parsed?.y;
-                      if (!Number.isFinite(y0) || !Number.isFinite(y1)) {
-                        return baseLineColor;
-                      }
-                      return y1 >= y0 ? upColor : downColor;
-                    },
-                  },
-                  pointBackgroundColor: (ctx) => {
-                    const idx = ctx?.dataIndex ?? 0;
-                    const current = values[idx];
-                    const prev = idx > 0 ? values[idx - 1] : null;
-                    if (!Number.isFinite(current) || prev === null || !Number.isFinite(prev)) {
-                      return baseLineColor;
-                    }
-                    return current >= prev ? upColor : downColor;
-                  },
-                }
-              : {}),
+            pointBackgroundColor: baseLineColor,
           },
         ],
       }}

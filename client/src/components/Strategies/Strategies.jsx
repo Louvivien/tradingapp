@@ -67,6 +67,7 @@ const Strategies = () => {
   const [strategyName, setstrategyName] = useState("");
   const [symphonyUrl, setSymphonyUrl] = useState("");
   const [collaborativeCashLimit, setCollaborativeCashLimit] = useState("");
+  const [savedStrategyFilter, setSavedStrategyFilter] = useState("all");
   const [polymarketStrategyName, setPolymarketStrategyName] = useState("");
   const [polymarketAddress, setPolymarketAddress] = useState("");
   const [polymarketCashLimit, setPolymarketCashLimit] = useState("");
@@ -200,12 +201,25 @@ const Strategies = () => {
   }, [fetchStrategyTemplates]);
 
   const collaborativeLibrary = useMemo(() => {
-    const templates = strategyTemplates.map((item) => ({
-      ...item,
-      sourceType: item.sourceType || "template",
-    }));
+    const templates =
+      savedStrategyFilter === "polymarket"
+        ? []
+        : strategyTemplates.map((item) => ({
+            ...item,
+            sourceType: item.sourceType || "template",
+          }));
     const portfolios = savedStrategies
-      .filter((item) => !item.isAIFund && item.provider !== "polymarket")
+      .filter((item) => !item.isAIFund)
+      .filter((item) => {
+        const provider = String(item.provider || "alpaca").toLowerCase();
+        if (savedStrategyFilter === "composer") {
+          return provider !== "polymarket";
+        }
+        if (savedStrategyFilter === "polymarket") {
+          return provider === "polymarket";
+        }
+        return true;
+      })
       .map((item) => ({
         ...item,
         sourceType: "portfolio",
@@ -221,7 +235,7 @@ const Strategies = () => {
       return true;
     });
     return merged;
-  }, [strategyTemplates, savedStrategies]);
+  }, [strategyTemplates, savedStrategies, savedStrategyFilter]);
 
   const selectedLibraryStrategy = useMemo(
     () => collaborativeLibrary.find((item) => item.id === librarySelection) || null,
@@ -855,6 +869,19 @@ const Strategies = () => {
                 <TextField
                   select
                   variant="outlined"
+                  label="Filter"
+                  value={savedStrategyFilter}
+                  onChange={(e) => setSavedStrategyFilter(e.target.value)}
+                  fullWidth
+                  margin="dense"
+                >
+                  <MenuItem value="all">All</MenuItem>
+                  <MenuItem value="composer">Composer</MenuItem>
+                  <MenuItem value="polymarket">Polymarket</MenuItem>
+                </TextField>
+                <TextField
+                  select
+                  variant="outlined"
                   label="Saved strategies"
                   value={librarySelection}
                   onChange={handleLibrarySelect}
@@ -867,7 +894,11 @@ const Strategies = () => {
                   {collaborativeLibrary.map((strategyOption) => (
                     <MenuItem key={strategyOption.id} value={strategyOption.id}>
                       {strategyOption.name}
-                      {strategyOption.sourceType === "template" ? " (Saved code)" : ""}
+                      {strategyOption.sourceType === "template"
+                        ? " (Saved code)"
+                        : String(strategyOption.provider || "alpaca").toLowerCase() === "polymarket"
+                          ? " (Polymarket)"
+                          : ""}
                     </MenuItem>
                   ))}
                 </TextField>

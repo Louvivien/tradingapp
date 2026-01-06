@@ -194,7 +194,7 @@ const ORDER_PENDING_STATUSES = new Set([
 
 const DEFAULT_REBALANCE_WINDOW_MINUTES = (() => {
   const parsed = Number(process.env.REBALANCE_WINDOW_MINUTES);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 15;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
 })();
 
 const computeRebalanceWindow = (closeTime, windowMinutes = DEFAULT_REBALANCE_WINDOW_MINUTES) => {
@@ -486,10 +486,11 @@ const alignToNextMarketOpen = async (tradingKeys, desiredDate) => {
   return nextSession?.open || desiredDate;
 };
 
-const alignToRebalanceWindowStart = async (tradingKeys, desiredDate) => {
+const alignToRebalanceWindowStart = async (tradingKeys, desiredDate, options = {}) => {
   if (!desiredDate) {
     return desiredDate;
   }
+  const anchorToWindowStart = String(options?.anchor || '').toLowerCase() === 'start';
   const session = await fetchNextMarketSessionAfter(tradingKeys, desiredDate);
   if (!session) {
     return desiredDate;
@@ -507,7 +508,7 @@ const alignToRebalanceWindowStart = async (tradingKeys, desiredDate) => {
       return window.start;
     }
     if (isWithinRebalanceWindow(targetDate, window)) {
-      return targetDate;
+      return anchorToWindowStart ? window.start : targetDate;
     }
     return null;
   };
@@ -537,7 +538,7 @@ const alignToRebalanceWindowStart = async (tradingKeys, desiredDate) => {
 
   const alignedOpen = await alignToNextMarketOpen(tradingKeys, desiredDate);
   if (alignedOpen && alignedOpen !== desiredDate) {
-    const nextAligned = await alignToRebalanceWindowStart(tradingKeys, alignedOpen);
+    const nextAligned = await alignToRebalanceWindowStart(tradingKeys, alignedOpen, options);
     return nextAligned || alignedOpen;
   }
   return desiredDate;
@@ -1979,7 +1980,12 @@ const rebalancePortfolio = async (portfolio) => {
   portfolio.rebalanceCount = (toNumber(portfolio.rebalanceCount, 0) || 0) + 1;
   portfolio.lastRebalancedAt = now;
   const provisionalNext = computeNextRebalanceAt(recurrence, now);
-  const alignedNext = await alignToRebalanceWindowStart(tradingKeys, provisionalNext);
+  const shouldAnchorToWindowStart = recurrence === 'daily' || recurrence === 'weekly' || recurrence === 'monthly';
+  const alignedNext = await alignToRebalanceWindowStart(
+    tradingKeys,
+    provisionalNext,
+    shouldAnchorToWindowStart ? { anchor: 'start' } : undefined
+  );
   portfolio.nextRebalanceAt = alignedNext || provisionalNext;
   portfolio.nextRebalanceManual = false;
   portfolio.recurrence = recurrence;
