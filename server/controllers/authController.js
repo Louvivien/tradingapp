@@ -2,7 +2,6 @@ const mongoose = require("mongoose");
 const User = require("../models/userModel");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const Alpaca = require('@alpacahq/alpaca-trade-api');
 const { getAlpacaConfig } = require('../config/alpacaConfig');
 
 
@@ -99,13 +98,25 @@ exports.loginUser = async (req, res) => {
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
 
-    //connect to alpaca when signedin
-    const alpacaConfig = await getAlpacaConfig(user._id); 
-    const alpacaApi = new Alpaca(alpacaConfig);
-
-    // get user's balance from Alpaca
-    const balance = await alpacaApi.getAccount();
-    const userBalance = balance.cash;
+    let userBalance = user.balance;
+    try {
+      const alpacaConfig = await getAlpacaConfig(user._id);
+      if (alpacaConfig?.hasValidKeys) {
+        const tradingKeys = alpacaConfig.getTradingKeys();
+        const response = await tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/account`, {
+          timeout: Number(process.env.ALPACA_ACCOUNT_TIMEOUT_MS || 5000),
+          headers: {
+            'APCA-API-KEY-ID': tradingKeys.keyId,
+            'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+          },
+        });
+        if (response?.data?.cash != null) {
+          userBalance = response.data.cash;
+        }
+      }
+    } catch (error) {
+      console.warn('[Auth] Alpaca balance fetch failed; continuing with stored balance.', error.message);
+    }
 
     console.log('[Auth] Login successful', {
       username,

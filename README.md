@@ -84,6 +84,10 @@ In `tradingapp/client/` you have an example file. Rename it `.env` and change th
 
 Check `REACT_APP_BASE_URL_DEV=http://localhost:3000` and make sure it matches your server port.
 
+For deployments (Vercel frontend + Render backend), set `REACT_APP_BASE_URL_PROD` to your backend URL (ex: `https://your-service.onrender.com`), not the Vercel app URL.
+
+Tip: after deploying the backend, visit `https://<backend>/api/health` to confirm MongoDB is connected and required env vars are present.
+
 Please make sure you have created a .env in the server AND in the client or it will not work
 
 To use Vertex you will need to create /tradingapp/server/config/googlecredentials.json with your google credentials
@@ -121,6 +125,10 @@ Smoke test:
 cd tradingapp/server
 node scripts/polymarket_smoke_test.js 0xYourWalletAddress
 ```
+
+Debug endpoint (useful after deploying the backend):
+- `GET /api/health/polymarket?maker=0xYourWalletAddress` (returns CLOB `/time`, `/auth/api-keys`, and `/data/trades` status + env credential fingerprints/lengths)
+  - If `POLYMARKET_DEBUG_TOKEN` is set server-side, include header `x-debug-token: <token>`
 
 Fix `401 Unauthorized/Invalid api key` (regenerate CLOB L2 creds):
 ```sh

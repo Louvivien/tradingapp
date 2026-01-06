@@ -2,6 +2,7 @@
 
 const cron = require('node-cron');
 const { spawn } = require('child_process');
+const mongoose = require('mongoose');
 const { runDueRebalances } = require('./services/rebalanceService');
 
 // Schedule news_fromstockslist.py to run every day at 1:00 AM
@@ -47,6 +48,10 @@ function scheduleSentimentVertex() {
 function schedulePortfolioRebalances() {
   cron.schedule('* * * * *', async () => {
     try {
+      if (mongoose.connection.readyState !== 1) {
+        console.warn('[Scheduler] MongoDB not connected; skipping rebalance check.');
+        return;
+      }
       console.log('[Scheduler] Checking for portfolios due for rebalancing...');
       await runDueRebalances();
     } catch (error) {
