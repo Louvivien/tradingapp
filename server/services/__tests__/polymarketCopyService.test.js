@@ -329,4 +329,47 @@ describe('polymarketCopyService', () => {
     expect(buyA.amount).toBeCloseTo(16.666667, 5);
     expect(sellB.amount).toBeCloseTo(33.333333, 5);
   });
+
+  it('does not save polymarket.sizingState when it is undefined', async () => {
+    process.env.POLYMARKET_TRADES_SOURCE = 'data-api';
+
+    const dataApi = nock('https://data-api.polymarket.com');
+    dataApi
+      .get('/trades')
+      .query(true)
+      .reply(200, []);
+
+    const { syncPolymarketPortfolio } = require('../polymarketCopyService');
+
+    const portfolio = {
+      provider: 'polymarket',
+      userId: 'user-1',
+      strategy_id: 'strategy-1',
+      name: 'Polymarket Undefined State',
+      recurrence: 'every_minute',
+      stocks: [],
+      retainedCash: 100,
+      cashBuffer: 100,
+      budget: 100,
+      cashLimit: 100,
+      initialInvestment: 100,
+      rebalanceCount: 0,
+      save: jest.fn(async function () {
+        expect(this.polymarket).toBeTruthy();
+        expect('sizingState' in this.polymarket).toBe(false);
+      }),
+      polymarket: {
+        address: '0x3333333333333333333333333333333333333333',
+        sizeToBudget: true,
+        sizingState: undefined,
+        backfillPending: false,
+        lastTradeMatchTime: '1970-01-01T00:00:00.000Z',
+        lastTradeId: null,
+      },
+    };
+
+    const result = await syncPolymarketPortfolio(portfolio, { mode: 'incremental' });
+    expect(result.processed).toBe(0);
+    expect(portfolio.save).toHaveBeenCalled();
+  });
 });

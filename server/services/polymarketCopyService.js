@@ -157,6 +157,19 @@ const buildGeoParams = (params = {}) => {
   return { ...params, geo_block_token: GEO_BLOCK_TOKEN };
 };
 
+const sanitizePolymarketSubdoc = (portfolio) => {
+  if (!portfolio || typeof portfolio !== 'object') {
+    return;
+  }
+  const poly = portfolio.polymarket;
+  if (!poly || typeof poly !== 'object') {
+    return;
+  }
+  if (poly.sizingState === undefined) {
+    delete poly.sizingState;
+  }
+};
+
 const axiosGet = async (url, config = {}) => {
   const timeout = config.timeout ? config.timeout : POLYMARKET_HTTP_TIMEOUT_MS;
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
@@ -1037,6 +1050,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     portfolio.nextRebalanceAt = computeNextRebalanceAt(normalizeRecurrence(portfolio.recurrence), now);
     portfolio.rebalanceCount = toNumber(portfolio.rebalanceCount, 0) + 1;
     portfolio.lastPerformanceComputedAt = now;
+    sanitizePolymarketSubdoc(portfolio);
     await portfolio.save();
     await recordEquitySnapshotIfPossible({
       stocks: currentHoldings,
@@ -1985,6 +1999,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   portfolio.nextRebalanceAt = computeNextRebalanceAt(normalizeRecurrence(portfolio.recurrence), now);
   portfolio.rebalanceCount = toNumber(portfolio.rebalanceCount, 0) + 1;
   portfolio.lastPerformanceComputedAt = now;
+  sanitizePolymarketSubdoc(portfolio);
   await portfolio.save();
 
   await recordEquitySnapshotIfPossible({
