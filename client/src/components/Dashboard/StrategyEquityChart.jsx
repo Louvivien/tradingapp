@@ -86,7 +86,7 @@ const StrategyEquityChart = ({ userId, token, strategyId, strategyName }) => {
             {error}
           </Typography>
         ) : chartData ? (
-          <LineChartPort pastDataPeriod={chartData} duration="4 months" />
+          <LineChartPort pastDataPeriod={chartData} duration="4 months" trendColors />
         ) : (
           <Typography variant="body2" color="textSecondary">
             No equity history yet.

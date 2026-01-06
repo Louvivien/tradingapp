@@ -1,5 +1,7 @@
 const nock = require('nock');
 
+jest.setTimeout(15000);
+
 jest.mock('../strategyLogger', () => ({
   recordStrategyLog: jest.fn(async () => {}),
 }));

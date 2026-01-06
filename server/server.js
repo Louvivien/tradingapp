@@ -29,6 +29,10 @@ const {
   resetClobAuthCooldown,
   normalizeTradesSourceSetting,
 } = require('./services/polymarketCopyService');
+const {
+  getPolymarketExecutionMode,
+  getPolymarketExecutionDebugInfo,
+} = require('./services/polymarketExecutionService');
 
 mongoose.set('bufferCommands', false);
 
@@ -139,6 +143,7 @@ app.get("/api/health", (req, res) => {
     },
     polymarket: {
       tradesSource: polymarketTradesSource,
+      executionMode: getPolymarketExecutionMode(),
       clobHost: String(process.env.POLYMARKET_CLOB_HOST || 'https://clob.polymarket.com').replace(/\/+$/, ''),
       dataApiHost: String(process.env.POLYMARKET_DATA_API_HOST || 'https://data-api.polymarket.com').replace(
         /\/+$/,
@@ -332,6 +337,7 @@ app.get("/api/health/polymarket", async (req, res) => {
       authAddressValid: isValidHexAddress(authAddress),
       makerAddress,
     },
+    execution: getPolymarketExecutionDebugInfo(),
     copyTrader: {
       clobAuthCooldown: getClobAuthCooldownStatus(),
       clobAuthCooldownReset: false,

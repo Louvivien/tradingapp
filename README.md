@@ -117,6 +117,10 @@ The Polymarket “copy trader (paper)” strategy syncs trades for a given walle
 Server env vars (in `tradingapp/server/config/.env`):
 - Trade source: `POLYMARKET_TRADES_SOURCE=auto|clob-l2|data-api` (default: `auto`, falls back to `data-api` if CLOB auth fails)
 - CLOB L2 creds (only needed if forcing `clob-l2`): `POLYMARKET_API_KEY`, `POLYMARKET_SECRET`, `POLYMARKET_PASSPHRASE`, `POLYMARKET_AUTH_ADDRESS`
+- Execution mode: `POLYMARKET_EXECUTION_MODE=paper|live` (default: `paper`)
+  - Live trading requires: `POLYMARKET_PRIVATE_KEY` (signer), plus the CLOB L2 creds above.
+  - Optional live settings: `POLYMARKET_CHAIN_ID=137|80002`, `POLYMARKET_SIGNATURE_TYPE=0|1`, `POLYMARKET_FUNDER_ADDRESS=0x...`, `POLYMARKET_MARKET_ORDER_TYPE=fak|fok`
+  - Safety: live execution runs only for incremental syncs (never during backfills).
 - Data API options (optional): `POLYMARKET_DATA_API_HOST`, `POLYMARKET_DATA_API_TAKER_ONLY`, `POLYMARKET_DATA_API_USER_AGENT`
 - CLOB auth retry cooldown in `auto` mode (optional, default 1h): `POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS`
 

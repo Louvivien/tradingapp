@@ -23,6 +23,23 @@ const sumCurrentValues = (adjustments = []) => {
   }, 0);
 };
 
+const sumPolymarketPositionsValue = (positions = []) => {
+  if (!Array.isArray(positions)) {
+    return 0;
+  }
+  return positions.reduce((sum, pos) => {
+    const qty = Number(pos?.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      return sum;
+    }
+    const price = Number(pos?.currentPrice ?? pos?.price);
+    if (!Number.isFinite(price) || price < 0) {
+      return sum;
+    }
+    return sum + qty * price;
+  }, 0);
+};
+
 const getRetainedCash = (details = {}) => {
   const direct = Number(details?.cashBuffer);
   if (Number.isFinite(direct)) {
@@ -77,7 +94,16 @@ const runEquityBackfill = async ({ initiatedBy = null, force = false } = {}) => 
     }
   });
 
-  const cursor = StrategyLog.find({ message: 'Portfolio rebalanced' })
+  const cursor = StrategyLog.find({
+    message: {
+      $in: [
+        'Portfolio rebalanced',
+        'Polymarket copy-trader synced',
+        'Polymarket copy-trader sync incomplete',
+        'Polymarket copy-trader backfilled',
+      ],
+    },
+  })
     .sort({ createdAt: 1 })
     .cursor();
 
@@ -105,19 +131,41 @@ const runEquityBackfill = async ({ initiatedBy = null, force = false } = {}) => 
       }
 
       const details = log.details || {};
-      const adjustments = details?.thoughtProcess?.adjustments || [];
-      let holdingsValue = sumCurrentValues(adjustments);
+      const message = String(log.message || '');
+      const isPolymarketLog = message.toLowerCase().startsWith('polymarket copy-trader');
 
-      if ((!holdingsValue || holdingsValue <= 0) && Number.isFinite(details?.budget)) {
-        holdingsValue = Number(details.budget);
+      let holdingsValue = 0;
+      let retainedCash = 0;
+
+      if (isPolymarketLog) {
+        holdingsValue = sumPolymarketPositionsValue(details?.positions || []);
+        retainedCash = Number(details?.cash ?? details?.retainedCash ?? details?.cashBuffer ?? 0) || 0;
+      } else {
+        const adjustments = details?.thoughtProcess?.adjustments || [];
+        holdingsValue = sumCurrentValues(adjustments);
+
+        if ((!holdingsValue || holdingsValue <= 0) && Number.isFinite(details?.budget)) {
+          holdingsValue = Number(details.budget);
+        }
+
+        if (!Number.isFinite(holdingsValue) || holdingsValue <= 0) {
+          skippedCount += 1;
+          continue;
+        }
+
+        retainedCash = getRetainedCash(details);
       }
 
-      if (!Number.isFinite(holdingsValue) || holdingsValue <= 0) {
+      if (!Number.isFinite(holdingsValue) || !Number.isFinite(retainedCash)) {
         skippedCount += 1;
         continue;
       }
 
-      const retainedCash = getRetainedCash(details);
+      if (holdingsValue <= 0 && retainedCash <= 0) {
+        skippedCount += 1;
+        continue;
+      }
+
       const holdingsRounded = roundToTwo(holdingsValue) || 0;
       const retainedRounded = Math.max(0, roundToTwo(retainedCash) || 0);
       const equityValue = roundToTwo(holdingsRounded + retainedRounded);
