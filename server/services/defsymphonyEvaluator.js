@@ -1731,6 +1731,49 @@ const loadPriceData = async (
   calendarLookbackDays = DEFAULT_LOOKBACK_BARS,
   options = {}
 ) => {
+  const computePreviousTradingCloseEndUtc = (value) => {
+    const date = value instanceof Date ? new Date(value) : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    const dow = date.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const daysBack = dow === 1 ? 3 : dow === 0 ? 2 : 1;
+    const prior = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
+    prior.setUTCDate(prior.getUTCDate() - daysBack);
+    return prior;
+  };
+
+  const diffDaysUtc = (a, b) => {
+    if (!a || !b) {
+      return null;
+    }
+    const aMid = Date.UTC(a.getUTCFullYear(), a.getUTCMonth(), a.getUTCDate());
+    const bMid = Date.UTC(b.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate());
+    return Math.floor((aMid - bMid) / (24 * 60 * 60 * 1000));
+  };
+
+  const isSeriesStaleForAsOf = ({ lastBarTimestamp, asOfDate, asOfMode }) => {
+    if (!lastBarTimestamp) {
+      return true;
+    }
+    const lastBarDate = new Date(lastBarTimestamp);
+    if (Number.isNaN(lastBarDate.getTime())) {
+      return true;
+    }
+    const asOf = asOfDate instanceof Date ? asOfDate : new Date(asOfDate);
+    if (Number.isNaN(asOf.getTime())) {
+      return false;
+    }
+    const lagDays = Math.abs(diffDaysUtc(asOf, lastBarDate));
+    if (!Number.isFinite(lagDays)) {
+      return false;
+    }
+    // Allow some slack for weekends/holidays; we only want to prevent using
+    // obviously stale cached series when evaluating "current" holdings parity.
+    const maxLagDays = asOfMode === 'previous-close' ? 5 : 2;
+    return lagDays > maxLagDays;
+  };
+
   const boundedLookback = Math.min(
     Math.max(1, Number(calendarLookbackDays) || DEFAULT_LOOKBACK_BARS),
     MAX_CALENDAR_LOOKBACK_DAYS
@@ -1740,9 +1783,13 @@ const loadPriceData = async (
     ? new Date(`${asOfDateKeyOverride}T23:59:59.999Z`)
     : normalizeAsOfDate(options.asOfDate) || now();
   const start = new Date(asOfDate.getTime() - boundedLookback * 24 * 60 * 60 * 1000);
-  const end = asOfDate;
   const adjustment = options.dataAdjustment;
   const asOfMode = normalizeAsOfMode(options.asOfMode) || 'previous-close';
+  const targetEnd = asOfMode === 'previous-close'
+    ? (computePreviousTradingCloseEndUtc(asOfDate) || asOfDate)
+    : asOfDate;
+  const targetEndDayKey = toISODateKey(targetEnd);
+  const end = targetEnd;
   const appendLivePrice =
     normalizeAppendLivePrice(options.appendLivePrice ?? process.env.COMPOSER_APPEND_LIVE_PRICE) ??
     asOfMode === 'current';
@@ -1757,17 +1804,31 @@ const loadPriceData = async (
   const handleSymbol = async (symbol) => {
     const upper = symbol.toUpperCase();
     try {
-      const response = await getCachedPrices({
-        symbol: upper,
-        startDate: start,
-        endDate: end,
-        adjustment,
-        source: priceSource,
-        forceRefresh,
-        minBars,
-        cacheOnly,
-      });
-      let bars = response.bars || [];
+      const fetchResponse = async ({ refresh, cacheOnlyMode }) => {
+        return getCachedPrices({
+          symbol: upper,
+          startDate: start,
+          endDate: end,
+          adjustment,
+          source: priceSource,
+          forceRefresh: refresh,
+          minBars,
+          cacheOnly: cacheOnlyMode,
+        });
+      };
+
+      const initialResponse = await fetchResponse({ refresh: forceRefresh, cacheOnlyMode: cacheOnly });
+      let bars = Array.isArray(initialResponse?.bars) ? initialResponse.bars : [];
+      let dataSource = initialResponse?.dataSource || null;
+      let refreshedAt = initialResponse?.refreshedAt || null;
+
+      if (targetEndDayKey && bars.length) {
+        bars = bars.filter((bar) => {
+          const dayKey = bar?.t ? toISODateKey(bar.t) : null;
+          return dayKey && dayKey <= targetEndDayKey;
+        });
+      }
+
       if (asOfMode === 'previous-close' && bars.length > 1) {
         // Use a consistent day-key basis across the evaluator:
         // - stale-series detection uses `toISODateKey()` (UTC-based)
@@ -1781,6 +1842,37 @@ const loadPriceData = async (
         const shouldDropAsOfBar = asOfDayKey && lastDayKey && lastDayKey === asOfDayKey;
         if (shouldDropAsOfBar) {
           bars = bars.slice(0, -1);
+        }
+      }
+
+      // If we were asked for a specific as-of date but only have stale cached bars,
+      // force a refresh once to align with Composer's holdings decisions.
+      const lastBarTimestamp = bars.length ? bars[bars.length - 1]?.t : null;
+      const isStale = isSeriesStaleForAsOf({
+        lastBarTimestamp,
+        asOfDate,
+        asOfMode,
+      });
+      if (isStale && cacheOnly && forceRefresh !== true) {
+        const refreshedResponse = await fetchResponse({ refresh: true, cacheOnlyMode: false });
+        const refreshedBars = Array.isArray(refreshedResponse?.bars) ? refreshedResponse.bars : [];
+        if (refreshedBars.length) {
+          bars = targetEndDayKey
+            ? refreshedBars.filter((bar) => {
+                const dayKey = bar?.t ? toISODateKey(bar.t) : null;
+                return dayKey && dayKey <= targetEndDayKey;
+              })
+            : refreshedBars;
+          dataSource = refreshedResponse?.dataSource || dataSource;
+          refreshedAt = refreshedResponse?.refreshedAt || refreshedAt;
+          if (asOfMode === 'previous-close' && bars.length > 1) {
+            const asOfDayKey = asOfDateKeyOverride ? asOfDateKeyOverride : toISODateKey(asOfDate);
+            const lastBar = bars[bars.length - 1];
+            const lastDayKey = lastBar?.t ? toISODateKey(lastBar.t) : null;
+            if (asOfDayKey && lastDayKey && lastDayKey === asOfDayKey) {
+              bars = bars.slice(0, -1);
+            }
+          }
         }
       }
       if (appendLivePrice) {
@@ -1827,6 +1919,8 @@ const loadPriceData = async (
         closes,
         latest: closes[closes.length - 1],
         bars,
+        dataSource,
+        refreshedAt,
       });
     } catch (error) {
       missing.push({
@@ -1896,7 +1990,7 @@ const evaluateDefsymphonyStrategy = async ({
     dataAdjustment ??
       process.env.COMPOSER_DATA_ADJUSTMENT ??
       process.env.ALPACA_DATA_ADJUSTMENT ??
-      'split'
+      'all'
   );
   const parityModeDefault = normalizeBoolean(process.env.COMPOSER_PARITY_MODE) === true;
   const resolvedAsOfMode =
@@ -2136,6 +2230,20 @@ const evaluateDefsymphonyStrategy = async ({
         appendLivePrice,
         priceSource: resolvedPriceSource,
         priceRefresh: resolvedPriceRefresh,
+        seriesMeta: Object.fromEntries(
+          Array.from(priceData.entries()).map(([symbol, series]) => {
+            const lastBar = Array.isArray(series?.bars) && series.bars.length ? series.bars[series.bars.length - 1] : null;
+            return [
+              symbol,
+              {
+                dataSource: series?.dataSource || null,
+                refreshedAt: series?.refreshedAt ? new Date(series.refreshedAt).toISOString() : null,
+                bars: Array.isArray(series?.bars) ? series.bars.length : null,
+                lastBar: lastBar?.t || null,
+              },
+            ];
+          })
+        ),
         missingData: context.missingSymbols
           ? Array.from(context.missingSymbols.entries()).map(([symbol, reason]) => ({ symbol, reason }))
           : [],
@@ -2501,7 +2609,7 @@ const backtestDefsymphonyStrategy = async ({
     dataAdjustment ??
       process.env.COMPOSER_DATA_ADJUSTMENT ??
       process.env.ALPACA_DATA_ADJUSTMENT ??
-      'split'
+      'all'
   );
   const resolvedPriceSource =
     normalizePriceSource(priceSource) ||

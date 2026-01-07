@@ -7,7 +7,8 @@
   "main": "server.js",
   "scripts": {
     "test": "jest --runInBand",
-    "start": "node server.js"
+    "start": "node server.js",
+    "compare:composer": "node scripts/compareComposerHoldings.js"
   },
   "repository": {
     "type": "git",
