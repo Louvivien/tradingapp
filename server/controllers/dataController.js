@@ -368,6 +368,16 @@ exports.evaluateComposerStrategyLocal = async (req, res) => {
     });
   } catch (error) {
     console.error('[ComposerLocal]', error);
+    const code = error?.code ? String(error.code) : null;
+    if (code === 'INSUFFICIENT_MARKET_DATA' || code === 'EMPTY_ALLOCATION') {
+      return res.status(422).json({
+        status: 'fail',
+        code,
+        message: error.message || 'Local Composer evaluation failed due to insufficient market data.',
+        missingSymbols: error?.missingSymbols || null,
+        dataContext: error?.dataContext || null,
+      });
+    }
     return res.status(500).json({
       status: 'fail',
       message: error.message || 'Local Composer evaluation failed.',

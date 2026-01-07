@@ -29,6 +29,25 @@ const METRIC_DEFAULT_WINDOWS = {
   'max-drawdown': 30,
 };
 
+const withErrorCode = (error, code, extra = {}) => {
+  if (!error) {
+    return error;
+  }
+  if (code) {
+    error.code = code;
+  }
+  Object.assign(error, extra);
+  return error;
+};
+
+const createMarketDataError = ({ message, missing = null, context = null } = {}) => {
+  const err = new Error(message || 'Insufficient market data to evaluate strategy.');
+  return withErrorCode(err, 'INSUFFICIENT_MARKET_DATA', {
+    missingSymbols: Array.isArray(missing) ? missing : null,
+    dataContext: context || null,
+  });
+};
+
 const getSeriesValuesForContext = (series, ctx) => {
   if (!series || !Array.isArray(series.closes)) {
     return [];
@@ -1057,6 +1076,23 @@ const evaluateCondition = (node, ctx) => {
     Number.isNaN(left) ||
     Number.isNaN(right)
   ) {
+    if (ctx?.requireMarketData) {
+      const conditionLabel = describeCondition(node);
+      throw createMarketDataError({
+        message: `Insufficient market data to evaluate condition: ${conditionLabel}.`,
+        missing: ctx?.missingSymbols ? Array.from(ctx.missingSymbols.entries()).map(([symbol, reason]) => ({ symbol, reason })) : null,
+        context: {
+          condition: conditionLabel,
+          operator,
+          left,
+          right,
+          asOfDate: ctx?.asOfDate ? formatDateForLog(ctx.asOfDate) : null,
+          asOfMode: ctx?.asOfMode || null,
+          priceSource: ctx?.priceSource || null,
+          dataAdjustment: ctx?.dataAdjustment || null,
+        },
+      });
+    }
     return false;
   }
   switch (operator) {
@@ -2009,6 +2045,10 @@ const evaluateDefsymphonyStrategy = async ({
   const resolvedDebugIndicators =
     normalizeBoolean(debugIndicators) ?? ENABLE_INDICATOR_DEBUG;
 
+  const requireMarketData = normalizeBoolean(process.env.COMPOSER_REQUIRE_MARKET_DATA) !== false;
+  const requireCompleteUniverse = normalizeBoolean(process.env.COMPOSER_REQUIRE_COMPLETE_UNIVERSE) === true;
+  const allowFallbackAllocations = normalizeBoolean(process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS) === true;
+
   const requiredBars = Math.max(
     Math.max(0, Number(astStats.maxWindow) || 0) + 5,
     rsiWindow + rsiHistoryBuffer,
@@ -2019,26 +2059,27 @@ const evaluateDefsymphonyStrategy = async ({
     Math.ceil((requiredBars * CALENDAR_DAYS_PER_YEAR) / TRADING_DAYS_PER_YEAR) + 7
   );
 
-  const {
+  let effectivePriceRefresh = resolvedPriceRefresh;
+  const runLoad = async (forceRefresh) => {
+    return loadPriceData(tickers, calendarLookbackDays, {
+      asOfDate: resolvedAsOfDate,
+      dataAdjustment: resolvedAdjustment,
+      asOfMode: resolvedAsOfMode,
+      priceSource: resolvedPriceSource,
+      forceRefresh,
+      minBars: requiredBars,
+    });
+  };
+
+  let {
     map: priceData,
     missing: missingFromCacheRaw,
     asOfDate: dataAsOfDate,
     asOfMode: resolvedDataAsOfMode,
     appendLivePrice,
-  } = await loadPriceData(
-    tickers,
-    calendarLookbackDays,
-    {
-      asOfDate: resolvedAsOfDate,
-      dataAdjustment: resolvedAdjustment,
-      asOfMode: resolvedAsOfMode,
-      priceSource: resolvedPriceSource,
-      forceRefresh: resolvedPriceRefresh,
-      minBars: requiredBars,
-    }
-  );
-  const missingFromCache = Array.isArray(missingFromCacheRaw) ? [...missingFromCacheRaw] : [];
-  const effectiveAsOfDate = dataAsOfDate || resolvedAsOfDate;
+  } = await runLoad(effectivePriceRefresh);
+  let missingFromCache = Array.isArray(missingFromCacheRaw) ? [...missingFromCacheRaw] : [];
+  let effectiveAsOfDate = dataAsOfDate || resolvedAsOfDate;
 
   // If a subset of symbols returned stale series (e.g., delisted tickers or sparse Yahoo coverage),
   // exclude them rather than forcing the entire evaluation to rewind to the oldest available date.
@@ -2061,9 +2102,73 @@ const evaluateDefsymphonyStrategy = async ({
     });
   }
 
+  // If we depend on market-data completeness, attempt a single force-refresh pass before continuing.
+  if (requireMarketData && missingFromCache.length && effectivePriceRefresh !== true) {
+    effectivePriceRefresh = true;
+    ({
+      map: priceData,
+      missing: missingFromCacheRaw,
+      asOfDate: dataAsOfDate,
+      asOfMode: resolvedDataAsOfMode,
+      appendLivePrice,
+    } = await runLoad(true));
+    missingFromCache = Array.isArray(missingFromCacheRaw) ? [...missingFromCacheRaw] : [];
+    effectiveAsOfDate = dataAsOfDate || resolvedAsOfDate;
+    const retryDayKey = toISODateKey(effectiveAsOfDate);
+    if (retryDayKey) {
+      const stale = [];
+      priceData.forEach((series, symbol) => {
+        const lastBar = Array.isArray(series?.bars) && series.bars.length ? series.bars[series.bars.length - 1] : null;
+        const lastKey = lastBar?.t ? toISODateKey(lastBar.t) : null;
+        if (lastKey && lastKey < retryDayKey) {
+          stale.push({ symbol, lastKey });
+        }
+      });
+      stale.forEach(({ symbol, lastKey }) => {
+        priceData.delete(symbol);
+        missingFromCache.push({
+          symbol,
+          reason: `Stale price history (last bar ${lastKey}, expected ${retryDayKey}).`,
+        });
+      });
+    }
+  }
+
+  if (requireCompleteUniverse && missingFromCache.length) {
+    const formatted = missingFromCache
+      .slice(0, 12)
+      .map((entry) => `${entry.symbol}${entry.reason ? ` (${entry.reason})` : ''}`);
+    const extra = missingFromCache.length > 12 ? ` and ${missingFromCache.length - 12} more` : '';
+    throw createMarketDataError({
+      message: `Insufficient market data for strategy evaluation: missing/stale data for ${missingFromCache.length}/${tickers.length} tickers (${formatted.join(', ')}${extra}).`,
+      missing: missingFromCache,
+      context: {
+        asOfDate: formatDateForLog(effectiveAsOfDate),
+        asOfMode: resolvedDataAsOfMode || resolvedAsOfMode,
+        priceSource: resolvedPriceSource,
+        priceRefresh: effectivePriceRefresh,
+        dataAdjustment: resolvedAdjustment,
+        requiredBars,
+      },
+    });
+  }
+
   const usableHistory = alignPriceHistory(priceData, requiredBars);
   if (!usableHistory) {
-    throw new Error('Unable to align price history for the requested lookback window.');
+    throw createMarketDataError({
+      message: 'Unable to align price history for the requested lookback window (insufficient bars across one or more tickers).',
+      missing: missingFromCache,
+      context: {
+        asOfDate: formatDateForLog(effectiveAsOfDate),
+        asOfMode: resolvedDataAsOfMode || resolvedAsOfMode,
+        priceSource: resolvedPriceSource,
+        priceRefresh: effectivePriceRefresh,
+        dataAdjustment: resolvedAdjustment,
+        requiredBars,
+        loadedTickers: priceData.size,
+        totalTickers: tickers.length,
+      },
+    });
   }
   const requestedAsOfLabel = formatDateForLog(resolvedAsOfDate);
   const effectiveAsOfLabel = formatDateForLog(effectiveAsOfDate);
@@ -2079,6 +2184,10 @@ const evaluateDefsymphonyStrategy = async ({
     enableGroupMetrics: false,
     debugIndicators: resolvedDebugIndicators,
     rsiMethod: resolvedRsiMethod,
+    requireMarketData,
+    allowFallbackAllocations,
+    asOfMode: resolvedDataAsOfMode || resolvedAsOfMode,
+    priceSource: resolvedPriceSource,
     // `loadPriceData()` already enforces "previous-close" semantics by dropping today's unfinished
     // daily bar when needed. Only drop the latest bar from indicator calculations when we explicitly
     // appended a live quote on top of the previous-close history.
@@ -2113,17 +2222,31 @@ const evaluateDefsymphonyStrategy = async ({
 
   let rawPositions = evaluateNode(ast, 1, context);
   if (!rawPositions.length) {
-    const fallbackSymbols = tickers.filter((symbol) => context.priceData.has(symbol));
-    if (fallbackSymbols.length) {
-      context.reasoning.push(
-        `Step 2a: Primary evaluation returned no tradable allocations. Applying equal-weight fallback across ${fallbackSymbols.length} tickers that have price data.`
+    if (allowFallbackAllocations) {
+      const fallbackSymbols = tickers.filter((symbol) => context.priceData.has(symbol));
+      if (fallbackSymbols.length) {
+        context.reasoning.push(
+          `Step 2a: Primary evaluation returned no tradable allocations. Applying equal-weight fallback across ${fallbackSymbols.length} tickers that have price data.`
+        );
+        const equalWeight = 1 / fallbackSymbols.length;
+        rawPositions = fallbackSymbols.map((symbol) => ({
+          symbol,
+          weight: equalWeight,
+          rationale: 'Fallback equal-weight allocation due to empty evaluator result.',
+        }));
+      }
+    } else {
+      throw withErrorCode(
+        new Error(
+          'Strategy evaluation produced no tradable allocations. This is treated as an error to avoid placing unintended trades.'
+        ),
+        'EMPTY_ALLOCATION',
+        {
+          missingSymbols: context.missingSymbols
+            ? Array.from(context.missingSymbols.entries()).map(([symbol, reason]) => ({ symbol, reason }))
+            : [],
+        }
       );
-      const equalWeight = 1 / fallbackSymbols.length;
-      rawPositions = fallbackSymbols.map((symbol) => ({
-        symbol,
-        weight: equalWeight,
-        rationale: 'Fallback equal-weight allocation due to empty evaluator result.',
-      }));
     }
   }
   context.reasoning.push(
@@ -2229,7 +2352,7 @@ const evaluateDefsymphonyStrategy = async ({
         usePreviousBarForIndicators: context.usePreviousBarForIndicators,
         appendLivePrice,
         priceSource: resolvedPriceSource,
-        priceRefresh: resolvedPriceRefresh,
+        priceRefresh: effectivePriceRefresh,
         seriesMeta: Object.fromEntries(
           Array.from(priceData.entries()).map(([symbol, series]) => {
             const lastBar = Array.isArray(series?.bars) && series.bars.length ? series.bars[series.bars.length - 1] : null;

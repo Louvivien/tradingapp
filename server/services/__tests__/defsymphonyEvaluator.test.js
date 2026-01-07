@@ -262,4 +262,102 @@ describe('evaluateDefsymphonyStrategy', () => {
       process.env.RSI_METHOD = originalRsiMethod;
     }
   });
+
+  describe('market data gating', () => {
+    const originalRequireMarketData = process.env.COMPOSER_REQUIRE_MARKET_DATA;
+    const originalRequireCompleteUniverse = process.env.COMPOSER_REQUIRE_COMPLETE_UNIVERSE;
+    const originalAllowFallback = process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS;
+
+    afterEach(() => {
+      if (originalRequireMarketData === undefined) {
+        delete process.env.COMPOSER_REQUIRE_MARKET_DATA;
+      } else {
+        process.env.COMPOSER_REQUIRE_MARKET_DATA = originalRequireMarketData;
+      }
+      if (originalRequireCompleteUniverse === undefined) {
+        delete process.env.COMPOSER_REQUIRE_COMPLETE_UNIVERSE;
+      } else {
+        process.env.COMPOSER_REQUIRE_COMPLETE_UNIVERSE = originalRequireCompleteUniverse;
+      }
+      if (originalAllowFallback === undefined) {
+        delete process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS;
+      } else {
+        process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS = originalAllowFallback;
+      }
+    });
+
+    it('fails fast when any strategy ticker is missing/stale (no silent partial evaluation)', async () => {
+      process.env.COMPOSER_REQUIRE_MARKET_DATA = 'true';
+      process.env.COMPOSER_REQUIRE_COMPLETE_UNIVERSE = 'true';
+      process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS = 'false';
+
+      getCachedPrices.mockImplementation(async ({ symbol }) => {
+        const upper = String(symbol || '').toUpperCase();
+        if (upper === 'AAA') {
+          return buildPriceResponse(100, 1, 60);
+        }
+        throw new Error(`Missing mock price data for ${upper}`);
+      });
+
+      const strategy = `
+        (defsymphony "Missing Data Gate" {}
+          (weight-equal
+            [
+              (asset "AAA")
+              (asset "BBB")
+            ]))
+      `;
+
+      await expect(
+        evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 })
+      ).rejects.toMatchObject({ code: 'INSUFFICIENT_MARKET_DATA' });
+    });
+
+    it('treats n/a indicators inside conditions as a market-data error (not FALSE)', async () => {
+      process.env.COMPOSER_REQUIRE_MARKET_DATA = 'true';
+      process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS = 'false';
+
+      installPriceMapMock({
+        AAA: buildPriceResponse(100, 1, 40), // < window+1 => RSI is n/a
+        BBB: buildPriceResponse(100, 1, 60),
+      });
+
+      const strategy = `
+        (defsymphony "NA Condition Gate" {}
+          (if
+            (> (rsi "AAA" {:window 50}) 80)
+            [(asset "AAA")]
+            [(asset "BBB")]))
+      `;
+
+      await expect(
+        evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 })
+      ).rejects.toMatchObject({ code: 'INSUFFICIENT_MARKET_DATA' });
+    });
+
+    it('does not apply equal-weight fallback unless explicitly enabled', async () => {
+      process.env.COMPOSER_REQUIRE_MARKET_DATA = 'false';
+      process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS = 'false';
+
+      getCachedPrices.mockImplementation(async ({ symbol }) => {
+        const upper = String(symbol || '').toUpperCase();
+        if (upper === 'BBB') {
+          return buildPriceResponse(100, 1, 60);
+        }
+        throw new Error(`Missing mock price data for ${upper}`);
+      });
+
+      const strategy = `
+        (defsymphony "No Fallback" {}
+          (if
+            (> (rsi "BBB" {:window 2}) 1000)
+            [(asset "AAA")]
+            [(asset "AAA")]))
+      `;
+
+      await expect(
+        evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 })
+      ).rejects.toMatchObject({ code: 'EMPTY_ALLOCATION' });
+    });
+  });
 });

@@ -1479,7 +1479,17 @@ const rebalancePortfolio = async (portfolio) => {
         });
       } catch (error) {
         console.warn('[Rebalance] Composer evaluation failed:', error.message);
-        throw new Error(`Composer evaluation failed: ${error.message}`);
+        const wrapped = new Error(`Composer evaluation failed: ${error.message}`);
+        if (error?.code) {
+          wrapped.code = error.code;
+        }
+        if (error?.missingSymbols) {
+          wrapped.missingSymbols = error.missingSymbols;
+        }
+        if (error?.dataContext) {
+          wrapped.dataContext = error.dataContext;
+        }
+        throw wrapped;
       }
     }
   }
