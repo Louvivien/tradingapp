@@ -644,6 +644,8 @@ const deleteStrategy = async (strategyId) => {
             : Number.isFinite(Number(portfolio.currentValue))
               ? Number(portfolio.currentValue)
               : (allStocksHaveAvgCost ? totalCurrentTotal : null);
+          const cashBufferValue = Number.isFinite(Number(portfolio.cashBuffer)) ? Number(portfolio.cashBuffer) : 0;
+          const equityValue = currentValue !== null ? currentValue + cashBufferValue : null;
           const initialInvestmentValue = Number.isFinite(Number(portfolio.initialInvestment))
             ? Number(portfolio.initialInvestment)
             : 0;
@@ -651,7 +653,7 @@ const deleteStrategy = async (strategyId) => {
             ? null
             : portfolio.pnlValue !== undefined && portfolio.pnlValue !== null && Number.isFinite(Number(portfolio.pnlValue))
               ? Number(portfolio.pnlValue)
-              : (currentValue !== null ? currentValue - initialInvestmentValue : null);
+              : (equityValue !== null ? equityValue - initialInvestmentValue : null);
           const pnlPercent = portfolio.pnlPercent !== undefined && portfolio.pnlPercent !== null && Number.isFinite(Number(portfolio.pnlPercent))
             ? Number(portfolio.pnlPercent)
             : (computedPnlValue !== null && initialInvestmentValue > 0 ? (computedPnlValue / initialInvestmentValue) * 100 : null);
@@ -816,7 +818,7 @@ const deleteStrategy = async (strategyId) => {
                 </Typography>
               ) : (
                 <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
-                  Initial investment: {formatCurrencyValue(initialInvestmentValue)} · Current value: {currentValue !== null ? formatCurrencyValue(currentValue) : '—'}
+                  Initial investment: {formatCurrencyValue(initialInvestmentValue)} · Holdings value: {currentValue !== null ? formatCurrencyValue(currentValue) : '—'} · Equity: {equityValue !== null ? formatCurrencyValue(equityValue) : '—'}
                   {pnlDisplay && (
                     <> · P/L: <span className={pnlValue >= 0 ? styles.positive : styles.negative}>{pnlDisplay}</span></>
                   )}

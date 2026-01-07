@@ -71,7 +71,9 @@ const StrategyEquityChart = ({ userId, token, strategyId, strategyName }) => {
   }
 
   const chartData = history?.length ? { history } : null;
-  const subtitle = strategyName ? `Equity for ${strategyName}` : "Strategy equity";
+  const subtitle = strategyName
+    ? `Equity (holdings + cash buffer) for ${strategyName}`
+    : "Strategy equity (holdings + cash buffer)";
 
   return (
     <Box sx={{ width: "100%" }}>
