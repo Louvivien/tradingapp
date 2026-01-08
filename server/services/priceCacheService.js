@@ -116,6 +116,23 @@ const getTiingoTokens = () => {
   return Array.from(new Set(tokens.filter(Boolean)));
 };
 
+let tiingoTokenCursor = 0;
+const tiingoTokenNextAllowedAt = new Map();
+
+const waitForTiingoSlot = async (token) => {
+  const minIntervalMsRaw = Number(process.env.TIINGO_MIN_REQUEST_INTERVAL_MS);
+  const minIntervalMs = Number.isFinite(minIntervalMsRaw) ? Math.max(0, Math.floor(minIntervalMsRaw)) : 250;
+  if (!minIntervalMs) {
+    return;
+  }
+  const now = Date.now();
+  const nextAt = tiingoTokenNextAllowedAt.get(token) || 0;
+  if (nextAt > now) {
+    await sleep(nextAt - now);
+  }
+  tiingoTokenNextAllowedAt.set(token, Date.now() + minIntervalMs);
+};
+
 const fetchBarsFromTiingo = async ({ symbol, start, end, adjustment }) => {
   const tokens = getTiingoTokens();
   if (!tokens.length) {
@@ -131,11 +148,21 @@ const fetchBarsFromTiingo = async ({ symbol, start, end, adjustment }) => {
   const resolvedAdjustment = normalizeAdjustment(adjustment);
   const useAdjusted = resolvedAdjustment !== 'raw';
 
+  const startIndex = (() => {
+    if (tokens.length <= 1) {
+      return 0;
+    }
+    const idx = tiingoTokenCursor % tokens.length;
+    tiingoTokenCursor += 1;
+    return idx;
+  })();
+
   let lastError = null;
   for (let attempt = 0; attempt < tokens.length; attempt += 1) {
-    const token = tokens[attempt];
+    const token = tokens[(startIndex + attempt) % tokens.length];
     const url = `https://api.tiingo.com/tiingo/daily/${encodeURIComponent(symbol)}/prices`;
     try {
+      await waitForTiingoSlot(token);
       const { data } = await Axios.get(url, {
         params: {
           startDate: startKey,
@@ -217,7 +244,10 @@ const fetchBarsFromTiingo = async ({ symbol, start, end, adjustment }) => {
       if (!shouldRotate) {
         throw error;
       }
-      const backoffMs = 500 + attempt * 250;
+      const retryAfter = Number(error?.response?.headers?.['retry-after']);
+      const retryAfterMs =
+        Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(30_000, Math.floor(retryAfter * 1000)) : null;
+      const backoffMs = retryAfterMs ?? Math.min(30_000, 750 + attempt * 500);
       await sleep(backoffMs);
     }
   }
@@ -711,30 +741,25 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, m
     normalizedSource === 'yahoo' ||
     normalizedSource === 'alpaca' ||
     normalizedSource === 'tiingo' ||
-    normalizedSource === 'stooq' ||
-    normalizedSource === 'testfolio'
+    normalizedSource === 'stooq'
       ? normalizedSource
       : null;
   const attemptOrder = (() => {
     if (preferred === 'yahoo') {
-      return ['yahoo', 'tiingo', 'testfolio', 'alpaca', 'stooq'];
+      return ['yahoo', 'tiingo', 'stooq', 'alpaca'];
     }
     if (preferred === 'tiingo') {
-      // Composer-style: Tiingo first, then Testfolio, then Alpaca.
-      return ['tiingo', 'testfolio', 'alpaca', 'yahoo', 'stooq'];
+      // Composer-style: Tiingo first, then Stooq, then Yahoo.
+      return ['tiingo', 'stooq', 'yahoo', 'alpaca'];
     }
     if (preferred === 'alpaca') {
-      return ['alpaca', 'tiingo', 'testfolio', 'yahoo', 'stooq'];
+      return ['alpaca', 'tiingo', 'stooq', 'yahoo'];
     }
     if (preferred === 'stooq') {
-      return ['stooq', 'tiingo', 'testfolio', 'alpaca', 'yahoo'];
+      return ['stooq', 'tiingo', 'yahoo', 'alpaca'];
     }
-    if (preferred === 'testfolio') {
-      // When caller asks for Testfolio, keep the surface pure: do not pull Yahoo/Alpaca fallback to avoid mixing sources.
-      return ['testfolio'];
-    }
-    // Default: Tiingo -> Testfolio -> Alpaca -> Yahoo -> Stooq.
-    return ['tiingo', 'testfolio', 'alpaca', 'yahoo', 'stooq'];
+    // Default: Tiingo -> Stooq -> Yahoo -> Alpaca.
+    return ['tiingo', 'stooq', 'yahoo', 'alpaca'];
   })();
 
   const attempt = async (candidate) => {
@@ -746,10 +771,6 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, m
       case 'tiingo': {
         const bars = await fetchBarsFromTiingo({ symbol, start, end, adjustment });
         return { bars, dataSource: 'tiingo' };
-      }
-      case 'testfolio': {
-        const bars = await fetchBarsFromTestfolio({ symbol, start, end, adjustment });
-        return { bars, dataSource: 'testfolio' };
       }
       case 'stooq': {
         const bars = await fetchBarsFromStooq({ symbol, start, end, adjustment });
@@ -880,8 +901,14 @@ const getCachedPrices = async ({
     cache = await PriceCache.findOne({ ...cacheQueryBase, dataSource: preferredSource }).sort({ refreshedAt: -1 });
   }
   if (!cache) {
-    cache = await PriceCache.findOne(cacheQueryBase).sort({ refreshedAt: -1 });
+    cache = await PriceCache.findOne({ ...cacheQueryBase, dataSource: { $ne: 'testfolio' } }).sort({ refreshedAt: -1 });
   }
+
+  const subsetBars = (bars = []) =>
+    (Array.isArray(bars) ? bars : []).filter((bar) => {
+      const timestamp = new Date(bar.t);
+      return timestamp >= start && timestamp <= end;
+    });
 
   const relaxedCoverageOk = (bars = []) => {
     if (!minBarsNeeded) {
@@ -894,14 +921,21 @@ const getCachedPrices = async ({
     const endKey = toISODateKey(end);
     return Boolean(lastKey && endKey && lastKey >= endKey);
   };
+  let subset = cache ? subsetBars(cache.bars || []) : [];
+  const cacheUsable =
+    cache && subset.length > 0 && (barsCoverRange(subset, start, end) || relaxedCoverageOk(subset));
   const isFresh =
     !resolvedForceRefresh &&
     cache &&
     cache.refreshedAt &&
     (Date.now() - new Date(cache.refreshedAt).getTime()) / (1000 * 60 * 60) < CACHE_TTL_HOURS &&
-    (barsCoverRange(cache.bars, start, end) || relaxedCoverageOk(cache.bars));
+    cacheUsable;
 
-  if (!isFresh && !(resolvedCacheOnly && cache && Array.isArray(cache.bars) && cache.bars.length)) {
+  // Cache-only mode should still enforce minimum history requirements, otherwise long-window
+  // indicators can silently drop branches and drift from Composer holdings.
+  const cacheOnlyOk = resolvedCacheOnly && cacheUsable;
+
+  if (!isFresh && !cacheOnlyOk) {
     const { bars, dataSource } = await fetchBarsWithFallback({
       symbol: uppercaseSymbol,
       start,
@@ -928,12 +962,8 @@ const getCachedPrices = async ({
       },
       { new: true, upsert: true }
     );
+    subset = subsetBars(cache.bars || []);
   }
-
-  const subset = (cache.bars || []).filter((bar) => {
-    const timestamp = new Date(bar.t);
-    return timestamp >= start && timestamp <= end;
-  });
 
   if (!subset.length) {
     throw new Error(`Cached data for ${uppercaseSymbol} does not cover the requested range.`);

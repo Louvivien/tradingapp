@@ -37,6 +37,7 @@ const {
   completeProgress,
 } = require('../utils/progressBus');
 const { fetchComposerLinkSnapshot } = require('../utils/composerLinkClient');
+const { computeComposerHoldingsWeights } = require('../utils/composerHoldingsWeights');
 
 const RECURRENCE_LABELS = {
   every_minute: 'Every minute',
@@ -3165,6 +3166,7 @@ exports.compareComposerHoldingsAll = async (req, res) => {
         composer: {
           effectiveAsOfDate: null,
           holdings: [],
+          meta: null,
         },
         tradingApp: {
           effectiveAsOfDate: null,
@@ -3181,6 +3183,8 @@ exports.compareComposerHoldingsAll = async (req, res) => {
         const snapshot = await fetchComposerLinkSnapshot({ url });
         entry.composer.effectiveAsOfDate = snapshot.effectiveAsOfDateKey || null;
         entry.composer.holdings = normalizeWeightRows(snapshot.holdings || []);
+        const composerHoldingsObject = snapshot.publicHoldingsObject || null;
+        const composerLastBacktestValue = snapshot.lastBacktestValue ?? null;
 
         const dbStrategyText = String(strategy?.strategy || '').trim();
         const strategyText = strategyTextSource === 'link' ? snapshot.strategyText : dbStrategyText;
@@ -3216,6 +3220,7 @@ exports.compareComposerHoldingsAll = async (req, res) => {
             asOfMode,
             priceSource,
             priceRefresh,
+            requireAsOfDateCoverage: true,
           });
 
           entry.tradingApp.meta = local?.meta || null;
@@ -3223,6 +3228,39 @@ exports.compareComposerHoldingsAll = async (req, res) => {
             ? toDateKey(local.meta.localEvaluator.asOfDate)
             : null;
           entry.tradingApp.holdings = normalizeWeightRows(local?.positions || []);
+
+          if (composerHoldingsObject) {
+            const localMeta = local?.meta?.localEvaluator || {};
+            const composerPriceSource = localMeta.priceSource || priceSource || null;
+            const composerAdjustment = localMeta.dataAdjustment || dataAdjustment || 'all';
+            try {
+              const computed = await computeComposerHoldingsWeights({
+                holdingsObject: composerHoldingsObject,
+                effectiveAsOfDateKey: entry.composer.effectiveAsOfDate,
+                lastBacktestValue: composerLastBacktestValue,
+                priceSource: composerPriceSource,
+                dataAdjustment: composerAdjustment,
+                cacheOnly: true,
+                forceRefresh: false,
+                concurrency: 4,
+              });
+              entry.composer.holdings = normalizeWeightRows(computed.holdings || []);
+              entry.composer.meta = computed.meta || null;
+            } catch (error) {
+              const computed = await computeComposerHoldingsWeights({
+                holdingsObject: composerHoldingsObject,
+                effectiveAsOfDateKey: entry.composer.effectiveAsOfDate,
+                lastBacktestValue: composerLastBacktestValue,
+                priceSource: composerPriceSource,
+                dataAdjustment: composerAdjustment,
+                cacheOnly: false,
+                forceRefresh: false,
+                concurrency: 2,
+              });
+              entry.composer.holdings = normalizeWeightRows(computed.holdings || []);
+              entry.composer.meta = computed.meta || null;
+            }
+          }
 
           entry.comparison = compareWeightRows({
             composer: entry.composer.holdings,

@@ -941,7 +941,8 @@ const computeCumulativeReturn = (series, window) => {
   if (!Number.isFinite(latest) || !Number.isFinite(prior) || prior === 0) {
     return null;
   }
-  return (latest - prior) / prior;
+  // Composer parity: treat return-like metrics as percentage points.
+  return ((latest - prior) / prior) * 100;
 };
 
 const computeStdDevReturn = (series, window) => {
@@ -972,7 +973,8 @@ const computeMaxDrawdown = (series, window) => {
       maxDd = dd;
     }
   });
-  return Math.abs(maxDd);
+  // Composer parity: express drawdown as a positive percentage value.
+  return Math.abs(maxDd) * 100;
 };
 
 const TICKER_PATTERN = /^[A-Z][A-Z0-9\.\-]{0,9}$/;
@@ -1966,11 +1968,18 @@ const loadPriceData = async (
     }
   };
 
-  if (priceSource === 'yahoo') {
-    await runWithConcurrency(symbols, 4, handleSymbol);
-  } else {
-    await Promise.all(symbols.map(handleSymbol));
-  }
+  const resolvedConcurrency = (() => {
+    const fromEnv = Number(process.env.PRICE_LOAD_CONCURRENCY);
+    if (Number.isFinite(fromEnv) && fromEnv > 0) {
+      return Math.max(1, Math.floor(fromEnv));
+    }
+    if (priceSource === 'tiingo') return 1;
+    if (priceSource === 'yahoo') return 3;
+    if (priceSource === 'alpaca') return 6;
+    if (priceSource === 'testfolio') return 4;
+    return 8; // stooq or mixed fallback
+  })();
+  await runWithConcurrency(symbols, resolvedConcurrency, handleSymbol);
   let asOfDateUsed = null;
   map.forEach((series) => {
     const lastBar = Array.isArray(series.bars) && series.bars.length
@@ -2005,6 +2014,7 @@ const evaluateDefsymphonyStrategy = async ({
   requireMarketData = null,
   requireCompleteUniverse = null,
   allowFallbackAllocations = null,
+  requireAsOfDateCoverage = null,
 }) => {
   const ast = parseComposerScript(strategyText);
   if (!ast) {
@@ -2051,6 +2061,7 @@ const evaluateDefsymphonyStrategy = async ({
   const resolvedRequireMarketData = normalizeBoolean(requireMarketData) ?? true;
   const resolvedRequireCompleteUniverse = normalizeBoolean(requireCompleteUniverse) ?? true;
   const resolvedAllowFallbackAllocations = normalizeBoolean(allowFallbackAllocations) ?? false;
+  const resolvedRequireAsOfDateCoverage = normalizeBoolean(requireAsOfDateCoverage) ?? false;
 
   const requiredBars = Math.max(
     Math.max(0, Number(astStats.maxWindow) || 0) + 5,
@@ -2084,9 +2095,25 @@ const evaluateDefsymphonyStrategy = async ({
   let missingFromCache = Array.isArray(missingFromCacheRaw) ? [...missingFromCacheRaw] : [];
   let effectiveAsOfDate = dataAsOfDate || resolvedAsOfDate;
 
+  const computeExpectedMarketCloseEndUtc = (value) => {
+    const date = value instanceof Date ? new Date(value) : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    const dow = date.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+    const daysBack = dow === 1 ? 3 : dow === 0 ? 2 : 1;
+    const prior = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
+    prior.setUTCDate(prior.getUTCDate() - daysBack);
+    return prior;
+  };
+  const expectedTargetEnd = (resolvedAsOfMode || resolvedDataAsOfMode) === 'previous-close'
+    ? (computeExpectedMarketCloseEndUtc(resolvedAsOfDate) || resolvedAsOfDate)
+    : resolvedAsOfDate;
+  const expectedTargetEndKey = expectedTargetEnd ? toISODateKey(expectedTargetEnd) : null;
+
   // If a subset of symbols returned stale series (e.g., delisted tickers or sparse Yahoo coverage),
   // exclude them rather than forcing the entire evaluation to rewind to the oldest available date.
-  const effectiveDayKey = toISODateKey(effectiveAsOfDate);
+  let effectiveDayKey = toISODateKey(effectiveAsOfDate);
   if (effectiveDayKey) {
     const stale = [];
     priceData.forEach((series, symbol) => {
@@ -2106,7 +2133,12 @@ const evaluateDefsymphonyStrategy = async ({
   }
 
   // If we depend on market-data completeness, attempt a single force-refresh pass before continuing.
-  if (resolvedRequireMarketData && missingFromCache.length && effectivePriceRefresh !== true) {
+  const needsCoverageRefresh =
+    resolvedRequireAsOfDateCoverage &&
+    expectedTargetEndKey &&
+    effectiveDayKey &&
+    effectiveDayKey < expectedTargetEndKey;
+  if ((resolvedRequireMarketData && missingFromCache.length && effectivePriceRefresh !== true) || (needsCoverageRefresh && effectivePriceRefresh !== true)) {
     effectivePriceRefresh = true;
     ({
       map: priceData,
@@ -2135,6 +2167,37 @@ const evaluateDefsymphonyStrategy = async ({
         });
       });
     }
+    effectiveDayKey = retryDayKey;
+  }
+
+  if (resolvedRequireAsOfDateCoverage && expectedTargetEndKey && effectiveDayKey && effectiveDayKey < expectedTargetEndKey) {
+    const stale = [];
+    priceData.forEach((series, symbol) => {
+      const lastBar = Array.isArray(series?.bars) && series.bars.length ? series.bars[series.bars.length - 1] : null;
+      const lastKey = lastBar?.t ? toISODateKey(lastBar.t) : null;
+      stale.push({ symbol, lastKey });
+    });
+    const formatted = stale
+      .slice(0, 12)
+      .map((entry) => `${entry.symbol}${entry.lastKey ? ` (last bar ${entry.lastKey})` : ''}`);
+    const extra = stale.length > 12 ? ` and ${stale.length - 12} more` : '';
+    throw createMarketDataError({
+      message: `Market data did not reach requested effective date (${expectedTargetEndKey}). Latest bar across universe was ${effectiveDayKey}. Missing/stale data for ${stale.length}/${tickers.length} tickers (${formatted.join(', ')}${extra}).`,
+      missing: stale.map((entry) => ({
+        symbol: entry.symbol,
+        reason: entry.lastKey ? `Stale price history (last bar ${entry.lastKey}, expected ${expectedTargetEndKey}).` : 'No price bars returned.',
+      })),
+      context: {
+        asOfDate: formatDateForLog(resolvedAsOfDate),
+        expectedEndDate: expectedTargetEndKey,
+        effectiveEndDate: effectiveDayKey,
+        asOfMode: resolvedDataAsOfMode || resolvedAsOfMode,
+        priceSource: resolvedPriceSource,
+        priceRefresh: effectivePriceRefresh,
+        dataAdjustment: resolvedAdjustment,
+        requiredBars,
+      },
+    });
   }
 
   if (resolvedRequireCompleteUniverse && missingFromCache.length) {

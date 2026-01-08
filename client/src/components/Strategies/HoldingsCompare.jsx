@@ -8,6 +8,7 @@ import {
   Container,
   Divider,
   FormControlLabel,
+  MenuItem,
   Paper,
   Switch,
   Table,
@@ -39,6 +40,14 @@ const formatDiffPct = (value) => {
   return `${(num * 100).toFixed(2)}%`;
 };
 
+const PRICE_SOURCE_OPTIONS = [
+  { value: "", label: "Default (server)" },
+  { value: "yahoo", label: "Yahoo" },
+  { value: "tiingo", label: "Tiingo" },
+  { value: "alpaca", label: "Alpaca" },
+  { value: "stooq", label: "Stooq" },
+];
+
 const HoldingsCompare = () => {
   const { userData } = useContext(UserContext);
   const authToken = userData?.token;
@@ -50,6 +59,7 @@ const HoldingsCompare = () => {
   const [onlyMismatched, setOnlyMismatched] = useState(true);
   const [limit, setLimit] = useState("50");
   const [tolerance, setTolerance] = useState("0.005");
+  const [priceSource, setPriceSource] = useState("");
 
   const fetchComparison = useCallback(async () => {
     if (!authToken || !userId) {
@@ -66,6 +76,7 @@ const HoldingsCompare = () => {
         params: {
           limit: Number(limit) || 50,
           tolerance: Number(tolerance) || 0.005,
+          ...(priceSource ? { priceSource } : {}),
         },
       });
 
@@ -79,7 +90,7 @@ const HoldingsCompare = () => {
     } finally {
       setLoading(false);
     }
-  }, [authToken, userId, limit, tolerance]);
+  }, [authToken, userId, limit, tolerance, priceSource]);
 
   useEffect(() => {
     fetchComparison();
@@ -118,6 +129,22 @@ const HoldingsCompare = () => {
             className={styles.input}
             helperText="Weight diff threshold"
           />
+          <TextField
+            label="Price source"
+            size="small"
+            value={priceSource}
+            onChange={(e) => setPriceSource(e.target.value)}
+            className={styles.selectInput}
+            select
+            SelectProps={{ displayEmpty: true }}
+            InputLabelProps={{ shrink: true }}
+          >
+            {PRICE_SOURCE_OPTIONS.map((opt) => (
+              <MenuItem key={opt.value || "default"} value={opt.value}>
+                {opt.label}
+              </MenuItem>
+            ))}
+          </TextField>
           <FormControlLabel
             control={
               <Switch
@@ -238,4 +265,3 @@ const HoldingsCompare = () => {
 };
 
 export default HoldingsCompare;
-

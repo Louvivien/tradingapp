@@ -290,6 +290,8 @@ const fetchComposerLinkSnapshot = async ({ url }) => {
         snapshot.holdings = holdingsObjectToWeights(details?.last_backtest_holdings) || snapshot.holdings;
         snapshot.effectiveAsOfDateKey =
           details?.last_backtest_last_market_day || snapshot.effectiveAsOfDateKey;
+        snapshot.publicHoldingsObject = details?.last_backtest_holdings || null;
+        snapshot.lastBacktestValue = details?.last_backtest_value ?? null;
       } catch {
         // ignore and return best-effort snapshot
       }
@@ -318,6 +320,8 @@ const fetchComposerLinkSnapshot = async ({ url }) => {
       base.raw = base.raw || details;
       base.holdings = holdingsObjectToWeights(details?.last_backtest_holdings) || base.holdings;
       base.effectiveAsOfDateKey = details?.last_backtest_last_market_day || base.effectiveAsOfDateKey;
+      base.publicHoldingsObject = details?.last_backtest_holdings || null;
+      base.lastBacktestValue = details?.last_backtest_value ?? null;
     } catch {
       // ignore and return best-effort snapshot
     }

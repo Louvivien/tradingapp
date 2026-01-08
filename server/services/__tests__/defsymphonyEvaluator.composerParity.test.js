@@ -223,7 +223,7 @@ describe('evaluateDefsymphonyStrategy (Composer parity)', () => {
     const strategy = `
       (defsymphony "Cumulative Return Formula" {}
         (if
-          (> (cumulative-return "AAA" {:window 2}) 0.205)
+          (> (cumulative-return "AAA" {:window 2}) 20.5)
           [(asset "AAA")]
           [(asset "BBB")]))
     `;

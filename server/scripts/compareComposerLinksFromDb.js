@@ -8,6 +8,7 @@ const mongoose = require('mongoose');
 const Strategy = require('../models/strategyModel');
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
 const { fetchComposerLinkSnapshot } = require('../utils/composerLinkClient');
+const { computeComposerHoldingsWeights } = require('../utils/composerHoldingsWeights');
 
 dotenv.config({ path: path.resolve(__dirname, '../config/.env') });
 
@@ -218,6 +219,8 @@ const main = async () => {
       entry.composer.effectiveAsOfDate = snapshot.effectiveAsOfDateKey || null;
       entry.composer.holdings = normalizePositions(snapshot.holdings || []);
       entry.composer.strategyHash = snapshot.strategyText ? sha256(snapshot.strategyText) : null;
+      const composerHoldingsObject = snapshot.publicHoldingsObject || null;
+      const composerLastBacktestValue = snapshot.lastBacktestValue ?? null;
 
       const dbText = String(strategy.strategy || '').trim();
       entry.tradingApp.strategyHash = dbText ? sha256(dbText) : null;
@@ -261,12 +264,44 @@ const main = async () => {
         asOfMode,
         priceSource,
         priceRefresh,
+        requireAsOfDateCoverage: true,
       });
 
       entry.tradingApp.effectiveAsOfDate = localResult?.meta?.localEvaluator?.asOfDate
         ? toDateKey(localResult.meta.localEvaluator.asOfDate)
         : null;
       entry.tradingApp.holdings = normalizePositions(localResult.positions || []);
+
+      if (composerHoldingsObject) {
+        const localMeta = localResult?.meta?.localEvaluator || {};
+        const composerPriceSource = localMeta.priceSource || priceSource || null;
+        const composerAdjustment = localMeta.dataAdjustment || dataAdjustment || 'all';
+        try {
+          const computed = await computeComposerHoldingsWeights({
+            holdingsObject: composerHoldingsObject,
+            effectiveAsOfDateKey: entry.composer.effectiveAsOfDate,
+            lastBacktestValue: composerLastBacktestValue,
+            priceSource: composerPriceSource,
+            dataAdjustment: composerAdjustment,
+            cacheOnly: true,
+            forceRefresh: false,
+            concurrency: 4,
+          });
+          entry.composer.holdings = normalizePositions(computed.holdings || []);
+        } catch (error) {
+          const computed = await computeComposerHoldingsWeights({
+            holdingsObject: composerHoldingsObject,
+            effectiveAsOfDateKey: entry.composer.effectiveAsOfDate,
+            lastBacktestValue: composerLastBacktestValue,
+            priceSource: composerPriceSource,
+            dataAdjustment: composerAdjustment,
+            cacheOnly: false,
+            forceRefresh: false,
+            concurrency: 2,
+          });
+          entry.composer.holdings = normalizePositions(computed.holdings || []);
+        }
+      }
 
       entry.comparison = compareWeights({
         remote: entry.composer.holdings,

@@ -26,6 +26,7 @@ const runComposerStrategy = async ({
   asOfMode = null,
   priceSource = null,
   priceRefresh = null,
+  requireAsOfDateCoverage = null,
 }) => {
   const cleanedScript = String(strategyText || '').trim();
   if (!cleanedScript) {
@@ -71,6 +72,7 @@ const runComposerStrategy = async ({
     asOfMode: resolvedAsOfMode,
     priceSource: resolvedPriceSource,
     priceRefresh: resolvedPriceRefresh,
+    requireAsOfDateCoverage,
   });
 
   const warnings = [];

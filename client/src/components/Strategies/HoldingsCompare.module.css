@@ -22,6 +22,10 @@
   width: 140px;
 }
 
+.selectInput {
+  width: 170px;
+}
+
 .alert {
   margin-bottom: 12px;
 }
