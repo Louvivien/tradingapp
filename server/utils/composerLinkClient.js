@@ -2,6 +2,23 @@ const Axios = require('axios');
 
 const isObject = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
+const parseSymphonyIdFromUrl = (url) => {
+  try {
+    const parsed = new URL(String(url));
+    const parts = String(parsed.pathname || '')
+      .split('/')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const idx = parts.findIndex((part) => part === 'symphony');
+    if (idx >= 0 && parts[idx + 1]) {
+      return parts[idx + 1];
+    }
+    return null;
+  } catch {
+    return null;
+  }
+};
+
 const extractNextDataFromHtml = (html) => {
   if (!html || typeof html !== 'string') {
     return null;
@@ -79,6 +96,43 @@ const normalizeSymbol = (value) => {
     return null;
   }
   return trimmed.toUpperCase();
+};
+
+const holdingsObjectToWeights = (holdingsObject) => {
+  if (!isObject(holdingsObject)) {
+    return null;
+  }
+  const entries = Object.entries(holdingsObject)
+    .map(([rawSymbol, rawValue]) => {
+      const symbol = normalizeSymbol(rawSymbol);
+      const value = Number(rawValue);
+      if (!symbol || !Number.isFinite(value)) {
+        return null;
+      }
+      if (symbol === '$USD' || symbol === 'USD' || symbol === 'CASH') {
+        return null;
+      }
+      if (value <= 0) {
+        return null;
+      }
+      return { symbol, value };
+    })
+    .filter(Boolean);
+
+  if (!entries.length) {
+    return [];
+  }
+  const total = entries.reduce((sum, entry) => sum + entry.value, 0);
+  if (!Number.isFinite(total) || total <= 0) {
+    return [];
+  }
+  return entries
+    .map((entry) => ({
+      symbol: entry.symbol,
+      weight: entry.value / total,
+      raw: entry,
+    }))
+    .sort((a, b) => a.symbol.localeCompare(b.symbol));
 };
 
 const normalizeWeightsToUnit = (entries) => {
@@ -168,6 +222,21 @@ const guessHoldings = (payload) => {
   return normalized;
 };
 
+const fetchPublicSymphonyDetailsById = async ({ symphonyId }) => {
+  if (!symphonyId) {
+    throw new Error('Missing symphony id.');
+  }
+  const url = `https://backtest-api.composer.trade/api/v1/public/symphonies/${encodeURIComponent(symphonyId)}`;
+  const response = await Axios.get(url, {
+    headers: {
+      'User-Agent': 'tradingapp/compareComposerLinkHoldings',
+      Accept: 'application/json',
+    },
+    timeout: 20000,
+  });
+  return response.data;
+};
+
 const guessEffectiveAsOfDateKey = (payload) => {
   const dateKeys = ['asOf', 'asOfDate', 'effectiveDate', 'date', 'holdingDate', 'rebalanceDate'];
   const candidates = [];
@@ -196,6 +265,7 @@ const fetchComposerLinkSnapshot = async ({ url }) => {
   if (!url) {
     throw new Error('Missing Composer symphony URL.');
   }
+  const symphonyId = parseSymphonyIdFromUrl(url);
   const response = await Axios.get(url, {
     headers: {
       'User-Agent': 'tradingapp/compareComposerLinkHoldings',
@@ -207,36 +277,62 @@ const fetchComposerLinkSnapshot = async ({ url }) => {
   const contentType = String(response.headers?.['content-type'] || '');
   if (contentType.includes('application/json') && typeof response.data === 'object') {
     const payload = response.data;
-    return {
+    const snapshot = {
       raw: payload,
       strategyText: guessStrategyText(payload),
       holdings: guessHoldings(payload),
       effectiveAsOfDateKey: guessEffectiveAsOfDateKey(payload),
     };
+    if (!snapshot.holdings && symphonyId) {
+      try {
+        const details = await fetchPublicSymphonyDetailsById({ symphonyId });
+        snapshot.raw = snapshot.raw || details;
+        snapshot.holdings = holdingsObjectToWeights(details?.last_backtest_holdings) || snapshot.holdings;
+        snapshot.effectiveAsOfDateKey =
+          details?.last_backtest_last_market_day || snapshot.effectiveAsOfDateKey;
+      } catch {
+        // ignore and return best-effort snapshot
+      }
+    }
+    return snapshot;
   }
   const html = typeof response.data === 'string' ? response.data : String(response.data || '');
   const nextData = extractNextDataFromHtml(html);
-  if (!nextData) {
-    return {
-      raw: null,
-      strategyText: null,
-      holdings: null,
-      effectiveAsOfDateKey: null,
-    };
+  const base = nextData
+    ? {
+        raw: nextData,
+        strategyText: guessStrategyText(nextData),
+        holdings: guessHoldings(nextData),
+        effectiveAsOfDateKey: guessEffectiveAsOfDateKey(nextData),
+      }
+    : {
+        raw: null,
+        strategyText: null,
+        holdings: null,
+        effectiveAsOfDateKey: null,
+      };
+
+  if ((!base.holdings || !base.holdings.length) && symphonyId) {
+    try {
+      const details = await fetchPublicSymphonyDetailsById({ symphonyId });
+      base.raw = base.raw || details;
+      base.holdings = holdingsObjectToWeights(details?.last_backtest_holdings) || base.holdings;
+      base.effectiveAsOfDateKey = details?.last_backtest_last_market_day || base.effectiveAsOfDateKey;
+    } catch {
+      // ignore and return best-effort snapshot
+    }
   }
-  return {
-    raw: nextData,
-    strategyText: guessStrategyText(nextData),
-    holdings: guessHoldings(nextData),
-    effectiveAsOfDateKey: guessEffectiveAsOfDateKey(nextData),
-  };
+
+  return base;
 };
 
 module.exports = {
   extractNextDataFromHtml,
+  parseSymphonyIdFromUrl,
   guessStrategyText,
   guessHoldings,
+  holdingsObjectToWeights,
   guessEffectiveAsOfDateKey,
+  fetchPublicSymphonyDetailsById,
   fetchComposerLinkSnapshot,
 };
-
