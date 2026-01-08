@@ -519,6 +519,23 @@ const toNumber = (value, fallback = null) => {
   return Number.isFinite(num) ? num : fallback;
 };
 
+const normalizeBoolean = (value) => {
+  if (value == null) {
+    return null;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  if (['true', '1', 'yes', 'y'].includes(normalized)) {
+    return true;
+  }
+  if (['false', '0', 'no', 'n'].includes(normalized)) {
+    return false;
+  }
+  return null;
+};
+
 const FRACTIONAL_QTY_DECIMALS = 6;
 const ENABLE_FRACTIONAL_ORDERS =
   String(process.env.ALPACA_ENABLE_FRACTIONAL ?? 'true').toLowerCase() !== 'false';
