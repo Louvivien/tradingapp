@@ -122,6 +122,22 @@ const tiingoTokenHourlyUsage = new Map();
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
+const getTiingoMinIntervalMs = () => {
+  const minIntervalMsRaw = Number(process.env.TIINGO_MIN_REQUEST_INTERVAL_MS);
+  return Number.isFinite(minIntervalMsRaw) ? Math.max(0, Math.floor(minIntervalMsRaw)) : 250;
+};
+
+const bumpTiingoTokenNextAllowedAt = (token, nextAtMs) => {
+  if (!token) {
+    return;
+  }
+  const current = tiingoTokenNextAllowedAt.get(token) || 0;
+  const desired = Number(nextAtMs) || 0;
+  if (desired > current) {
+    tiingoTokenNextAllowedAt.set(token, desired);
+  }
+};
+
 const getTiingoHourlyLimit = () => {
   const raw = Number(process.env.TIINGO_MAX_REQUESTS_PER_HOUR);
   if (Number.isFinite(raw) && raw > 0) {
@@ -158,18 +174,28 @@ const consumeTiingoHourlyBudget = (token) => {
   tiingoTokenHourlyUsage.set(token, usage);
 };
 
-const waitForTiingoSlot = async (token) => {
-  const minIntervalMsRaw = Number(process.env.TIINGO_MIN_REQUEST_INTERVAL_MS);
-  const minIntervalMs = Number.isFinite(minIntervalMsRaw) ? Math.max(0, Math.floor(minIntervalMsRaw)) : 250;
+const waitForTiingoSlot = async (token, { maxWaitMs } = {}) => {
+  const minIntervalMs = getTiingoMinIntervalMs();
   if (!minIntervalMs) {
     return;
   }
   const now = Date.now();
   const nextAt = tiingoTokenNextAllowedAt.get(token) || 0;
-  if (nextAt > now) {
-    await sleep(nextAt - now);
+  const waitMs = nextAt > now ? nextAt - now : 0;
+  const resolvedMaxWaitMs = Number.isFinite(Number(maxWaitMs)) ? Math.max(0, Math.floor(Number(maxWaitMs))) : null;
+  if (resolvedMaxWaitMs != null && waitMs > resolvedMaxWaitMs) {
+    const retryAfterSeconds = Math.ceil(waitMs / 1000);
+    const error = new Error(
+      `Tiingo key temporarily rate-limited (retry after ~${retryAfterSeconds}s).`
+    );
+    error.code = 'TIINGO_TOKEN_COOLDOWN';
+    error.retryAfterSeconds = retryAfterSeconds;
+    throw error;
   }
-  tiingoTokenNextAllowedAt.set(token, Date.now() + minIntervalMs);
+  if (waitMs > 0) {
+    await sleep(waitMs);
+  }
+  bumpTiingoTokenNextAllowedAt(token, Date.now() + minIntervalMs);
 };
 
 const fetchBarsFromTiingo = async ({ symbol, start, end, adjustment }) => {
@@ -201,8 +227,28 @@ const fetchBarsFromTiingo = async ({ symbol, start, end, adjustment }) => {
     const token = tokens[(startIndex + attempt) % tokens.length];
     const url = `https://api.tiingo.com/tiingo/daily/${encodeURIComponent(symbol)}/prices`;
     try {
-      await waitForTiingoSlot(token);
-      consumeTiingoHourlyBudget(token);
+      try {
+        // Only wait briefly for per-key pacing; if a key is in a longer cooldown window,
+        // skip it and allow fallback sources (Yahoo/Stooq/Alpaca) to proceed quickly.
+        await waitForTiingoSlot(token, { maxWaitMs: 2000 });
+      } catch (cooldownError) {
+        lastError = cooldownError;
+        if (cooldownError?.code === 'TIINGO_TOKEN_COOLDOWN') {
+          continue;
+        }
+        throw cooldownError;
+      }
+      try {
+        consumeTiingoHourlyBudget(token);
+      } catch (budgetError) {
+        lastError = budgetError;
+        if (budgetError?.code === 'TIINGO_HOURLY_LIMIT') {
+          const retryAfterMs = Math.max(0, Number(budgetError.retryAfterSeconds || 0) * 1000);
+          bumpTiingoTokenNextAllowedAt(token, Date.now() + retryAfterMs);
+          continue;
+        }
+        throw budgetError;
+      }
       const { data } = await Axios.get(url, {
         params: {
           startDate: startKey,
@@ -289,9 +335,14 @@ const fetchBarsFromTiingo = async ({ symbol, start, end, adjustment }) => {
       }
       const retryAfter = Number(error?.response?.headers?.['retry-after']);
       const retryAfterMs =
-        Number.isFinite(retryAfter) && retryAfter > 0 ? Math.min(30_000, Math.floor(retryAfter * 1000)) : null;
-      const backoffMs = retryAfterMs ?? Math.min(30_000, 750 + attempt * 500);
-      await sleep(backoffMs);
+        Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(5 * 60_000, Math.floor(retryAfter * 1000))
+          : null;
+      // Avoid blocking on Tiingo backoffs; record a cooldown for this key and fall through to the next.
+      const cooldownMs =
+        retryAfterMs ??
+        (status === 403 ? 30 * 60_000 : Math.min(60_000, 2_000 + attempt * 750));
+      bumpTiingoTokenNextAllowedAt(token, Date.now() + cooldownMs);
     }
   }
 
@@ -778,6 +829,9 @@ const fetchBarsFromTestfolio = async ({ symbol, start, end }) => {
 
 const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, minBars }) => {
   const normalizedSource = String(source ?? '').trim().toLowerCase();
+  const normalizedAdjustment = normalizeAdjustment(adjustment);
+  const wantsDividendAdjustment =
+    normalizedAdjustment === 'all' || normalizedAdjustment === 'dividend';
   const minBarsNeeded = Number.isFinite(Number(minBars)) ? Math.max(0, Math.floor(Number(minBars))) : 0;
   const endKey = toISODateKey(end);
   const preferred =
@@ -793,16 +847,20 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, m
     }
     if (preferred === 'tiingo') {
       // Composer-style: Tiingo first, then Stooq, then Yahoo.
-      return ['tiingo', 'stooq', 'yahoo', 'alpaca'];
+      return wantsDividendAdjustment ? ['tiingo', 'yahoo', 'stooq', 'alpaca'] : ['tiingo', 'stooq', 'yahoo', 'alpaca'];
     }
     if (preferred === 'alpaca') {
-      return ['alpaca', 'tiingo', 'stooq', 'yahoo'];
+      // Alpaca's daily data is not dividend-adjusted; for parity with Composer-style "all"/"dividend" adjustments,
+      // prefer Tiingo/Yahoo first when requested.
+      return wantsDividendAdjustment ? ['tiingo', 'yahoo', 'alpaca', 'stooq'] : ['alpaca', 'tiingo', 'stooq', 'yahoo'];
     }
     if (preferred === 'stooq') {
-      return ['stooq', 'tiingo', 'yahoo', 'alpaca'];
+      // Stooq daily bars are not dividend-adjusted; if the caller asked for dividend-adjusted data,
+      // prefer sources that support that adjustment first.
+      return wantsDividendAdjustment ? ['tiingo', 'yahoo', 'stooq', 'alpaca'] : ['stooq', 'tiingo', 'yahoo', 'alpaca'];
     }
     // Default: Tiingo -> Stooq -> Yahoo -> Alpaca.
-    return ['tiingo', 'stooq', 'yahoo', 'alpaca'];
+    return wantsDividendAdjustment ? ['tiingo', 'yahoo', 'stooq', 'alpaca'] : ['tiingo', 'stooq', 'yahoo', 'alpaca'];
   })();
 
   const attempt = async (candidate) => {

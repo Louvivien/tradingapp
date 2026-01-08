@@ -397,12 +397,14 @@ const buildAlignedSeriesForAxis = (symbol, barMap, axisKeys) => {
 
   let pointer = 0;
   let lastClose = null;
+  let lastTimestamp = null;
   const seedKey = axisKeys[offset];
   while (pointer < keys.length && keys[pointer] <= seedKey) {
     const entry = barMap.get(keys[pointer]);
     const close = Number(entry?.close);
     if (Number.isFinite(close)) {
       lastClose = close;
+      lastTimestamp = entry?.timestamp || lastTimestamp;
     }
     pointer += 1;
   }
@@ -419,11 +421,12 @@ const buildAlignedSeriesForAxis = (symbol, barMap, axisKeys) => {
       const close = Number(entry?.close);
       if (Number.isFinite(close)) {
         lastClose = close;
+        lastTimestamp = entry?.timestamp || lastTimestamp;
       }
       pointer += 1;
     }
     closes.push(lastClose);
-    bars.push({ t: `${dateKey}T00:00:00.000Z`, c: lastClose });
+    bars.push({ t: lastTimestamp || `${dateKey}T00:00:00.000Z`, c: lastClose });
   }
 
   return {
@@ -432,6 +435,103 @@ const buildAlignedSeriesForAxis = (symbol, barMap, axisKeys) => {
     closes,
     latest: closes.length ? closes[closes.length - 1] : null,
     bars,
+  };
+};
+
+const alignPriceDataToCommonAxis = ({ priceData, requiredBars, preferredSymbol }) => {
+  if (!priceData || typeof priceData.get !== 'function') {
+    return { priceData, usableHistory: 0, axisKeys: [] };
+  }
+  const required = Math.max(1, Number(requiredBars) || 0);
+  if (!required) {
+    return { priceData, usableHistory: 0, axisKeys: [] };
+  }
+
+  const barsBySymbol = new Map();
+  const metaBySymbol = new Map();
+  const lastKeyBySymbol = new Map();
+  priceData.forEach((series, symbol) => {
+    const upper = String(symbol || '').toUpperCase();
+    if (!upper) {
+      return;
+    }
+    const bars = Array.isArray(series?.bars) ? series.bars : [];
+    if (!bars.length) {
+      return;
+    }
+    const map = new Map();
+    let lastKey = null;
+    for (const bar of bars) {
+      const timestamp = bar?.t || bar?.timestamp || null;
+      if (!timestamp) {
+        continue;
+      }
+      const dayKey = toISODateKey(timestamp);
+      if (!dayKey) {
+        continue;
+      }
+      const close = Number(bar?.c ?? bar?.close);
+      if (!Number.isFinite(close)) {
+        continue;
+      }
+      map.set(dayKey, { close, timestamp });
+      if (!lastKey || dayKey > lastKey) {
+        lastKey = dayKey;
+      }
+    }
+    if (!map.size || !lastKey) {
+      return;
+    }
+    barsBySymbol.set(upper, map);
+    lastKeyBySymbol.set(upper, lastKey);
+    metaBySymbol.set(upper, {
+      dataSource: series?.dataSource || null,
+      refreshedAt: series?.refreshedAt || null,
+    });
+  });
+
+  if (!barsBySymbol.size) {
+    return { priceData, usableHistory: 0, axisKeys: [] };
+  }
+
+  // Ensure we never align beyond the stale tail of a symbol's history.
+  let commonEndKey = null;
+  lastKeyBySymbol.forEach((lastKey) => {
+    if (!commonEndKey || lastKey < commonEndKey) {
+      commonEndKey = lastKey;
+    }
+  });
+  if (!commonEndKey) {
+    return { priceData, usableHistory: 0, axisKeys: [] };
+  }
+
+  const rawAxisKeys = pickDateAxis(barsBySymbol, preferredSymbol);
+  const axisKeys = rawAxisKeys.filter((key) => key <= commonEndKey);
+  if (axisKeys.length < required) {
+    return { priceData, usableHistory: axisKeys.length, axisKeys };
+  }
+  const tailAxisKeys = axisKeys.slice(axisKeys.length - required);
+
+  const aligned = new Map();
+  for (const symbol of Array.from(barsBySymbol.keys()).sort()) {
+    const barMap = barsBySymbol.get(symbol);
+    const built = buildAlignedSeriesForAxis(symbol, barMap, tailAxisKeys);
+    if (!built || !Array.isArray(built.closes) || built.closes.length !== tailAxisKeys.length) {
+      continue;
+    }
+    const meta = metaBySymbol.get(symbol) || {};
+    aligned.set(symbol, {
+      ...built,
+      offset: 0,
+      dataSource: meta.dataSource || null,
+      refreshedAt: meta.refreshedAt || null,
+    });
+  }
+
+  return {
+    priceData: aligned.size ? aligned : priceData,
+    usableHistory: aligned.size ? tailAxisKeys.length : 0,
+    axisKeys: aligned.size ? tailAxisKeys : [],
   };
 };
 
@@ -2219,7 +2319,25 @@ const evaluateDefsymphonyStrategy = async ({
     });
   }
 
-  const usableHistory = alignPriceHistory(priceData, requiredBars);
+  let usableHistory = 0;
+  if (resolvedRequireCompleteUniverse) {
+    const calendarSymbol = tickers.includes('SPY') ? 'SPY' : tickers[0];
+    const preAlignCount = priceData.size;
+    const aligned = alignPriceDataToCommonAxis({
+      priceData,
+      requiredBars,
+      preferredSymbol: calendarSymbol,
+    });
+    priceData = aligned.priceData;
+    usableHistory = aligned.usableHistory || 0;
+    if (usableHistory && priceData.size !== preAlignCount) {
+      usableHistory = 0;
+    }
+  }
+
+  if (!usableHistory) {
+    usableHistory = alignPriceHistory(priceData, requiredBars);
+  }
   if (!usableHistory) {
     throw createMarketDataError({
       message: 'Unable to align price history for the requested lookback window (insufficient bars across one or more tickers).',
