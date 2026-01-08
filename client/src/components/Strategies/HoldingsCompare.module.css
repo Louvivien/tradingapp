@@ -1,0 +1,48 @@
+.container {
+  padding-top: 8px;
+}
+
+.headerRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.input {
+  width: 140px;
+}
+
+.alert {
+  margin-bottom: 12px;
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 24px;
+}
+
+.paper {
+  overflow: hidden;
+}
+
+.detailBox {
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.02);
+  border-radius: 8px;
+}
+
+.divider {
+  margin: 8px 0;
+}
+

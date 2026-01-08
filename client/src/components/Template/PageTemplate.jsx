@@ -20,6 +20,7 @@ import SecondNavbar from "../Template/SecondNavbar";
 import Dashboard from "../Dashboard/Dashboard";
 import Strategies from "../Strategies/Strategies";
 import StrategyLogs from "../Strategies/StrategyLogs";
+import HoldingsCompare from "../Strategies/HoldingsCompare";
 import News from "../News/News";
 import Search from "../Search/Search";
 import SettingsModal from "./SettingsModal";
@@ -241,6 +242,7 @@ const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, ini
             {currentPage === "news" && "Market News"}
             {currentPage === "search" && "Search"}
             {currentPage === "strategies" && "Strategies"}
+            {currentPage === "holdingsCompare" && "Holdings Compare"}
             {currentPage === "strategyLogs" && "Strategy Logs"}
           </Typography>
           <Typography color="inherit">
@@ -286,6 +288,7 @@ const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, ini
 
         {currentPage === "news" && <News />}
         {currentPage === "strategies" && <Strategies />}
+        {currentPage === "holdingsCompare" && <HoldingsCompare />}
         {currentPage === "strategyLogs" && (
           <StrategyLogs
             strategyId={selectedStrategyForLogs.id}

@@ -36,6 +36,7 @@ const {
   publishProgress,
   completeProgress,
 } = require('../utils/progressBus');
+const { fetchComposerLinkSnapshot } = require('../utils/composerLinkClient');
 
 const RECURRENCE_LABELS = {
   every_minute: 'Every minute',
@@ -3025,6 +3026,220 @@ exports.compareComposerHoldings = async (req, res) => {
     return res.status(500).json({
       status: 'fail',
       message: 'Failed to compare composer holdings.',
+    });
+  }
+};
+
+const isComposerUrl = (value) => {
+  try {
+    const parsed = new URL(String(value));
+    const host = String(parsed.hostname || '').toLowerCase();
+    return (
+      host === 'composer.trade' ||
+      host.endsWith('.composer.trade') ||
+      host === 'app.composer.trade' ||
+      host === 'investcomposer.com' ||
+      host.endsWith('.investcomposer.com')
+    );
+  } catch {
+    return false;
+  }
+};
+
+const normalizeWeightRows = (rows = []) => {
+  const mapped = (rows || [])
+    .map((row) => {
+      const symbol = sanitizeSymbol(row?.symbol);
+      const weight = toNumber(row?.weight, null);
+      if (!symbol || !Number.isFinite(weight)) {
+        return null;
+      }
+      return { symbol, weight };
+    })
+    .filter(Boolean);
+  mapped.sort((a, b) => a.symbol.localeCompare(b.symbol));
+  return mapped;
+};
+
+const toDateKey = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date.toISOString().slice(0, 10);
+};
+
+const addDays = (dayKey, days) => {
+  if (!dayKey || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey))) {
+    return null;
+  }
+  const date = new Date(`${dayKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return toDateKey(date);
+};
+
+const compareWeightRows = ({ composer, tradingApp, tolerance }) => {
+  const composerMap = new Map(composer.map((row) => [row.symbol, row.weight]));
+  const tradingMap = new Map(tradingApp.map((row) => [row.symbol, row.weight]));
+  const symbols = Array.from(new Set([...composerMap.keys(), ...tradingMap.keys()])).sort();
+  const diffs = symbols.map((symbol) => {
+    const composerWeight = composerMap.get(symbol) ?? 0;
+    const tradingAppWeight = tradingMap.get(symbol) ?? 0;
+    const diff = Math.abs(composerWeight - tradingAppWeight);
+    return { symbol, composerWeight, tradingAppWeight, diff };
+  });
+  const mismatches = diffs.filter((row) => row.diff > tolerance);
+  return { diffs, mismatches };
+};
+
+exports.compareComposerHoldingsAll = async (req, res) => {
+  try {
+    const userId = String(req.params.userId || '');
+    if (!userId || req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const limit = Math.max(1, Math.min(200, Number(req.query?.limit ?? 50)));
+    const tolerance = toNumber(req.query?.tolerance, 0.005);
+    const sleepMs = Math.max(0, Math.min(2000, Number(req.query?.sleepMs ?? 150)));
+    const asOfMode = String(req.query?.asOfMode || 'previous-close').trim();
+    const asOfDate = req.query?.asOfDate ? String(req.query.asOfDate).trim() : null;
+    const priceSource = req.query?.priceSource ? String(req.query.priceSource).trim() : null;
+    const priceRefresh = req.query?.priceRefresh ?? null;
+    const dataAdjustment = req.query?.dataAdjustment ? String(req.query.dataAdjustment).trim() : null;
+    const rsiMethod = req.query?.rsiMethod ? String(req.query.rsiMethod).trim() : null;
+    const debugIndicators = normalizeBoolean(req.query?.debugIndicators) ?? true;
+    const budget = Math.max(1, toNumber(req.query?.budget, 10000));
+    const strategyTextSource = String(req.query?.strategyTextSource || 'db')
+      .trim()
+      .toLowerCase(); // db|link
+
+    if (!['db', 'link'].includes(strategyTextSource)) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Invalid strategyTextSource. Use "db" or "link".',
+      });
+    }
+
+    const strategies = await Strategy.find({ userId })
+      .sort({ updatedAt: -1 })
+      .limit(limit)
+      .lean();
+
+    const results = [];
+
+    for (const strategy of strategies) {
+      const url = strategy?.symphonyUrl ? String(strategy.symphonyUrl).trim() : null;
+      const provider = String(strategy?.provider || 'alpaca').trim().toLowerCase();
+
+      if (!url || provider === 'polymarket' || !isComposerUrl(url)) {
+        continue;
+      }
+
+      const entry = {
+        id: strategy?.strategy_id || null,
+        name: strategy?.name || null,
+        symphonyUrl: url,
+        status: 'ok',
+        errors: [],
+        composer: {
+          effectiveAsOfDate: null,
+          holdings: [],
+        },
+        tradingApp: {
+          effectiveAsOfDate: null,
+          holdings: [],
+          meta: null,
+        },
+        comparison: {
+          diffs: [],
+          mismatches: [],
+        },
+      };
+
+      try {
+        const snapshot = await fetchComposerLinkSnapshot({ url });
+        entry.composer.effectiveAsOfDate = snapshot.effectiveAsOfDateKey || null;
+        entry.composer.holdings = normalizeWeightRows(snapshot.holdings || []);
+
+        const dbStrategyText = String(strategy?.strategy || '').trim();
+        const strategyText = strategyTextSource === 'link' ? snapshot.strategyText : dbStrategyText;
+
+        if (!entry.composer.holdings.length) {
+          entry.status = 'error';
+          entry.errors.push('Unable to extract Composer holdings from link.');
+        }
+        if (!strategyText) {
+          entry.status = 'error';
+          entry.errors.push(
+            strategyTextSource === 'link'
+              ? 'Unable to extract defsymphony text from link.'
+              : 'Strategy text missing in DB.'
+          );
+        }
+
+        if (entry.status === 'ok') {
+          const resolvedAsOfDate =
+            asOfDate ||
+            (asOfMode === 'previous-close' && entry.composer.effectiveAsOfDate
+              ? addDays(entry.composer.effectiveAsOfDate, 1)
+              : entry.composer.effectiveAsOfDate) ||
+            null;
+
+          const local = await runComposerStrategy({
+            strategyText,
+            budget,
+            asOfDate: resolvedAsOfDate,
+            rsiMethod,
+            dataAdjustment,
+            debugIndicators,
+            asOfMode,
+            priceSource,
+            priceRefresh,
+          });
+
+          entry.tradingApp.meta = local?.meta || null;
+          entry.tradingApp.effectiveAsOfDate = local?.meta?.localEvaluator?.asOfDate
+            ? toDateKey(local.meta.localEvaluator.asOfDate)
+            : null;
+          entry.tradingApp.holdings = normalizeWeightRows(local?.positions || []);
+
+          entry.comparison = compareWeightRows({
+            composer: entry.composer.holdings,
+            tradingApp: entry.tradingApp.holdings,
+            tolerance,
+          });
+        }
+      } catch (error) {
+        entry.status = 'error';
+        entry.errors.push(error?.message || String(error));
+      }
+
+      results.push(entry);
+      if (sleepMs) {
+        await new Promise((resolve) => setTimeout(resolve, sleepMs));
+      }
+    }
+
+    const mismatched = results.filter((r) => (r.comparison?.mismatches || []).length > 0).length;
+
+    return res.status(200).json({
+      status: 'success',
+      summary: {
+        total: results.length,
+        mismatched,
+        tolerance,
+      },
+      results,
+    });
+  } catch (error) {
+    console.error('[CompareAll] Failed to compare holdings:', error?.message || error);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Failed to compare holdings.',
     });
   }
 };

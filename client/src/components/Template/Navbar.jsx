@@ -6,6 +6,7 @@ import DashboardIcon from "@mui/icons-material/Dashboard";
 import SearchIcon from "@mui/icons-material/Search";
 import InfoIcon from "@mui/icons-material/Info";
 import PsychologyIcon from '@mui/icons-material/Psychology';
+import CompareArrowsIcon from "@mui/icons-material/CompareArrows";
 
 
 const Navbar = ({ currentPage, onNavigate }) => {
@@ -30,6 +31,11 @@ const Navbar = ({ currentPage, onNavigate }) => {
   const onSearchButtonClick = (e) => {
     e.preventDefault();
     onNavigate("search");
+  };
+
+  const onHoldingsCompareClick = (e) => {
+    e.preventDefault();
+    onNavigate("holdingsCompare");
   };
 
   return (
@@ -67,6 +73,17 @@ const Navbar = ({ currentPage, onNavigate }) => {
           <PsychologyIcon />
         </ListItemIcon>
         <ListItemText primary="Strategies" />
+      </ListItem>
+
+      <ListItem
+        button
+        selected={currentPage === "holdingsCompare"}
+        onClick={onHoldingsCompareClick}
+      >
+        <ListItemIcon>
+          <CompareArrowsIcon />
+        </ListItemIcon>
+        <ListItemText primary="Holdings Compare" />
       </ListItem>
 
 
