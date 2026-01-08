@@ -2002,6 +2002,9 @@ const evaluateDefsymphonyStrategy = async ({
   asOfMode = null,
   priceSource = null,
   priceRefresh = null,
+  requireMarketData = null,
+  requireCompleteUniverse = null,
+  allowFallbackAllocations = null,
 }) => {
   const ast = parseComposerScript(strategyText);
   if (!ast) {
@@ -2045,9 +2048,9 @@ const evaluateDefsymphonyStrategy = async ({
   const resolvedDebugIndicators =
     normalizeBoolean(debugIndicators) ?? ENABLE_INDICATOR_DEBUG;
 
-  const requireMarketData = normalizeBoolean(process.env.COMPOSER_REQUIRE_MARKET_DATA) !== false;
-  const requireCompleteUniverse = normalizeBoolean(process.env.COMPOSER_REQUIRE_COMPLETE_UNIVERSE) === true;
-  const allowFallbackAllocations = normalizeBoolean(process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS) === true;
+  const resolvedRequireMarketData = normalizeBoolean(requireMarketData) ?? true;
+  const resolvedRequireCompleteUniverse = normalizeBoolean(requireCompleteUniverse) ?? true;
+  const resolvedAllowFallbackAllocations = normalizeBoolean(allowFallbackAllocations) ?? false;
 
   const requiredBars = Math.max(
     Math.max(0, Number(astStats.maxWindow) || 0) + 5,
@@ -2103,7 +2106,7 @@ const evaluateDefsymphonyStrategy = async ({
   }
 
   // If we depend on market-data completeness, attempt a single force-refresh pass before continuing.
-  if (requireMarketData && missingFromCache.length && effectivePriceRefresh !== true) {
+  if (resolvedRequireMarketData && missingFromCache.length && effectivePriceRefresh !== true) {
     effectivePriceRefresh = true;
     ({
       map: priceData,
@@ -2134,7 +2137,7 @@ const evaluateDefsymphonyStrategy = async ({
     }
   }
 
-  if (requireCompleteUniverse && missingFromCache.length) {
+  if (resolvedRequireCompleteUniverse && missingFromCache.length) {
     const formatted = missingFromCache
       .slice(0, 12)
       .map((entry) => `${entry.symbol}${entry.reason ? ` (${entry.reason})` : ''}`);
@@ -2181,12 +2184,12 @@ const evaluateDefsymphonyStrategy = async ({
     metricCache: new WeakMap(),
     missingSymbols: new Map(),
     nodeIdMap,
-    enableGroupMetrics: false,
-    debugIndicators: resolvedDebugIndicators,
-    rsiMethod: resolvedRsiMethod,
-    requireMarketData,
-    allowFallbackAllocations,
-    asOfMode: resolvedDataAsOfMode || resolvedAsOfMode,
+	    enableGroupMetrics: false,
+	    debugIndicators: resolvedDebugIndicators,
+	    rsiMethod: resolvedRsiMethod,
+	    requireMarketData: resolvedRequireMarketData,
+	    allowFallbackAllocations: resolvedAllowFallbackAllocations,
+	    asOfMode: resolvedDataAsOfMode || resolvedAsOfMode,
     priceSource: resolvedPriceSource,
     // `loadPriceData()` already enforces "previous-close" semantics by dropping today's unfinished
     // daily bar when needed. Only drop the latest bar from indicator calculations when we explicitly
@@ -2220,14 +2223,14 @@ const evaluateDefsymphonyStrategy = async ({
     );
   }
 
-  let rawPositions = evaluateNode(ast, 1, context);
-  if (!rawPositions.length) {
-    if (allowFallbackAllocations) {
-      const fallbackSymbols = tickers.filter((symbol) => context.priceData.has(symbol));
-      if (fallbackSymbols.length) {
-        context.reasoning.push(
-          `Step 2a: Primary evaluation returned no tradable allocations. Applying equal-weight fallback across ${fallbackSymbols.length} tickers that have price data.`
-        );
+	  let rawPositions = evaluateNode(ast, 1, context);
+	  if (!rawPositions.length) {
+	    if (resolvedAllowFallbackAllocations && !resolvedRequireMarketData) {
+	      const fallbackSymbols = tickers.filter((symbol) => context.priceData.has(symbol));
+	      if (fallbackSymbols.length) {
+	        context.reasoning.push(
+	          `Step 2a: Primary evaluation returned no tradable allocations. Applying equal-weight fallback across ${fallbackSymbols.length} tickers that have price data.`
+	        );
         const equalWeight = 1 / fallbackSymbols.length;
         rawPositions = fallbackSymbols.map((symbol) => ({
           symbol,

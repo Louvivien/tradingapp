@@ -273,19 +273,29 @@ const addTicker = (acc, value) => {
   acc.add(trimmed.toUpperCase());
 };
 
+const TICKER_ARG_OPERATORS = new Set([
+  'asset',
+  'current-price',
+  'moving-average-price',
+  'exponential-moving-average-price',
+  'moving-average-return',
+  'cumulative-return',
+  'stdev-return',
+  'stdev-return%',
+  'max-drawdown',
+  'rsi',
+]);
+
 const collectTickersFromAst = (node, acc = new Set()) => {
   if (!node) {
     return acc;
   }
   if (Array.isArray(node)) {
-    if (node[0] === 'asset' && typeof node[1] === 'string') {
+    const operator = typeof node[0] === 'string' ? node[0] : null;
+    if (operator && TICKER_ARG_OPERATORS.has(operator) && typeof node[1] === 'string') {
       addTicker(acc, node[1]);
     }
     node.forEach((child) => collectTickersFromAst(child, acc));
-    return acc;
-  }
-  if (typeof node === 'string' && isTickerLike(node)) {
-    addTicker(acc, node);
     return acc;
   }
   if (node && typeof node === 'object') {

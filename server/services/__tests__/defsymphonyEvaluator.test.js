@@ -69,7 +69,12 @@ describe('evaluateDefsymphonyStrategy', () => {
           ]))
     `;
 
-    const result = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
+    const result = await evaluateDefsymphonyStrategy({
+      strategyText: strategy,
+      budget: 10000,
+      requireMarketData: false,
+      requireCompleteUniverse: false,
+    });
     expect(result.positions.map((pos) => pos.symbol)).toEqual(['LONG']);
   });
 
@@ -264,33 +269,7 @@ describe('evaluateDefsymphonyStrategy', () => {
   });
 
   describe('market data gating', () => {
-    const originalRequireMarketData = process.env.COMPOSER_REQUIRE_MARKET_DATA;
-    const originalRequireCompleteUniverse = process.env.COMPOSER_REQUIRE_COMPLETE_UNIVERSE;
-    const originalAllowFallback = process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS;
-
-    afterEach(() => {
-      if (originalRequireMarketData === undefined) {
-        delete process.env.COMPOSER_REQUIRE_MARKET_DATA;
-      } else {
-        process.env.COMPOSER_REQUIRE_MARKET_DATA = originalRequireMarketData;
-      }
-      if (originalRequireCompleteUniverse === undefined) {
-        delete process.env.COMPOSER_REQUIRE_COMPLETE_UNIVERSE;
-      } else {
-        process.env.COMPOSER_REQUIRE_COMPLETE_UNIVERSE = originalRequireCompleteUniverse;
-      }
-      if (originalAllowFallback === undefined) {
-        delete process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS;
-      } else {
-        process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS = originalAllowFallback;
-      }
-    });
-
     it('fails fast when any strategy ticker is missing/stale (no silent partial evaluation)', async () => {
-      process.env.COMPOSER_REQUIRE_MARKET_DATA = 'true';
-      process.env.COMPOSER_REQUIRE_COMPLETE_UNIVERSE = 'true';
-      process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS = 'false';
-
       getCachedPrices.mockImplementation(async ({ symbol }) => {
         const upper = String(symbol || '').toUpperCase();
         if (upper === 'AAA') {
@@ -309,14 +288,17 @@ describe('evaluateDefsymphonyStrategy', () => {
       `;
 
       await expect(
-        evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 })
+        evaluateDefsymphonyStrategy({
+          strategyText: strategy,
+          budget: 10000,
+          requireMarketData: true,
+          requireCompleteUniverse: true,
+          allowFallbackAllocations: false,
+        })
       ).rejects.toMatchObject({ code: 'INSUFFICIENT_MARKET_DATA' });
     });
 
     it('treats n/a indicators inside conditions as a market-data error (not FALSE)', async () => {
-      process.env.COMPOSER_REQUIRE_MARKET_DATA = 'true';
-      process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS = 'false';
-
       installPriceMapMock({
         AAA: buildPriceResponse(100, 1, 40), // < window+1 => RSI is n/a
         BBB: buildPriceResponse(100, 1, 60),
@@ -331,14 +313,17 @@ describe('evaluateDefsymphonyStrategy', () => {
       `;
 
       await expect(
-        evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 })
+        evaluateDefsymphonyStrategy({
+          strategyText: strategy,
+          budget: 10000,
+          requireMarketData: true,
+          requireCompleteUniverse: true,
+          allowFallbackAllocations: false,
+        })
       ).rejects.toMatchObject({ code: 'INSUFFICIENT_MARKET_DATA' });
     });
 
     it('does not apply equal-weight fallback unless explicitly enabled', async () => {
-      process.env.COMPOSER_REQUIRE_MARKET_DATA = 'false';
-      process.env.COMPOSER_ALLOW_FALLBACK_ALLOCATIONS = 'false';
-
       getCachedPrices.mockImplementation(async ({ symbol }) => {
         const upper = String(symbol || '').toUpperCase();
         if (upper === 'BBB') {
@@ -356,7 +341,13 @@ describe('evaluateDefsymphonyStrategy', () => {
       `;
 
       await expect(
-        evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 })
+        evaluateDefsymphonyStrategy({
+          strategyText: strategy,
+          budget: 10000,
+          requireMarketData: false,
+          requireCompleteUniverse: false,
+          allowFallbackAllocations: false,
+        })
       ).rejects.toMatchObject({ code: 'EMPTY_ALLOCATION' });
     });
   });
