@@ -387,4 +387,37 @@ describe('evaluateDefsymphonyStrategy (Composer parity)', () => {
     const totalWeight = Object.values(weights).reduce((sum, value) => sum + value, 0);
     expect(totalWeight).toBeCloseTo(1, 10);
   });
+
+  it('stabilizes near-ties in select-bottom (avoids cross-provider flips)', async () => {
+    const barsLength = 120;
+    const uproCloses = buildClosesFromReturnPattern({
+      start: 100,
+      pattern: [0.01, -0.01],
+      length: barsLength,
+    });
+    const spxlCloses = buildClosesFromReturnPattern({
+      start: 100,
+      pattern: [0.0099999, -0.0099999],
+      length: barsLength,
+    });
+
+    installPriceMapMock({
+      UPRO: buildPriceResponseFromSeries(uproCloses),
+      SPXL: buildPriceResponseFromSeries(spxlCloses),
+    });
+
+    const strategy = `
+      (defsymphony "Near Tie Selection" {}
+        (filter
+          (stdev-return {:window 80})
+          (select-bottom 1)
+          [
+            (asset "UPRO")
+            (asset "SPXL")
+          ]))
+    `;
+
+    const result = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
+    expect(result.positions.map((pos) => pos.symbol)).toEqual(['UPRO']);
+  });
 });

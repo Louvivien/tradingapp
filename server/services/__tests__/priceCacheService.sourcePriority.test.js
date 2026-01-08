@@ -47,6 +47,66 @@ describe('priceCacheService source priority', () => {
     expect(urls.some((u) => u.includes('stooq.com/q/d/l/'))).toBe(false);
   });
 
+  it('falls back to Alpaca before Stooq when adjustment=all and upstream sources fail', async () => {
+    jest.doMock('axios', () => ({ get: jest.fn(), create: jest.fn(() => ({ get: jest.fn() })) }));
+    jest.doMock('../../config/alpacaConfig', () => ({ getAlpacaConfig: jest.fn() }));
+
+    const Axios = require('axios');
+    const { getAlpacaConfig } = require('../../config/alpacaConfig');
+
+    const alpacaGet = jest.fn().mockResolvedValue({
+      data: {
+        bars: [
+          { t: '2026-01-06T05:00:00.000Z', o: 1, h: 1, l: 1, c: 1, v: 0 },
+          { t: '2026-01-07T05:00:00.000Z', o: 1.01, h: 1.01, l: 1.01, c: 1.01, v: 0 },
+          { t: '2026-01-08T05:00:00.000Z', o: 1.02, h: 1.02, l: 1.02, c: 1.02, v: 0 },
+        ],
+        next_page_token: null,
+      },
+    });
+
+    getAlpacaConfig.mockResolvedValue({
+      getDataKeys: () => ({
+        apiUrl: 'https://alpaca.test',
+        keyId: 'test-key',
+        secretKey: 'test-secret',
+        client: { get: alpacaGet },
+      }),
+    });
+
+    Axios.get.mockImplementation(async (url) => {
+      if (String(url).includes('api.tiingo.com/tiingo/daily/')) {
+        throw new Error('tiingo unavailable');
+      }
+      if (String(url).includes('query1.finance.yahoo.com/v8/finance/chart/')) {
+        throw new Error('yahoo unavailable');
+      }
+      if (String(url).includes('stooq.com/q/d/l/')) {
+        throw new Error('stooq should not be needed when Alpaca can satisfy adjustment=all');
+      }
+      throw new Error(`Unexpected url: ${url}`);
+    });
+
+    const { getCachedPrices } = require('../priceCacheService');
+
+    const response = await getCachedPrices({
+      symbol: 'BIL',
+      startDate: '2026-01-01',
+      endDate: '2026-01-08',
+      adjustment: 'all',
+      source: 'stooq',
+      forceRefresh: true,
+      minBars: 0,
+      cacheOnly: true,
+    });
+
+    expect(response.dataSource).toBe('alpaca');
+    expect((response.bars || []).length).toBeGreaterThan(0);
+    expect(alpacaGet).toHaveBeenCalled();
+    const urls = Axios.get.mock.calls.map((call) => String(call[0]));
+    expect(urls.some((u) => u.includes('stooq.com/q/d/l/'))).toBe(false);
+  });
+
   it('keeps Stooq first when adjustment=raw', async () => {
     jest.doMock('axios', () => ({ get: jest.fn(), create: jest.fn(() => ({ get: jest.fn() })) }));
     const Axios = require('axios');

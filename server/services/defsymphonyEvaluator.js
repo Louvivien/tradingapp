@@ -1473,14 +1473,36 @@ const applySelector = (selectorNode, scoredAssets) => {
   }
   const type = String(selectorNode[0]);
   const count = Number(selectorNode[1] || 1);
-  const sorted = [...scoredAssets];
+  const sorted = scoredAssets.map((entry, index) => ({ entry, index }));
+  const epsilonAbs = 1e-10;
+  const epsilonRel = 0.005; // tolerate <=0.5% relative metric deltas as ties (stabilizes cross-provider near-ties)
+  const compareWithTolerance = (av, bv) => {
+    const diff = av - bv;
+    const tol = Math.max(epsilonAbs, epsilonRel * Math.max(Math.abs(av), Math.abs(bv)));
+    if (!Number.isFinite(diff) || Math.abs(diff) <= tol) {
+      return 0;
+    }
+    return diff;
+  };
+  const compareAsc = (a, b) => {
+    const av = Number(a.entry?.value);
+    const bv = Number(b.entry?.value);
+    const cmp = compareWithTolerance(av, bv);
+    return cmp === 0 ? a.index - b.index : cmp;
+  };
+  const compareDesc = (a, b) => {
+    const av = Number(a.entry?.value);
+    const bv = Number(b.entry?.value);
+    const cmp = compareWithTolerance(bv, av);
+    return cmp === 0 ? a.index - b.index : cmp;
+  };
   if (type === 'select-top') {
-    sorted.sort((a, b) => b.value - a.value);
-    return sorted.slice(0, count);
+    sorted.sort(compareDesc);
+    return sorted.slice(0, count).map((item) => item.entry);
   }
   if (type === 'select-bottom') {
-    sorted.sort((a, b) => a.value - b.value);
-    return sorted.slice(0, count);
+    sorted.sort(compareAsc);
+    return sorted.slice(0, count).map((item) => item.entry);
   }
   return scoredAssets;
 };

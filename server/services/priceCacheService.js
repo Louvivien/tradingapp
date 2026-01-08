@@ -827,13 +827,12 @@ const fetchBarsFromTestfolio = async ({ symbol, start, end }) => {
   return [];
 };
 
-const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, minBars }) => {
+const getProviderAttemptOrder = ({ source, adjustment }) => {
   const normalizedSource = String(source ?? '').trim().toLowerCase();
   const normalizedAdjustment = normalizeAdjustment(adjustment);
   const wantsDividendAdjustment =
     normalizedAdjustment === 'all' || normalizedAdjustment === 'dividend';
-  const minBarsNeeded = Number.isFinite(Number(minBars)) ? Math.max(0, Math.floor(Number(minBars))) : 0;
-  const endKey = toISODateKey(end);
+
   const preferred =
     normalizedSource === 'yahoo' ||
     normalizedSource === 'alpaca' ||
@@ -841,27 +840,42 @@ const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, m
     normalizedSource === 'stooq'
       ? normalizedSource
       : null;
-  const attemptOrder = (() => {
-    if (preferred === 'yahoo') {
-      return ['yahoo', 'tiingo', 'stooq', 'alpaca'];
-    }
-    if (preferred === 'tiingo') {
-      // Composer-style: Tiingo first, then Stooq, then Yahoo.
-      return wantsDividendAdjustment ? ['tiingo', 'yahoo', 'stooq', 'alpaca'] : ['tiingo', 'stooq', 'yahoo', 'alpaca'];
-    }
-    if (preferred === 'alpaca') {
-      // Alpaca's daily data is not dividend-adjusted; for parity with Composer-style "all"/"dividend" adjustments,
-      // prefer Tiingo/Yahoo first when requested.
-      return wantsDividendAdjustment ? ['tiingo', 'yahoo', 'alpaca', 'stooq'] : ['alpaca', 'tiingo', 'stooq', 'yahoo'];
-    }
-    if (preferred === 'stooq') {
-      // Stooq daily bars are not dividend-adjusted; if the caller asked for dividend-adjusted data,
-      // prefer sources that support that adjustment first.
-      return wantsDividendAdjustment ? ['tiingo', 'yahoo', 'stooq', 'alpaca'] : ['stooq', 'tiingo', 'yahoo', 'alpaca'];
-    }
-    // Default: Tiingo -> Stooq -> Yahoo -> Alpaca.
-    return wantsDividendAdjustment ? ['tiingo', 'yahoo', 'stooq', 'alpaca'] : ['tiingo', 'stooq', 'yahoo', 'alpaca'];
-  })();
+
+  if (preferred === 'yahoo') {
+    return wantsDividendAdjustment
+      ? ['yahoo', 'tiingo', 'alpaca', 'stooq']
+      : ['yahoo', 'tiingo', 'stooq', 'alpaca'];
+  }
+  if (preferred === 'tiingo') {
+    return wantsDividendAdjustment
+      ? ['tiingo', 'yahoo', 'alpaca', 'stooq']
+      : ['tiingo', 'stooq', 'yahoo', 'alpaca'];
+  }
+  if (preferred === 'alpaca') {
+    return wantsDividendAdjustment
+      ? ['alpaca', 'yahoo', 'tiingo', 'stooq']
+      : ['alpaca', 'tiingo', 'stooq', 'yahoo'];
+  }
+  if (preferred === 'stooq') {
+    // Stooq daily history does not include dividend adjustments; prefer providers that can honor
+    // `adjustment=all|dividend` and only fall back to Stooq if nothing else is available.
+    return wantsDividendAdjustment
+      ? ['tiingo', 'yahoo', 'alpaca', 'stooq']
+      : ['stooq', 'tiingo', 'yahoo', 'alpaca'];
+  }
+  return wantsDividendAdjustment
+    ? ['tiingo', 'yahoo', 'alpaca', 'stooq']
+    : ['tiingo', 'stooq', 'yahoo', 'alpaca'];
+};
+
+const fetchBarsWithFallback = async ({ symbol, start, end, adjustment, source, minBars }) => {
+  const normalizedSource = String(source ?? '').trim().toLowerCase();
+  const minBarsNeeded = Number.isFinite(Number(minBars)) ? Math.max(0, Math.floor(Number(minBars))) : 0;
+  const endKey = toISODateKey(end);
+  const attemptOrder = getProviderAttemptOrder({
+    source: normalizedSource,
+    adjustment,
+  });
 
   const attempt = async (candidate) => {
     switch (candidate) {
@@ -963,11 +977,6 @@ const getCachedPrices = async ({
       ? { ...baseQuery, $or: [{ adjustment: 'raw' }, { adjustment: { $exists: false } }] }
       : { ...baseQuery, adjustment: resolvedAdjustment };
 
-  const preferredSource =
-    resolvedSource === 'yahoo' || resolvedSource === 'alpaca' || resolvedSource === 'tiingo' || resolvedSource === 'stooq'
-      ? resolvedSource
-      : null;
-
   // If DB cache is disabled, fetch fresh data and skip any Mongo operations.
   if (SKIP_DB_CACHE) {
     const { bars, dataSource } = await fetchBarsWithFallback({
@@ -997,14 +1006,6 @@ const getCachedPrices = async ({
     };
   }
 
-  let cache = null;
-  if (preferredSource) {
-    cache = await PriceCache.findOne({ ...cacheQueryBase, dataSource: preferredSource }).sort({ refreshedAt: -1 });
-  }
-  if (!cache) {
-    cache = await PriceCache.findOne({ ...cacheQueryBase, dataSource: { $ne: 'testfolio' } }).sort({ refreshedAt: -1 });
-  }
-
   const subsetBars = (bars = []) =>
     (Array.isArray(bars) ? bars : []).filter((bar) => {
       const timestamp = new Date(bar.t);
@@ -1022,7 +1023,68 @@ const getCachedPrices = async ({
     const endKey = toISODateKey(end);
     return Boolean(lastKey && endKey && lastKey >= endKey);
   };
-  let subset = cache ? subsetBars(cache.bars || []) : [];
+
+  const providerOrder = getProviderAttemptOrder({
+    source: resolvedSource,
+    adjustment: resolvedAdjustment,
+  });
+
+  const pickNewest = (docs = []) => {
+    let latest = null;
+    docs.forEach((doc) => {
+      if (!doc) {
+        return;
+      }
+      const nextTime = doc?.refreshedAt ? new Date(doc.refreshedAt).getTime() : 0;
+      const prevTime = latest?.refreshedAt ? new Date(latest.refreshedAt).getTime() : 0;
+      if (!latest || (Number.isFinite(nextTime) && nextTime > prevTime)) {
+        latest = doc;
+      }
+    });
+    return latest;
+  };
+
+  let cache = null;
+  let subset = [];
+
+  const caches = await PriceCache.find({
+    ...cacheQueryBase,
+    dataSource: { $in: providerOrder },
+  });
+  const bySource = new Map();
+  caches.forEach((doc) => {
+    const key = String(doc?.dataSource || '').trim().toLowerCase();
+    if (!key) {
+      return;
+    }
+    const existing = bySource.get(key);
+    bySource.set(key, pickNewest([existing, doc]));
+  });
+
+  for (const candidate of providerOrder) {
+    const candidateCache = bySource.get(candidate);
+    if (!candidateCache) {
+      continue;
+    }
+    const candidateSubset = subsetBars(candidateCache.bars || []);
+    const candidateUsable =
+      candidateSubset.length > 0 && (barsCoverRange(candidateSubset, start, end) || relaxedCoverageOk(candidateSubset));
+    if (!candidateUsable) {
+      continue;
+    }
+    cache = candidateCache;
+    subset = candidateSubset;
+    break;
+  }
+
+  if (!cache) {
+    const anyCaches = await PriceCache.find({
+      ...cacheQueryBase,
+      dataSource: { $ne: 'testfolio' },
+    });
+    cache = pickNewest(anyCaches);
+    subset = cache ? subsetBars(cache.bars || []) : [];
+  }
   const cacheUsable =
     cache && subset.length > 0 && (barsCoverRange(subset, start, end) || relaxedCoverageOk(subset));
   const isFresh =
