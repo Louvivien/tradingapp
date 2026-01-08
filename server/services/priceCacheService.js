@@ -118,6 +118,45 @@ const getTiingoTokens = () => {
 
 let tiingoTokenCursor = 0;
 const tiingoTokenNextAllowedAt = new Map();
+const tiingoTokenHourlyUsage = new Map();
+
+const ONE_HOUR_MS = 60 * 60 * 1000;
+
+const getTiingoHourlyLimit = () => {
+  const raw = Number(process.env.TIINGO_MAX_REQUESTS_PER_HOUR);
+  if (Number.isFinite(raw) && raw > 0) {
+    return Math.floor(raw);
+  }
+  return 50;
+};
+
+const getTiingoTokenUsage = (token, nowMs) => {
+  const current = tiingoTokenHourlyUsage.get(token);
+  if (!current || !Number.isFinite(current.windowStartMs) || nowMs - current.windowStartMs >= ONE_HOUR_MS) {
+    const fresh = { windowStartMs: nowMs, count: 0 };
+    tiingoTokenHourlyUsage.set(token, fresh);
+    return fresh;
+  }
+  return current;
+};
+
+const consumeTiingoHourlyBudget = (token) => {
+  const limit = getTiingoHourlyLimit();
+  const nowMs = Date.now();
+  const usage = getTiingoTokenUsage(token, nowMs);
+  if (usage.count >= limit) {
+    const retryAfterMs = Math.max(0, usage.windowStartMs + ONE_HOUR_MS - nowMs);
+    const retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
+    const error = new Error(
+      `Tiingo hourly request limit reached for this API key (${limit}/hour). Try again in ~${retryAfterSeconds}s or switch price source.`
+    );
+    error.code = 'TIINGO_HOURLY_LIMIT';
+    error.retryAfterSeconds = retryAfterSeconds;
+    throw error;
+  }
+  usage.count += 1;
+  tiingoTokenHourlyUsage.set(token, usage);
+};
 
 const waitForTiingoSlot = async (token) => {
   const minIntervalMsRaw = Number(process.env.TIINGO_MIN_REQUEST_INTERVAL_MS);
@@ -163,6 +202,7 @@ const fetchBarsFromTiingo = async ({ symbol, start, end, adjustment }) => {
     const url = `https://api.tiingo.com/tiingo/daily/${encodeURIComponent(symbol)}/prices`;
     try {
       await waitForTiingoSlot(token);
+      consumeTiingoHourlyBudget(token);
       const { data } = await Axios.get(url, {
         params: {
           startDate: startKey,
@@ -239,6 +279,9 @@ const fetchBarsFromTiingo = async ({ symbol, start, end, adjustment }) => {
       }
     } catch (error) {
       lastError = error;
+      if (error?.code === 'TIINGO_HOURLY_LIMIT') {
+        continue;
+      }
       const status = Number(error?.response?.status);
       const shouldRotate = status === 429 || status === 403;
       if (!shouldRotate) {
