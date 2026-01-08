@@ -56,6 +56,7 @@ const HoldingsCompare = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [results, setResults] = useState([]);
+  const [hasRun, setHasRun] = useState(false);
   const [onlyMismatched, setOnlyMismatched] = useState(true);
   const [limit, setLimit] = useState("50");
   const [tolerance, setTolerance] = useState("0.005");
@@ -67,6 +68,7 @@ const HoldingsCompare = () => {
     }
     setLoading(true);
     setError(null);
+    setHasRun(true);
 
     try {
       const headers = { "x-auth-token": authToken };
@@ -91,10 +93,6 @@ const HoldingsCompare = () => {
       setLoading(false);
     }
   }, [authToken, userId, limit, tolerance, priceSource]);
-
-  useEffect(() => {
-    fetchComparison();
-  }, [fetchComparison]);
 
   const filtered = useMemo(() => {
     const rows = Array.isArray(results) ? results : [];
@@ -155,7 +153,7 @@ const HoldingsCompare = () => {
             label="Only mismatched"
           />
           <Button variant="contained" onClick={fetchComparison} disabled={loading}>
-            Refresh
+            Run compare
           </Button>
         </Box>
       </Box>
@@ -170,6 +168,14 @@ const HoldingsCompare = () => {
         <Box className={styles.loading}>
           <CircularProgress />
         </Box>
+      ) : !hasRun ? (
+        <Paper className={styles.paper}>
+          <Box className={styles.emptyState}>
+            <Typography variant="body2" color="text.secondary">
+              Choose your settings, then click &quot;Run compare&quot;.
+            </Typography>
+          </Box>
+        </Paper>
       ) : (
         <Paper className={styles.paper}>
           <Table size="small">

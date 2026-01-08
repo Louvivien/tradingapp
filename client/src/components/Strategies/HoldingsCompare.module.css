@@ -1,5 +1,5 @@
 .container {
-  padding-top: 56px;
+  padding-top: 16px;
 }
 
 .headerRow {
@@ -38,6 +38,10 @@
 
 .paper {
   overflow: hidden;
+}
+
+.emptyState {
+  padding: 16px;
 }
 
 .detailBox {
