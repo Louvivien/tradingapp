@@ -1,5 +1,6 @@
 .container {
-  padding-top: 8px;
+  padding-top: 16px;
+  margin-top: 12px;
 }
 
 .headerRow {
@@ -45,4 +46,3 @@
 .divider {
   margin: 8px 0;
 }
-

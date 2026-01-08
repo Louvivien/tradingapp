@@ -49,9 +49,10 @@ router.route("/equity/backfill/:userId").post(auth, triggerEquityBackfill);
 router.route("/recurrence/:userId/:strategyId").patch(auth, updateStrategyRecurrence);
 router.route("/metadata/:userId/:strategyId").patch(auth, updateStrategyMetadata);
 router.route("/rebalance-date/:userId/:strategyId").patch(auth, updateNextRebalanceDate);
-router.route("/composer-holdings/:userId/:strategyId").get(auth, getComposerHoldings).patch(auth, updateComposerHoldings);
-router.route("/composer-holdings/compare/:userId/:strategyId").get(auth, compareComposerHoldings);
+// NOTE: place more-specific routes before parameterized catch-alls like `:userId/:strategyId`.
 router.route("/composer-holdings/compare-all/:userId").get(auth, compareComposerHoldingsAll);
+router.route("/composer-holdings/compare/:userId/:strategyId").get(auth, compareComposerHoldings);
+router.route("/composer-holdings/:userId/:strategyId").get(auth, getComposerHoldings).patch(auth, updateComposerHoldings);
 router.route("/diagnose/:userId/:strategyId").get(auth, diagnoseAllocationMismatch);
 router.route("/rebalance-now/:userId/:strategyId").post(auth, rebalanceNow);
 router.route("/progress/:jobId").get(streamStrategyProgress);
