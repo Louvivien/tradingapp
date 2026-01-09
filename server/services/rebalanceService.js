@@ -194,7 +194,7 @@ const ORDER_PENDING_STATUSES = new Set([
 
 const DEFAULT_REBALANCE_WINDOW_MINUTES = (() => {
   const parsed = Number(process.env.REBALANCE_WINDOW_MINUTES);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 60;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
 })();
 
 const computeRebalanceWindow = (closeTime, windowMinutes = DEFAULT_REBALANCE_WINDOW_MINUTES) => {

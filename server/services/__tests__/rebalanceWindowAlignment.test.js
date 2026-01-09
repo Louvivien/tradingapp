@@ -10,7 +10,7 @@ describe('rebalance window alignment', () => {
     jest.resetModules();
   });
 
-  it('defaults to a 60 minute window before close', () => {
+  it('defaults to a 30 minute window before close', () => {
     delete process.env.REBALANCE_WINDOW_MINUTES;
     jest.resetModules();
 
@@ -18,8 +18,8 @@ describe('rebalance window alignment', () => {
 
     const close = new Date('2026-01-06T21:00:00.000Z');
     const window = computeRebalanceWindow(close);
-    expect(window.minutes).toBe(60);
-    expect(window.start.toISOString()).toBe('2026-01-06T20:00:00.000Z');
+    expect(window.minutes).toBe(30);
+    expect(window.start.toISOString()).toBe('2026-01-06T20:30:00.000Z');
     expect(window.end.toISOString()).toBe('2026-01-06T21:00:00.000Z');
   });
 
@@ -48,4 +48,3 @@ describe('rebalance window alignment', () => {
     expect(preserved.toISOString()).toBe('2026-01-06T20:30:00.000Z');
   });
 });
-
