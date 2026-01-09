@@ -1702,7 +1702,7 @@ const rebalancePortfolio = async (portfolio) => {
   });
 
   strategyCash += sellProceeds;
-  const actualCashAvailable = Math.max(0, accountCash) + sellProceeds;
+  const actualCashAvailable = Math.max(0, accountCash + sellProceeds);
   let availableCash = Math.min(budget, strategyCash, actualCashAvailable);
   let buySpend = 0;
 
