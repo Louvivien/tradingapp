@@ -1191,6 +1191,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
             asset_id: assetId,
             outcome: row?.outcome ? String(row.outcome) : null,
             quantity: toNumber(row?.quantity, 0),
+            avgCost: toNumber(row?.avgCost, null),
             currentPrice: toNumber(row?.currentPrice, null),
           });
         });
@@ -1378,7 +1379,17 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 
         const makerExisting = makerHoldingsByAssetId.get(assetId) || null;
         const makerQty = makerExisting ? toNumber(makerExisting.quantity, 0) : 0;
+        const makerAvgCost = makerExisting && makerExisting.avgCost !== undefined && makerExisting.avgCost !== null
+          ? toNumber(makerExisting.avgCost, null)
+          : null;
         const newMakerQty = roundToDecimals(makerQty + size, 6);
+        const newMakerAvgCost = (() => {
+          if (!makerQty || makerAvgCost === null) {
+            return price;
+          }
+          const totalCost = makerQty * makerAvgCost + size * price;
+          return newMakerQty ? totalCost / newMakerQty : price;
+        })();
         const makerEntry = makerExisting || {
           market: conditionId,
           asset_id: assetId,
@@ -1391,6 +1402,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         makerEntry.outcome = makerEntry.outcome || outcome;
         makerEntry.currentPrice = toNumber(makerEntry.currentPrice, null) ?? price;
         makerEntry.quantity = newMakerQty;
+        makerEntry.avgCost = roundToDecimals(newMakerAvgCost, 6);
         makerHoldingsByAssetId.set(assetId, makerEntry);
 
         tradeSummary.buys.push({
@@ -1815,7 +1827,17 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       }
       return Math.max(0, toNumber(startingCash, 0));
     })();
-    const scale = makerValue > 0 ? sizingBudget / makerValue : 0;
+    const existingSizingState =
+      poly?.sizingState && typeof poly.sizingState === 'object' ? poly.sizingState : {};
+    const storedScale = toNumber(existingSizingState?.scale, null);
+    const storedScaleBudget = toNumber(existingSizingState?.scaleBudget, null);
+    const shouldResetScale =
+      !Number.isFinite(storedScale) ||
+      storedScale <= 0 ||
+      storedScaleBudget === null ||
+      Math.abs(storedScaleBudget - sizingBudget) > 1e-9;
+    const computedScale = makerValue > 0 ? sizingBudget / makerValue : 0;
+    const scale = shouldResetScale ? computedScale : storedScale;
 
     if (!Number.isFinite(scale) || scale <= 0) {
       sizingMeta = { makerValue, sizingBudget, scale };
@@ -1830,6 +1852,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         const market = pos.market ? String(pos.market) : null;
         const asset_id = pos.asset_id ? String(pos.asset_id) : null;
         const outcome = pos.outcome ? String(pos.outcome) : null;
+        const avgCost = toNumber(pos.avgCost, null);
         const currentPrice = toNumber(pos.currentPrice, null);
         const quantity = roundToDecimals(Math.max(0, toNumber(pos.quantity, 0)) * scale, 6) ?? 0;
         if (!quantity || quantity <= 0) {
@@ -1841,7 +1864,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
           market,
           asset_id,
           outcome,
-          avgCost: currentPrice,
+          avgCost: avgCost !== null ? avgCost : currentPrice,
           quantity,
           currentPrice,
           orderID: `poly-size-${String(asset_id || '').slice(-10)}`,
@@ -1858,8 +1881,17 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	          asset_id: pos.asset_id ? String(pos.asset_id) : null,
 	          outcome: pos.outcome ? String(pos.outcome) : null,
 	          quantity: toNumber(pos.quantity, 0),
+	          avgCost: toNumber(pos.avgCost, null),
 	          currentPrice: toNumber(pos.currentPrice, null),
 	        })),
+        scale,
+        scaleBudget: shouldResetScale ? sizingBudget : storedScaleBudget,
+        scaleMakerValue: shouldResetScale ? makerValue : toNumber(existingSizingState?.scaleMakerValue, null),
+        scaleSetAt: shouldResetScale
+          ? now.toISOString()
+          : existingSizingState?.scaleSetAt
+            ? String(existingSizingState.scaleSetAt)
+            : null,
         lastUpdatedAt: now.toISOString(),
       },
     };

@@ -207,10 +207,28 @@ const portfolioSchema = new Schema({
             asset_id: { type: String, default: null },
             outcome: { type: String, default: null },
             quantity: { type: Number, default: 0 },
+            avgCost: { type: Number, default: null },
             currentPrice: { type: Number, default: null },
           },
         ],
         default: [],
+      },
+      scale: {
+        type: Number,
+        default: null,
+      },
+      scaleBudget: {
+        type: Number,
+        default: null,
+      },
+      scaleMakerValue: {
+        type: Number,
+        default: null,
+      },
+      scaleSetAt: {
+        type: String,
+        default: null,
+        trim: true,
       },
       lastUpdatedAt: {
         type: String,

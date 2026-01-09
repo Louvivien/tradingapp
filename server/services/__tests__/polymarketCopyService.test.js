@@ -387,9 +387,8 @@ describe('polymarketCopyService', () => {
     const buyA = calls.find((c) => c.side === 'BUY' && c.tokenID === 'asset-a');
     const sellB = calls.find((c) => c.side === 'SELL' && c.tokenID === 'asset-b');
     expect(buyA).toBeTruthy();
-    expect(sellB).toBeTruthy();
-    expect(buyA.amount).toBeCloseTo(16.666667, 5);
-    expect(sellB.amount).toBeCloseTo(33.333333, 5);
+    expect(sellB).toBeFalsy();
+    expect(buyA.amount).toBeCloseTo(50, 6);
   });
 
   it('does not save polymarket.sizingState when it is undefined', async () => {
