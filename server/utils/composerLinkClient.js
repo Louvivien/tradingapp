@@ -237,6 +237,356 @@ const fetchPublicSymphonyDetailsById = async ({ symphonyId }) => {
   return response.data;
 };
 
+const fetchPublicSymphonyScoreById = async ({ symphonyId }) => {
+  if (!symphonyId) {
+    throw new Error('Missing symphony id.');
+  }
+  const url = `https://backtest-api.composer.trade/api/v1/public/symphonies/${encodeURIComponent(
+    symphonyId
+  )}/score?score_version=v2`;
+  const response = await Axios.get(url, {
+    headers: {
+      'User-Agent': 'tradingapp/compareComposerLinkHoldings',
+      Accept: 'application/json',
+    },
+    timeout: 20000,
+  });
+  return response.data;
+};
+
+const escapeEdnString = (value) => JSON.stringify(String(value ?? ''));
+
+const formatNumber = (value) => {
+  const number = Number(value);
+  if (!Number.isFinite(number)) {
+    return '0';
+  }
+  if (Number.isInteger(number)) {
+    return String(number);
+  }
+  const rounded = Number(number.toFixed(12));
+  if (Number.isInteger(rounded)) {
+    return String(rounded);
+  }
+  return String(rounded);
+};
+
+const extractSymbolFromComposerTicker = (ticker) => {
+  const raw = String(ticker ?? '').trim();
+  if (!raw) {
+    return null;
+  }
+  const withoutPrefix = raw.includes('::') ? raw.split('::').slice(1).join('::') : raw;
+  const withoutSuffix = withoutPrefix.includes('//') ? withoutPrefix.split('//')[0] : withoutPrefix;
+  const symbol = withoutSuffix.trim().toUpperCase();
+  return symbol || null;
+};
+
+const getScoreFnName = (expr) => {
+  if (Array.isArray(expr) && typeof expr[0] === 'string') {
+    return expr[0];
+  }
+  return null;
+};
+
+const isPercentLikeFn = (fnName) =>
+  fnName === 'fn_relative_strength_index' ||
+  fnName === 'fn_cumulative_return' ||
+  fnName === 'fn_max_drawdown';
+
+const normalizePercentConstant = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) {
+    return numeric;
+  }
+  const scaled = numeric * 100;
+  const rounded = Number(scaled.toFixed(12));
+  return rounded;
+};
+
+const convertScoreExpression = (expr) => {
+  if (expr == null) {
+    return 'nil';
+  }
+  if (typeof expr === 'number') {
+    return formatNumber(expr);
+  }
+  if (typeof expr === 'string') {
+    const symbol = extractSymbolFromComposerTicker(expr);
+    if (symbol) {
+      return escapeEdnString(symbol);
+    }
+    return escapeEdnString(expr);
+  }
+  if (!Array.isArray(expr) || !expr.length) {
+    throw new Error(`Unsupported score expression: ${JSON.stringify(expr)}`);
+  }
+
+  const fn = expr[0];
+  const args = expr.slice(1);
+
+  switch (fn) {
+    case 'fn_constant': {
+      return formatNumber(args[0]);
+    }
+    case 'metric_close': {
+      const symbol = extractSymbolFromComposerTicker(args[0]);
+      if (!symbol) {
+        throw new Error(`Unable to parse metric_close symbol from: ${JSON.stringify(expr)}`);
+      }
+      return `(current-price ${escapeEdnString(symbol)})`;
+    }
+    case 'fn_relative_strength_index': {
+      const symbol = extractSymbolFromComposerTicker(args[0]?.[1] ?? args[0]);
+      const window = Number(args[1]);
+      if (!symbol || !Number.isFinite(window)) {
+        throw new Error(`Unable to parse RSI expression: ${JSON.stringify(expr)}`);
+      }
+      return `(rsi ${escapeEdnString(symbol)} {:window ${formatNumber(window)}})`;
+    }
+    case 'fn_cumulative_return': {
+      const symbol = extractSymbolFromComposerTicker(args[0]?.[1] ?? args[0]);
+      const window = Number(args[1]);
+      if (!symbol || !Number.isFinite(window)) {
+        throw new Error(`Unable to parse cumulative return expression: ${JSON.stringify(expr)}`);
+      }
+      return `(cumulative-return ${escapeEdnString(symbol)} {:window ${formatNumber(window)}})`;
+    }
+    case 'fn_max_drawdown': {
+      const symbol = extractSymbolFromComposerTicker(args[0]?.[1] ?? args[0]);
+      const window = Number(args[1]);
+      if (!symbol || !Number.isFinite(window)) {
+        throw new Error(`Unable to parse max drawdown expression: ${JSON.stringify(expr)}`);
+      }
+      return `(max-drawdown ${escapeEdnString(symbol)} {:window ${formatNumber(window)}})`;
+    }
+    case 'fn_simple_moving_average': {
+      const symbol = extractSymbolFromComposerTicker(args[0]?.[1] ?? args[0]);
+      const window = Number(args[1]);
+      if (!symbol || !Number.isFinite(window)) {
+        throw new Error(`Unable to parse moving average expression: ${JSON.stringify(expr)}`);
+      }
+      return `(moving-average-price ${escapeEdnString(symbol)} {:window ${formatNumber(window)}})`;
+    }
+    case 'fn_exponential_moving_average': {
+      const symbol = extractSymbolFromComposerTicker(args[0]?.[1] ?? args[0]);
+      const window = Number(args[1]);
+      if (!symbol || !Number.isFinite(window)) {
+        throw new Error(`Unable to parse exponential moving average expression: ${JSON.stringify(expr)}`);
+      }
+      return `(exponential-moving-average-price ${escapeEdnString(symbol)} {:window ${formatNumber(window)}})`;
+    }
+    case 'fn_lt':
+    case 'fn_gt':
+    case 'fn_lte':
+    case 'fn_gte':
+    case 'fn_eq': {
+      const operator = {
+        fn_lt: '<',
+        fn_gt: '>',
+        fn_lte: '<=',
+        fn_gte: '>=',
+        fn_eq: '=',
+      }[fn];
+      const left = args[0];
+      const right = args[1];
+      const leftFn = getScoreFnName(left);
+      const rightFn = getScoreFnName(right);
+
+      const normalizeConstSide = (sideExpr, otherFnName) => {
+        if (!Array.isArray(sideExpr) || sideExpr[0] !== 'fn_constant') {
+          return convertScoreExpression(sideExpr);
+        }
+        const rawValue = sideExpr[1];
+        const scaledValue = isPercentLikeFn(otherFnName) ? normalizePercentConstant(rawValue) : rawValue;
+        return formatNumber(scaledValue);
+      };
+
+      const leftConverted = normalizeConstSide(left, rightFn);
+      const rightConverted = normalizeConstSide(right, leftFn);
+
+      return `(${operator} ${leftConverted} ${rightConverted})`;
+    }
+    default: {
+      throw new Error(`Unsupported score function: ${fn}`);
+    }
+  }
+};
+
+const convertScoreMetric = (expr) => {
+  if (!Array.isArray(expr) || !expr.length) {
+    throw new Error(`Unsupported score metric: ${JSON.stringify(expr)}`);
+  }
+  const fn = expr[0];
+  const args = expr.slice(1);
+
+  switch (fn) {
+    case 'fn_relative_strength_index': {
+      const window = Number(args[1]);
+      if (!Number.isFinite(window)) {
+        throw new Error(`Unable to parse RSI metric: ${JSON.stringify(expr)}`);
+      }
+      return `(rsi {:window ${formatNumber(window)}})`;
+    }
+    case 'fn_cumulative_return': {
+      const window = Number(args[1]);
+      if (!Number.isFinite(window)) {
+        throw new Error(`Unable to parse cumulative return metric: ${JSON.stringify(expr)}`);
+      }
+      return `(cumulative-return {:window ${formatNumber(window)}})`;
+    }
+    case 'fn_max_drawdown': {
+      const window = Number(args[1]);
+      if (!Number.isFinite(window)) {
+        throw new Error(`Unable to parse max drawdown metric: ${JSON.stringify(expr)}`);
+      }
+      return `(max-drawdown {:window ${formatNumber(window)}})`;
+    }
+    case 'fn_simple_moving_average': {
+      const window = Number(args[1]?.[2] ?? args[1]);
+      const maybeWindow = Number(args[1] ?? args[2]);
+      const resolvedWindow = Number.isFinite(window) ? window : maybeWindow;
+      if (!Number.isFinite(resolvedWindow)) {
+        throw new Error(`Unable to parse moving average return metric: ${JSON.stringify(expr)}`);
+      }
+      return `(moving-average-return {:window ${formatNumber(resolvedWindow)}})`;
+    }
+    case 'fn_standard_deviation': {
+      const window = Number(args[1]?.[2] ?? args[1]);
+      const maybeWindow = Number(args[1] ?? args[2]);
+      const resolvedWindow = Number.isFinite(window) ? window : maybeWindow;
+      if (!Number.isFinite(resolvedWindow)) {
+        throw new Error(`Unable to parse stdev return metric: ${JSON.stringify(expr)}`);
+      }
+      return `(stdev-return {:window ${formatNumber(resolvedWindow)}})`;
+    }
+    default: {
+      throw new Error(`Unsupported score metric function: ${fn}`);
+    }
+  }
+};
+
+const convertScoreNode = (node) => {
+  if (!isObject(node)) {
+    throw new Error(`Invalid score node: ${JSON.stringify(node)}`);
+  }
+
+  switch (node.type) {
+    case 'node_asset': {
+      const symbol = extractSymbolFromComposerTicker(node.ticker);
+      if (!symbol) {
+        throw new Error(`Unable to parse asset ticker: ${JSON.stringify(node.ticker)}`);
+      }
+      const name = node?.meta?.name;
+      if (name) {
+        return `(asset ${escapeEdnString(symbol)} ${escapeEdnString(name)})`;
+      }
+      return `(asset ${escapeEdnString(symbol)})`;
+    }
+    case 'node_filter': {
+      const rawSortFn = node.sort_fn;
+      const sortFn =
+        Array.isArray(rawSortFn) && rawSortFn[0] === 'weight_every_fn' ? rawSortFn[1] : rawSortFn;
+      const metric = convertScoreMetric(sortFn);
+      const direction = String(node.direction || '').trim().toLowerCase();
+      const takeCount = Number(node.take_count);
+      if (!Number.isFinite(takeCount) || takeCount <= 0) {
+        throw new Error(`Invalid filter take_count: ${JSON.stringify(node.take_count)}`);
+      }
+      const selector = direction === 'asc' ? 'select-bottom' : 'select-top';
+      const children = Array.isArray(node.children) ? node.children : [];
+      const convertedChildren = children.map(convertScoreNode).join(' ');
+      return `(filter ${metric} (${selector} ${formatNumber(takeCount)}) [${convertedChildren}])`;
+    }
+    case 'node_if': {
+      const condition = convertScoreExpression(node.condition);
+      const thenChildren = Array.isArray(node.then_children) ? node.then_children : [];
+      const elseChildren = Array.isArray(node.else_children) ? node.else_children : [];
+      const thenExpr = thenChildren.map(convertScoreNode).join(' ');
+      const elseExpr = elseChildren.map(convertScoreNode).join(' ');
+      return `(if ${condition} [${thenExpr}] [${elseExpr}])`;
+    }
+    case 'node_weight': {
+      const weight = node.weight;
+      const weightType = Array.isArray(weight) ? weight[0] : null;
+      const children = Array.isArray(node.children) ? node.children : [];
+
+      let rendered = null;
+      if (weightType === 'weight_equal') {
+        const inner = children.map(convertScoreNode).join(' ');
+        rendered = `(weight-equal [${inner}])`;
+      } else if (weightType === 'weight_constants') {
+        const constants = Array.isArray(weight[1]) ? weight[1] : [];
+        if (constants.length !== children.length) {
+          throw new Error(
+            `Weight constants length mismatch (weights=${constants.length}, children=${children.length}).`
+          );
+        }
+        const pairs = children
+          .map((child, idx) => `${formatNumber(constants[idx])} ${convertScoreNode(child)}`)
+          .join(' ');
+        rendered = `(weight-specified ${pairs})`;
+      } else if (weightType === 'weight_every_fn') {
+        const weightFn = weight[1];
+        const fnName = getScoreFnName(weightFn);
+        if (fnName !== 'fn_inverse_volatility') {
+          throw new Error(`Unsupported weight function: ${JSON.stringify(weightFn)}`);
+        }
+        const window = Number(weightFn?.[2]);
+        if (!Number.isFinite(window) || window <= 0) {
+          throw new Error(`Invalid inverse volatility window: ${JSON.stringify(weightFn?.[2])}`);
+        }
+        const inner = children.map(convertScoreNode).join(' ');
+        rendered = `(weight-inverse-volatility ${formatNumber(window)} [${inner}])`;
+      } else {
+        throw new Error(`Unsupported weight node type: ${JSON.stringify(weight)}`);
+      }
+
+      const label = String(node?.meta?.name || '').trim();
+      if (label) {
+        return `(group ${escapeEdnString(label)} [${rendered}])`;
+      }
+      return rendered;
+    }
+    case 'node_root': {
+      const children = Array.isArray(node.children) ? node.children : [];
+      if (!children.length) {
+        return `(weight-equal [])`;
+      }
+      if (children.length === 1) {
+        return convertScoreNode(children[0]);
+      }
+      const inner = children.map(convertScoreNode).join(' ');
+      return `(weight-equal [${inner}])`;
+    }
+    default: {
+      throw new Error(`Unsupported score node type: ${node.type}`);
+    }
+  }
+};
+
+const scoreTreeToStrategyText = (scoreTree) => {
+  if (!isObject(scoreTree) || scoreTree.type !== 'node_root') {
+    throw new Error('Invalid score tree payload.');
+  }
+
+  const name = scoreTree?.meta?.name || 'Composer Symphony';
+  const assetClass = scoreTree.asset_class || 'EQUITIES';
+  const rebalance = String(scoreTree.rebalance || '').trim().toLowerCase();
+
+  const options = [`:asset-class ${escapeEdnString(assetClass)}`];
+  if (rebalance === 'daily') {
+    options.push(`:rebalance-frequency :daily`);
+  } else if (rebalance === 'threshold') {
+    options.push(`:rebalance-threshold ${formatNumber(scoreTree.rebalance_corridor_width)}`);
+  } else if (rebalance) {
+    options.push(`:rebalance-frequency ${escapeEdnString(rebalance)}`);
+  }
+
+  const body = convertScoreNode(scoreTree);
+  return `(defsymphony ${escapeEdnString(name)} {${options.join(', ')}} ${body})`;
+};
+
 const guessEffectiveAsOfDateKey = (payload) => {
   const dateKeys = ['asOf', 'asOfDate', 'effectiveDate', 'date', 'holdingDate', 'rebalanceDate'];
   const candidates = [];
@@ -290,8 +640,19 @@ const fetchComposerLinkSnapshot = async ({ url }) => {
         snapshot.holdings = holdingsObjectToWeights(details?.last_backtest_holdings) || snapshot.holdings;
         snapshot.effectiveAsOfDateKey =
           details?.last_backtest_last_market_day || snapshot.effectiveAsOfDateKey;
+        snapshot.name = details?.name || snapshot.name;
         snapshot.publicHoldingsObject = details?.last_backtest_holdings || null;
         snapshot.lastBacktestValue = details?.last_backtest_value ?? null;
+      } catch {
+        // ignore and return best-effort snapshot
+      }
+    }
+    if (!snapshot.strategyText && symphonyId) {
+      try {
+        const score = await fetchPublicSymphonyScoreById({ symphonyId });
+        snapshot.strategyText = scoreTreeToStrategyText(score);
+        snapshot.name = score?.meta?.name || snapshot.name;
+        snapshot.id = symphonyId;
       } catch {
         // ignore and return best-effort snapshot
       }
@@ -320,8 +681,20 @@ const fetchComposerLinkSnapshot = async ({ url }) => {
       base.raw = base.raw || details;
       base.holdings = holdingsObjectToWeights(details?.last_backtest_holdings) || base.holdings;
       base.effectiveAsOfDateKey = details?.last_backtest_last_market_day || base.effectiveAsOfDateKey;
+      base.name = details?.name || base.name;
       base.publicHoldingsObject = details?.last_backtest_holdings || null;
       base.lastBacktestValue = details?.last_backtest_value ?? null;
+    } catch {
+      // ignore and return best-effort snapshot
+    }
+  }
+
+  if (!base.strategyText && symphonyId) {
+    try {
+      const score = await fetchPublicSymphonyScoreById({ symphonyId });
+      base.strategyText = scoreTreeToStrategyText(score);
+      base.name = score?.meta?.name || base.name;
+      base.id = symphonyId;
     } catch {
       // ignore and return best-effort snapshot
     }
@@ -338,5 +711,7 @@ module.exports = {
   holdingsObjectToWeights,
   guessEffectiveAsOfDateKey,
   fetchPublicSymphonyDetailsById,
+  fetchPublicSymphonyScoreById,
+  scoreTreeToStrategyText,
   fetchComposerLinkSnapshot,
 };

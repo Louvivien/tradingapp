@@ -1028,6 +1028,11 @@ const getCachedPrices = async ({
     source: resolvedSource,
     adjustment: resolvedAdjustment,
   });
+  const wantsDividendAdjustment = resolvedAdjustment === 'all' || resolvedAdjustment === 'dividend';
+  const cacheProviderOrder =
+    wantsDividendAdjustment && resolvedSource !== 'stooq'
+      ? providerOrder.filter((candidate) => candidate !== 'stooq')
+      : providerOrder;
 
   const pickNewest = (docs = []) => {
     let latest = null;
@@ -1049,7 +1054,7 @@ const getCachedPrices = async ({
 
   const caches = await PriceCache.find({
     ...cacheQueryBase,
-    dataSource: { $in: providerOrder },
+    dataSource: { $in: cacheProviderOrder },
   });
   const bySource = new Map();
   caches.forEach((doc) => {
@@ -1061,7 +1066,7 @@ const getCachedPrices = async ({
     bySource.set(key, pickNewest([existing, doc]));
   });
 
-  for (const candidate of providerOrder) {
+  for (const candidate of cacheProviderOrder) {
     const candidateCache = bySource.get(candidate);
     if (!candidateCache) {
       continue;
@@ -1078,10 +1083,16 @@ const getCachedPrices = async ({
   }
 
   if (!cache) {
-    const anyCaches = await PriceCache.find({
-      ...cacheQueryBase,
-      dataSource: { $ne: 'testfolio' },
-    });
+    const anyCachesQuery = wantsDividendAdjustment
+      ? {
+          ...cacheQueryBase,
+          dataSource: { $in: cacheProviderOrder },
+        }
+      : {
+          ...cacheQueryBase,
+          dataSource: { $ne: 'testfolio' },
+        };
+    const anyCaches = await PriceCache.find(anyCachesQuery);
     cache = pickNewest(anyCaches);
     subset = cache ? subsetBars(cache.bars || []) : [];
   }

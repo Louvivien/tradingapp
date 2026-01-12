@@ -76,7 +76,17 @@ const addDays = (dayKey, days) => {
 const sanitizeSymbol = (value) => String(value || '').trim().toUpperCase();
 
 const toNumber = (value, fallback = null) => {
-  const n = typeof value === 'number' ? value : Number(String(value ?? '').trim());
+  if (value == null) {
+    return fallback;
+  }
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : fallback;
+  }
+  const trimmed = String(value).trim();
+  if (!trimmed) {
+    return fallback;
+  }
+  const n = Number(trimmed);
   return Number.isFinite(n) ? n : fallback;
 };
 
@@ -336,4 +346,3 @@ main()
     }
     process.exit(1);
   });
-

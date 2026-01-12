@@ -7,6 +7,7 @@ const {
   guessHoldings,
   holdingsObjectToWeights,
   guessEffectiveAsOfDateKey,
+  scoreTreeToStrategyText,
   fetchComposerLinkSnapshot,
 } = require('../composerLinkClient');
 
@@ -107,12 +108,70 @@ describe('composerLinkClient', () => {
       .reply(200, {
         last_backtest_last_market_day: '2026-01-07',
         last_backtest_holdings: { SPY: 60, BIL: 40, $USD: 10 },
+        name: 'Fallback Strategy',
+      });
+
+    const scoreScope = nock('https://backtest-api.composer.trade')
+      .get('/api/v1/public/symphonies/XYZ/score')
+      .query({ score_version: 'v2' })
+      .reply(200, {
+        type: 'node_root',
+        asset_class: 'EQUITIES',
+        rebalance: 'daily',
+        rebalance_corridor_width: null,
+        meta: { name: 'Fallback Strategy' },
+        children: [
+          {
+            type: 'node_weight',
+            weight: ['weight_equal'],
+            meta: {},
+            children: [{ type: 'node_asset', ticker: 'EQUITIES::SPY//USD', exchange: 'NYSEARCA', meta: {} }],
+          },
+        ],
       });
 
     const snapshot = await fetchComposerLinkSnapshot({ url: 'https://app.composer.trade/symphony/XYZ/factsheet' });
     expect(snapshot.holdings.map((row) => row.symbol)).toEqual(['BIL', 'SPY']);
     expect(snapshot.effectiveAsOfDateKey).toEqual('2026-01-07');
+    expect(snapshot.strategyText).toContain('(defsymphony');
     htmlScope.done();
     apiScope.done();
+    scoreScope.done();
+  });
+
+  it('converts score tree to defsymphony syntax and scales percent constants', () => {
+    const script = scoreTreeToStrategyText({
+      type: 'node_root',
+      asset_class: 'EQUITIES',
+      rebalance: 'daily',
+      rebalance_corridor_width: null,
+      meta: { name: 'Score Strategy' },
+      children: [
+        {
+          type: 'node_weight',
+          weight: ['weight_equal'],
+          meta: {},
+          children: [
+            {
+              type: 'node_if',
+              meta: {},
+              condition: [
+                'fn_gt',
+                ['fn_relative_strength_index', ['metric_close', 'EQUITIES::SPY//USD'], 10],
+                ['fn_constant', 0.8],
+              ],
+              then_children: [{ type: 'node_asset', ticker: 'EQUITIES::TQQQ//USD', exchange: 'NASDAQ', meta: {} }],
+              else_children: [{ type: 'node_asset', ticker: 'EQUITIES::BIL//USD', exchange: 'NYSEARCA', meta: {} }],
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(script).toContain('(defsymphony');
+    expect(script).toContain(':rebalance-frequency :daily');
+    expect(script).toContain('(rsi "SPY" {:window 10})');
+    expect(script).toContain(' 80)');
+    expect(script).not.toContain('0.8');
   });
 });
