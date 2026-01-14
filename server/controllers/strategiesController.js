@@ -3130,6 +3130,7 @@ exports.compareComposerHoldingsAll = async (req, res) => {
     const dataAdjustment = req.query?.dataAdjustment ? String(req.query.dataAdjustment).trim() : null;
     const rsiMethod = req.query?.rsiMethod ? String(req.query.rsiMethod).trim() : null;
     const debugIndicators = normalizeBoolean(req.query?.debugIndicators) ?? true;
+    const simulateHoldings = normalizeBoolean(req.query?.simulateHoldings) ?? true;
     const budget = Math.max(1, toNumber(req.query?.budget, 10000));
     const strategyTextSource = String(req.query?.strategyTextSource || 'db')
       .trim()
@@ -3221,13 +3222,18 @@ exports.compareComposerHoldingsAll = async (req, res) => {
             priceSource,
             priceRefresh,
             requireAsOfDateCoverage: true,
+            simulateHoldings,
           });
 
           entry.tradingApp.meta = local?.meta || null;
           entry.tradingApp.effectiveAsOfDate = local?.meta?.localEvaluator?.asOfDate
             ? toDateKey(local.meta.localEvaluator.asOfDate)
             : null;
-          entry.tradingApp.holdings = normalizeWeightRows(local?.positions || []);
+          const tradingHoldingsSource =
+            simulateHoldings && Array.isArray(local?.simulatedHoldings) && local.simulatedHoldings.length
+              ? local.simulatedHoldings
+              : local?.positions || [];
+          entry.tradingApp.holdings = normalizeWeightRows(tradingHoldingsSource);
 
           if (composerHoldingsObject) {
             const localMeta = local?.meta?.localEvaluator || {};

@@ -6,6 +6,7 @@ const dotenv = require('dotenv');
 const mongoose = require('mongoose');
 
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
+const { computeComposerHoldingsWeights } = require('../utils/composerHoldingsWeights');
 const { fetchComposerLinkSnapshot } = require('../utils/composerLinkClient');
 
 dotenv.config({ path: path.resolve(__dirname, '../config/.env') });
@@ -28,6 +29,20 @@ console.error = consoleToStderr('error');
 console.info = consoleToStderr('info');
 
 const parseArgs = (argv) => {
+  const normalizePrimitive = (value) => {
+    if (value == null) {
+      return value;
+    }
+    const normalized = String(value).trim().toLowerCase();
+    if (['true', '1', 'yes', 'y'].includes(normalized)) {
+      return true;
+    }
+    if (['false', '0', 'no', 'n'].includes(normalized)) {
+      return false;
+    }
+    return value;
+  };
+
   const args = {};
   for (let idx = 2; idx < argv.length; idx += 1) {
     const raw = argv[idx];
@@ -40,7 +55,7 @@ const parseArgs = (argv) => {
       args[key] = true;
       continue;
     }
-    args[key] = next;
+    args[key] = normalizePrimitive(next);
     idx += 1;
   }
   return args;
@@ -128,14 +143,42 @@ const main = async () => {
   const dataAdjustment = args.dataAdjustment || 'all';
   const rsiMethod = args.rsiMethod || null;
   const debugIndicators = args.debugIndicators === false ? false : true;
+  const simulateHoldings = args.simulateHoldings === false ? false : true;
   const tolerance = Number.isFinite(Number(args.tolerance)) ? Number(args.tolerance) : 0.005;
 
   const snapshot = await fetchComposerLinkSnapshot({ url });
   if (!snapshot.strategyText) {
     throw new Error('Unable to extract defsymphony strategy text from the provided link.');
   }
-  const remoteHoldings = normalizePositions(snapshot.holdings || []);
   const remoteEffectiveAsOf = snapshot.effectiveAsOfDateKey || null;
+  let remoteHoldings = normalizePositions(snapshot.holdings || []);
+  if (snapshot.publicHoldingsObject && remoteEffectiveAsOf) {
+    try {
+      const computed = await computeComposerHoldingsWeights({
+        holdingsObject: snapshot.publicHoldingsObject,
+        effectiveAsOfDateKey: remoteEffectiveAsOf,
+        lastBacktestValue: snapshot.lastBacktestValue ?? null,
+        priceSource,
+        dataAdjustment,
+        cacheOnly: true,
+        forceRefresh: false,
+        concurrency: 4,
+      });
+      remoteHoldings = normalizePositions(computed.holdings || []);
+    } catch (error) {
+      const computed = await computeComposerHoldingsWeights({
+        holdingsObject: snapshot.publicHoldingsObject,
+        effectiveAsOfDateKey: remoteEffectiveAsOf,
+        lastBacktestValue: snapshot.lastBacktestValue ?? null,
+        priceSource,
+        dataAdjustment,
+        cacheOnly: false,
+        forceRefresh: false,
+        concurrency: 2,
+      });
+      remoteHoldings = normalizePositions(computed.holdings || []);
+    }
+  }
 
   // If Composer provides an effective holdings date and we run in previous-close mode, pass the next day
   // so TradingApp aligns to that previous close (effective date key).
@@ -154,9 +197,14 @@ const main = async () => {
     asOfMode,
     priceSource,
     priceRefresh,
+    simulateHoldings,
   });
 
-  const localHoldings = normalizePositions(localResult.positions || []);
+  const localHoldingsSource =
+    simulateHoldings && Array.isArray(localResult?.simulatedHoldings) && localResult.simulatedHoldings.length
+      ? localResult.simulatedHoldings
+      : localResult.positions || [];
+  const localHoldings = normalizePositions(localHoldingsSource);
   const comparison = compareWeights({ remote: remoteHoldings, local: localHoldings, tolerance });
 
   const output = {
@@ -171,6 +219,7 @@ const main = async () => {
       priceRefresh: priceRefresh ?? null,
       dataAdjustment,
       rsiMethod: rsiMethod || null,
+      simulateHoldings,
       tolerance,
       skipDb,
     },
@@ -204,4 +253,3 @@ main()
     }
     process.exit(1);
   });
-

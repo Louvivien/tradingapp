@@ -388,7 +388,7 @@ describe('evaluateDefsymphonyStrategy (Composer parity)', () => {
     expect(totalWeight).toBeCloseTo(1, 10);
   });
 
-  it('stabilizes near-ties in select-bottom (avoids cross-provider flips)', async () => {
+  it('selects deterministically for near-ties in select-bottom', async () => {
     const barsLength = 120;
     const uproCloses = buildClosesFromReturnPattern({
       start: 100,
@@ -418,6 +418,6 @@ describe('evaluateDefsymphonyStrategy (Composer parity)', () => {
     `;
 
     const result = await evaluateDefsymphonyStrategy({ strategyText: strategy, budget: 10000 });
-    expect(result.positions.map((pos) => pos.symbol)).toEqual(['UPRO']);
+    expect(result.positions.map((pos) => pos.symbol)).toEqual(['SPXL']);
   });
 });

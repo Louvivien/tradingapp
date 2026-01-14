@@ -14,6 +14,23 @@ const toISODateKey = (value) => {
 
 const toEndOfDayUtc = (dateKey) => new Date(`${dateKey}T23:59:59.999Z`);
 
+const shiftWeekendToPriorWeekday = (dateKey) => {
+  if (!DATE_KEY_RE.test(String(dateKey || ''))) {
+    return null;
+  }
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  const dow = date.getUTCDay(); // 0=Sun ... 6=Sat
+  if (dow === 6) {
+    date.setUTCDate(date.getUTCDate() - 1);
+  } else if (dow === 0) {
+    date.setUTCDate(date.getUTCDate() - 2);
+  }
+  return toISODateKey(date);
+};
+
 const addDaysUtc = (dateKey, days) => {
   if (!DATE_KEY_RE.test(String(dateKey || ''))) {
     return null;
@@ -52,19 +69,22 @@ const normalizeWeights = (rows) => {
     .sort((a, b) => a.symbol.localeCompare(b.symbol));
 };
 
-const findBarCloseForDateKey = (bars, dateKey) => {
+const findBarCloseOnOrBeforeDateKey = (bars, dateKey) => {
   if (!Array.isArray(bars) || !bars.length || !dateKey) {
     return null;
   }
   for (let idx = bars.length - 1; idx >= 0; idx -= 1) {
     const bar = bars[idx];
     const barKey = bar?.t ? toISODateKey(bar.t) : null;
-    if (barKey === dateKey) {
-      const close = Number(bar?.c);
-      return Number.isFinite(close) && close > 0 ? close : null;
+    if (!barKey) {
+      continue;
     }
-    if (barKey && barKey < dateKey) {
-      break;
+    if (barKey > dateKey) {
+      continue;
+    }
+    const close = Number(bar?.c);
+    if (Number.isFinite(close) && close > 0) {
+      return { close, dateKeyUsed: barKey };
     }
   }
   return null;
@@ -84,8 +104,10 @@ const fetchClosePriceOnDate = async ({
   if (!DATE_KEY_RE.test(String(dateKey || ''))) {
     throw new Error(`Invalid date key "${dateKey}".`);
   }
-  const end = toEndOfDayUtc(dateKey);
-  const startKey = addDaysUtc(dateKey, -14);
+
+  const pricingEndKey = shiftWeekendToPriorWeekday(dateKey) || dateKey;
+  const end = toEndOfDayUtc(pricingEndKey);
+  const startKey = addDaysUtc(pricingEndKey, -14);
   const start = startKey ? new Date(`${startKey}T00:00:00.000Z`) : new Date(end.getTime() - 14 * 86400 * 1000);
   const response = await getCachedPrices({
     symbol,
@@ -97,11 +119,15 @@ const fetchClosePriceOnDate = async ({
     minBars: 1,
     cacheOnly,
   });
-  const close = findBarCloseForDateKey(response?.bars || [], dateKey);
-  if (!close) {
-    throw new Error(`Missing close price for ${symbol} on ${dateKey}.`);
+  const closeMatch = findBarCloseOnOrBeforeDateKey(response?.bars || [], dateKey);
+  if (!closeMatch?.close) {
+    throw new Error(`Missing close price for ${symbol} on or before ${dateKey}.`);
   }
-  return { close, dataSource: response?.dataSource || null };
+  return {
+    close: closeMatch.close,
+    dateKeyUsed: closeMatch.dateKeyUsed,
+    dataSource: response?.dataSource || null,
+  };
 };
 
 const inferHoldingsUnits = ({ totalAmount, lastBacktestValue }) => {
@@ -173,6 +199,7 @@ const computeComposerHoldingsWeights = async ({
 
   const prices = {};
   const dataSources = {};
+  const priceDateKeys = {};
   const values = {};
   const errors = [];
 
@@ -188,6 +215,7 @@ const computeComposerHoldingsWeights = async ({
       });
       prices[row.symbol] = result.close;
       dataSources[row.symbol] = result.dataSource;
+      priceDateKeys[row.symbol] = result.dateKeyUsed || null;
       values[row.symbol] = row.amount * result.close;
     } catch (error) {
       errors.push({ symbol: row.symbol, error: error?.message || String(error) });
@@ -225,6 +253,7 @@ const computeComposerHoldingsWeights = async ({
       lastBacktestValue: Number.isFinite(Number(lastBacktestValue)) ? Number(lastBacktestValue) : null,
       pricedBy: priceSource || null,
       prices,
+      priceDateKeys,
       priceDataSources: dataSources,
     },
   };
@@ -234,4 +263,3 @@ module.exports = {
   computeComposerHoldingsWeights,
   holdingsObjectToRows,
 };
-

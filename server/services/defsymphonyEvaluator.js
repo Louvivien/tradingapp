@@ -507,31 +507,36 @@ const alignPriceDataToCommonAxis = ({ priceData, requiredBars, preferredSymbol }
 
   const rawAxisKeys = pickDateAxis(barsBySymbol, preferredSymbol);
   const axisKeys = rawAxisKeys.filter((key) => key <= commonEndKey);
-  if (axisKeys.length < required) {
-    return { priceData, usableHistory: axisKeys.length, axisKeys };
+  if (!axisKeys.length) {
+    return { priceData, usableHistory: 0, axisKeys: [] };
   }
-  const tailAxisKeys = axisKeys.slice(axisKeys.length - required);
+  const barsToUse = Math.min(required, axisKeys.length);
+  const tailAxisKeys = axisKeys.slice(axisKeys.length - barsToUse);
 
   const aligned = new Map();
   for (const symbol of Array.from(barsBySymbol.keys()).sort()) {
     const barMap = barsBySymbol.get(symbol);
     const built = buildAlignedSeriesForAxis(symbol, barMap, tailAxisKeys);
-    if (!built || !Array.isArray(built.closes) || built.closes.length !== tailAxisKeys.length) {
+    if (!built || !Array.isArray(built.closes) || !built.closes.length) {
       continue;
     }
     const meta = metaBySymbol.get(symbol) || {};
     aligned.set(symbol, {
       ...built,
-      offset: 0,
+      offset: built.offset || 0,
       dataSource: meta.dataSource || null,
       refreshedAt: meta.refreshedAt || null,
     });
   }
 
+  if (aligned.size !== barsBySymbol.size) {
+    return { priceData, usableHistory: 0, axisKeys: [] };
+  }
+
   return {
-    priceData: aligned.size ? aligned : priceData,
-    usableHistory: aligned.size ? tailAxisKeys.length : 0,
-    axisKeys: aligned.size ? tailAxisKeys : [],
+    priceData: aligned,
+    usableHistory: tailAxisKeys.length,
+    axisKeys: tailAxisKeys,
   };
 };
 
@@ -909,7 +914,20 @@ const multiplyPositions = (positions = [], factor = 1) =>
     weight: pos.weight * factor,
   }));
 
-const ensureArray = (value) => (isArray(value) ? value : [value]);
+const ensureArray = (value) => {
+  if (value == null) {
+    return [];
+  }
+  if (isArray(value)) {
+    // AST nodes are themselves arrays like `['asset', 'SPY']`; wrap those so callers can safely iterate
+    // over a list of nodes without accidentally iterating over a node's arguments.
+    if (value.length && typeof value[0] === 'string') {
+      return [value];
+    }
+    return value;
+  }
+  return [value];
+};
 
 const extractSymbolFromAssetNode = (node) => {
   if (!isArray(node)) {
@@ -1475,7 +1493,9 @@ const applySelector = (selectorNode, scoredAssets) => {
   const count = Number(selectorNode[1] || 1);
   const sorted = scoredAssets.map((entry, index) => ({ entry, index }));
   const epsilonAbs = 1e-10;
-  const epsilonRel = 0.005; // tolerate <=0.5% relative metric deltas as ties (stabilizes cross-provider near-ties)
+  // Composer selection behaves deterministically based on the computed metric value; treating small
+  // relative differences as ties can change which ticker is selected (notably for top/bottom sorts).
+  const epsilonRel = 0;
   const compareWithTolerance = (av, bv) => {
     const diff = av - bv;
     const tol = Math.max(epsilonAbs, epsilonRel * Math.max(Math.abs(av), Math.abs(bv)));
@@ -2137,6 +2157,7 @@ const evaluateDefsymphonyStrategy = async ({
   requireCompleteUniverse = null,
   allowFallbackAllocations = null,
   requireAsOfDateCoverage = null,
+  simulateHoldings = null,
 }) => {
   const ast = parseComposerScript(strategyText);
   if (!ast) {
@@ -2149,10 +2170,12 @@ const evaluateDefsymphonyStrategy = async ({
   }
   const blueprint = buildEvaluationBlueprint(ast) || [];
   const nodeIdMap = assignNodeIds(ast);
+  const rebalanceConfig = extractRebalanceConfig(ast);
 
   const rsiWindow = Math.max(0, Number(astStats.maxRsiWindow) || 0);
-  // Keep RSI warmup lean to match Composer parity (no excessive buffer).
-  const rsiHistoryBuffer = rsiWindow ? rsiWindow : 0;
+  // Wilder RSI values depend on the initial seed; Composer's backtests effectively include a
+  // long warmup period, so mirror the backtest evaluator's buffer here for parity.
+  const rsiHistoryBuffer = rsiWindow ? 250 : 0;
 
   const resolvedAsOfDate = normalizeAsOfDate(asOfDate) || now();
   const resolvedRsiMethod =
@@ -2184,12 +2207,19 @@ const evaluateDefsymphonyStrategy = async ({
   const resolvedRequireCompleteUniverse = normalizeBoolean(requireCompleteUniverse) ?? true;
   const resolvedAllowFallbackAllocations = normalizeBoolean(allowFallbackAllocations) ?? false;
   const resolvedRequireAsOfDateCoverage = normalizeBoolean(requireAsOfDateCoverage) ?? false;
+  const resolvedSimulateHoldings = normalizeBoolean(simulateHoldings) ?? false;
 
-  const requiredBars = Math.max(
+  const indicatorBars = Math.max(
     Math.max(0, Number(astStats.maxWindow) || 0) + 5,
     rsiWindow + rsiHistoryBuffer,
     30
   );
+  const wantsHoldingsSimulation = resolvedSimulateHoldings && rebalanceConfig.mode !== 'daily';
+  // `requiredBars` controls how much history we *try* to load and keep for evaluation/simulation.
+  // `minBars` is the minimum we require to compute the latest-bar indicators; simulation can run
+  // on shorter histories when tickers are new/illiquid (Composer will similarly operate on available data).
+  const requiredBars = wantsHoldingsSimulation ? indicatorBars + 252 : indicatorBars;
+  const minBars = indicatorBars;
   const calendarLookbackDays = Math.min(
     MAX_CALENDAR_LOOKBACK_DAYS,
     Math.ceil((requiredBars * CALENDAR_DAYS_PER_YEAR) / TRADING_DAYS_PER_YEAR) + 7
@@ -2203,7 +2233,7 @@ const evaluateDefsymphonyStrategy = async ({
       asOfMode: resolvedAsOfMode,
       priceSource: resolvedPriceSource,
       forceRefresh,
-      minBars: requiredBars,
+      minBars,
     });
   };
 
@@ -2535,10 +2565,136 @@ const evaluateDefsymphonyStrategy = async ({
   }
   summaryLines.push(`Final tradable allocation: ${describePositionPlan(withPricing)}.`);
 
+  let simulatedHoldings = null;
+  let simulatedHoldingsMeta = null;
+  if (wantsHoldingsSimulation) {
+    try {
+      const calendarSymbol = tickers.includes('SPY') ? 'SPY' : tickers[0];
+      const calendarSeries = priceData.get(calendarSymbol) || priceData.get(tickers[0]);
+      const axisKeys = Array.isArray(calendarSeries?.bars)
+        ? calendarSeries.bars
+            .map((bar) => toISODateKey(bar?.t || bar?.timestamp))
+            .filter(Boolean)
+        : [];
+
+      const simulationStartIndex = Math.max(1, Math.min(axisKeys.length - 1, Math.max(1, (Number(astStats.maxWindow) || 0) + 1)));
+      if (axisKeys.length > simulationStartIndex) {
+        const baseSimContext = {
+          ...context,
+          reasoning: null,
+          previewStack: null,
+        };
+        let heldWeights = null;
+        let rebalanceCount = 0;
+
+        for (let idx = simulationStartIndex; idx < axisKeys.length; idx += 1) {
+          const dateKey = axisKeys[idx];
+          const prevDateKey = axisKeys[idx - 1];
+
+          // Drift holdings from the prior close to the current close before evaluating new signals.
+          let currentWeights = heldWeights ? new Map(heldWeights) : new Map();
+          if (heldWeights?.size) {
+            const drifted = new Map();
+            let driftTotal = 0;
+            heldWeights.forEach((weight, symbol) => {
+              const series = priceData.get(String(symbol).toUpperCase());
+              if (!series || !Array.isArray(series.closes) || !series.closes.length) {
+                return;
+              }
+              const offset = Number(series.offset) || 0;
+              const relIdx = idx - offset;
+              const prevRelIdx = relIdx - 1;
+              if (prevRelIdx < 0) {
+                return;
+              }
+              const prev = series.closes[Math.min(prevRelIdx, series.closes.length - 1)];
+              const curr = series.closes[Math.min(Math.max(relIdx, 0), series.closes.length - 1)];
+              if (!Number.isFinite(prev) || !Number.isFinite(curr) || prev <= 0) {
+                return;
+              }
+              const assetReturn = (curr - prev) / prev;
+              const driftedWeight = Number(weight) * (1 + assetReturn);
+              if (!Number.isFinite(driftedWeight) || driftedWeight <= 0) {
+                return;
+              }
+              drifted.set(symbol, driftedWeight);
+              driftTotal += driftedWeight;
+            });
+
+            if (driftTotal > 0) {
+              drifted.forEach((weight, symbol) => {
+                drifted.set(symbol, weight / driftTotal);
+              });
+              currentWeights = drifted;
+            }
+          }
+
+          const simCtx = {
+            ...baseSimContext,
+            priceIndex: idx,
+            metricCache: new WeakMap(),
+          };
+
+          let targetPositions = [];
+          try {
+            const raw = evaluateNode(ast, 1, simCtx);
+            targetPositions = safeNormalizePositions(raw);
+          } catch (error) {
+            targetPositions = [];
+          }
+
+          const targetWeights = new Map();
+          targetPositions.forEach((pos) => {
+            if (pos?.symbol) {
+              targetWeights.set(pos.symbol, Number(pos.weight) || 0);
+            }
+          });
+
+          const effectiveTargetWeights = targetWeights.size ? targetWeights : currentWeights;
+          const scheduledRebalance =
+            !heldWeights ||
+            (rebalanceConfig.mode !== 'threshold' &&
+              shouldRebalanceOnDate(rebalanceConfig.mode, dateKey, prevDateKey));
+
+          const turnoverToTarget = heldWeights ? computeTurnover(currentWeights, effectiveTargetWeights) : 0;
+          const shouldRebalance =
+            !heldWeights ||
+            (rebalanceConfig.mode === 'threshold'
+              ? turnoverToTarget > (rebalanceConfig.threshold || 0)
+              : scheduledRebalance);
+          if (shouldRebalance) {
+            rebalanceCount += 1;
+          }
+          heldWeights = shouldRebalance ? effectiveTargetWeights : currentWeights;
+        }
+
+        if (heldWeights?.size) {
+          simulatedHoldings = Array.from(heldWeights.entries())
+            .filter(([symbol, weight]) => symbol && Number.isFinite(weight) && weight > 0)
+            .map(([symbol, weight]) => ({ symbol: String(symbol).toUpperCase(), weight }))
+            .sort((a, b) => a.symbol.localeCompare(b.symbol));
+          simulatedHoldingsMeta = {
+            mode: rebalanceConfig.mode,
+            threshold: rebalanceConfig.mode === 'threshold' ? rebalanceConfig.threshold : null,
+            barsSimulated: axisKeys.length,
+            startDate: axisKeys[simulationStartIndex] || null,
+            endDate: axisKeys[axisKeys.length - 1] || null,
+            rebalances: rebalanceCount,
+          };
+        }
+      }
+    } catch (error) {
+      simulatedHoldings = null;
+      simulatedHoldingsMeta = { error: error?.message || String(error) };
+    }
+  }
+
   return {
     summary: summaryLines.join(' '),
     reasoning: context.reasoning,
     positions: withPricing,
+    simulatedHoldings,
+    simulatedHoldingsMeta,
     data_source: 'local-cache',
     meta: {
       engine: 'local',

@@ -56,6 +56,7 @@ const HoldingsCompare = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [results, setResults] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [hasRun, setHasRun] = useState(false);
   const [onlyMismatched, setOnlyMismatched] = useState(true);
   const [limit, setLimit] = useState("50");
@@ -71,6 +72,7 @@ const HoldingsCompare = () => {
     setHasRun(true);
 
     try {
+      setSummary(null);
       const headers = { "x-auth-token": authToken };
       const url = `${config.base_url}/api/strategies/composer-holdings/compare-all/${userId}`;
       const response = await Axios.get(url, {
@@ -85,10 +87,12 @@ const HoldingsCompare = () => {
       if (response.data?.status !== "success") {
         throw new Error(response.data?.message || "Failed to compare holdings.");
       }
+      setSummary(response.data?.summary || null);
       setResults(Array.isArray(response.data?.results) ? response.data.results : []);
     } catch (err) {
       setError(err?.response?.data?.message || err?.message || "Failed to load comparison.");
       setResults([]);
+      setSummary(null);
     } finally {
       setLoading(false);
     }
@@ -110,6 +114,11 @@ const HoldingsCompare = () => {
           <Typography variant="body2" color="text.secondary">
             Compares Composer link holdings vs TradingApp local evaluator (skips Polymarket/non-Composer links).
           </Typography>
+          {summary && (
+            <Typography variant="caption" color="text.secondary">
+              Compared {summary.total} strategies • {summary.mismatched} mismatched • tolerance {summary.tolerance}
+            </Typography>
+          )}
         </Box>
         <Box className={styles.controls}>
           <TextField
@@ -257,7 +266,11 @@ const HoldingsCompare = () => {
                 <TableRow>
                   <TableCell colSpan={5}>
                     <Typography variant="body2" color="text.secondary">
-                      No strategies to show.
+                      {results.length
+                        ? onlyMismatched
+                          ? 'No mismatches found. Turn off "Only mismatched" to view all strategies.'
+                          : "No strategies to show."
+                        : "No Composer-linked strategies found."}
                     </Typography>
                   </TableCell>
                 </TableRow>
