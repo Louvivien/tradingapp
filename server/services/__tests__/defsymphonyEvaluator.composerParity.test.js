@@ -232,7 +232,7 @@ describe('evaluateDefsymphonyStrategy (Composer parity)', () => {
     expect(result.positions.map((pos) => pos.symbol)).toEqual(['AAA']);
   });
 
-  it('uses prior session data in previous-close mode (drops the as-of-day bar even if present)', async () => {
+  it('uses the prior session close in previous-close mode before US close', async () => {
     const buildBars = (dateKeys, closes) => ({
       bars: dateKeys.map((dateKey, index) => {
         const close = closes[index];
@@ -272,13 +272,63 @@ describe('evaluateDefsymphonyStrategy (Composer parity)', () => {
     const result = await evaluateDefsymphonyStrategy({
       strategyText: strategy,
       budget: 10000,
+      // 2020-01-03 15:00 ET (before close)
+      asOfDate: '2020-01-03T20:00:00.000Z',
+      asOfMode: 'previous-close',
+    });
+
+    // Before the US close on 2020-01-03, the last completed session is 2020-01-02,
+    // so AAA wins (20 vs 15).
+    expect(result.positions.map((pos) => pos.symbol)).toEqual(['AAA']);
+  });
+
+  it('uses the same-day close in previous-close mode after US close', async () => {
+    const buildBars = (dateKeys, closes) => ({
+      bars: dateKeys.map((dateKey, index) => {
+        const close = closes[index];
+        return {
+          t: `${dateKey}T00:00:00.000Z`,
+          o: close,
+          h: close,
+          l: close,
+          c: close,
+          v: 1000,
+        };
+      }),
+    });
+
+    getCachedPrices.mockImplementation(async ({ symbol }) => {
+      const upper = symbol.toUpperCase();
+      if (upper === 'AAA') {
+        return buildBars(['2020-01-01', '2020-01-02', '2020-01-03'], [10, 20, 5]);
+      }
+      if (upper === 'BBB') {
+        return buildBars(['2020-01-01', '2020-01-02', '2020-01-03'], [10, 15, 30]);
+      }
+      throw new Error(`Unexpected symbol ${symbol}`);
+    });
+
+    const strategy = `
+      (defsymphony "Prev Close Current Price" {}
+        (filter
+          (current-price)
+          (select-top 1)
+          [
+            (asset "AAA")
+            (asset "BBB")
+          ]))
+    `;
+
+    const result = await evaluateDefsymphonyStrategy({
+      strategyText: strategy,
+      budget: 10000,
+      // Date keys are treated as "after close", so 2020-01-03 is in scope.
       asOfDate: '2020-01-03',
       asOfMode: 'previous-close',
     });
 
-    // If the evaluator included the 2020-01-03 bar, BBB would win (30 vs 5).
-    // Composer previous-close semantics evaluate at the prior session close (2020-01-02), so AAA wins (20 vs 15).
-    expect(result.positions.map((pos) => pos.symbol)).toEqual(['AAA']);
+    // With the 2020-01-03 bar included, BBB wins (30 vs 5).
+    expect(result.positions.map((pos) => pos.symbol)).toEqual(['BBB']);
   });
 
   it('parity: evaluates the full sorts + inverse-volatility fixture deterministically', async () => {

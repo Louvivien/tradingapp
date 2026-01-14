@@ -74,15 +74,6 @@ const toDateKey = (date) => {
   return d.toISOString().slice(0, 10);
 };
 
-const addDays = (dayKey, days) => {
-  if (!dayKey || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey))) {
-    return null;
-  }
-  const d = new Date(`${dayKey}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + Number(days || 0));
-  return toDateKey(d);
-};
-
 const sha256 = (value) =>
   crypto.createHash('sha256').update(String(value || ''), 'utf8').digest('hex');
 
@@ -247,12 +238,7 @@ const main = async () => {
       }
 
       const strategyText = strategyTextSource === 'link' ? snapshot.strategyText : dbText;
-      const asOfDate =
-        args.asOfDate ||
-        (asOfMode === 'previous-close' && entry.composer.effectiveAsOfDate
-          ? addDays(entry.composer.effectiveAsOfDate, 1)
-          : entry.composer.effectiveAsOfDate) ||
-        null;
+      const asOfDate = args.asOfDate || entry.composer.effectiveAsOfDate || null;
 
       const localResult = await runComposerStrategy({
         strategyText,

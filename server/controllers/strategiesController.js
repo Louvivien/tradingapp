@@ -2295,13 +2295,13 @@ exports.createPolymarketCopyTrader = async (req, res) => {
           strategyName: rawName,
           level: 'warn',
           message: 'Polymarket initial sync failed',
-	          details: {
-	            provider: 'polymarket',
-	            mode: initialMode,
-	            error: String(error?.message || error),
-	          },
-	        });
-	      }
+          details: {
+            provider: 'polymarket',
+            mode: initialMode,
+            error: String(error?.message || error),
+          },
+        });
+      }
     });
 
     return res.status(200).json({
@@ -3205,11 +3205,7 @@ exports.compareComposerHoldingsAll = async (req, res) => {
 
         if (entry.status === 'ok') {
           const resolvedAsOfDate =
-            asOfDate ||
-            (asOfMode === 'previous-close' && entry.composer.effectiveAsOfDate
-              ? addDays(entry.composer.effectiveAsOfDate, 1)
-              : entry.composer.effectiveAsOfDate) ||
-            null;
+            asOfDate || entry.composer.effectiveAsOfDate || null;
 
           const local = await runComposerStrategy({
             strategyText,

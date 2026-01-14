@@ -76,7 +76,8 @@ describe('evaluateDefsymphonyStrategy (EM strategy branch parity)', () => {
     const result = await evaluateDefsymphonyStrategy({
       strategyText: strategy,
       budget: 10000,
-      asOfDate: '2026-01-07',
+      // 2026-01-07 15:00 ET (before close) -> previous-close targets the 2026-01-06 bar.
+      asOfDate: '2026-01-07T20:00:00.000Z',
       asOfMode: 'previous-close',
       priceSource: 'tiingo',
       dataAdjustment: 'all',

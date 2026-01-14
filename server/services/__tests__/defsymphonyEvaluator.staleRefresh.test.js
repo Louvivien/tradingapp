@@ -75,7 +75,8 @@ describe('evaluateDefsymphonyStrategy (stale cache refresh)', () => {
     const result = await evaluateDefsymphonyStrategy({
       strategyText: strategy,
       budget: 10000,
-      asOfDate: '2026-01-06',
+      // 2026-01-06 15:00 ET (before close) -> previous-close targets the 2026-01-05 bar.
+      asOfDate: '2026-01-06T20:00:00.000Z',
       asOfMode: 'previous-close',
       priceSource: 'tiingo',
       dataAdjustment: 'all',
@@ -95,4 +96,3 @@ describe('evaluateDefsymphonyStrategy (stale cache refresh)', () => {
     expect(teclCalls.some((call) => call.forceRefresh === true && call.cacheOnly === false)).toBe(true);
   });
 });
-

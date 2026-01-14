@@ -64,15 +64,6 @@ const toDateKey = (value) => {
   return date.toISOString().slice(0, 10);
 };
 
-const addDays = (dayKey, days) => {
-  if (!dayKey || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey))) {
-    return null;
-  }
-  const date = new Date(`${dayKey}T00:00:00.000Z`);
-  date.setUTCDate(date.getUTCDate() + Number(days || 0));
-  return toDateKey(date);
-};
-
 const sanitizeSymbol = (value) => String(value || '').trim().toUpperCase();
 
 const toNumber = (value, fallback = null) => {
@@ -240,11 +231,7 @@ const main = async () => {
 
       if (entry.status === 'ok') {
         const resolvedAsOfDate =
-          asOfDate ||
-          (asOfMode === 'previous-close' && entry.composer.effectiveAsOfDate
-            ? addDays(entry.composer.effectiveAsOfDate, 1)
-            : entry.composer.effectiveAsOfDate) ||
-          null;
+          asOfDate || entry.composer.effectiveAsOfDate || null;
 
         const local = await runComposerStrategy({
           strategyText,

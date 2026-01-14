@@ -759,6 +759,64 @@ const toISODateKey = (value) => {
   return date.toISOString().slice(0, 10);
 };
 
+const shiftDateKeyUtc = (dateKey, days) => {
+  if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey))) {
+    return null;
+  }
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return toISODateKey(date);
+};
+
+const isWeekendDateKey = (dateKey) => {
+  if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(String(dateKey))) {
+    return false;
+  }
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+  const dow = date.getUTCDay(); // 0=Sun, 6=Sat
+  return dow === 0 || dow === 6;
+};
+
+const previousTradingDayKey = (dateKey) => {
+  let cursor = shiftDateKeyUtc(dateKey, -1);
+  let safety = 0;
+  while (cursor && isWeekendDateKey(cursor) && safety < 7) {
+    cursor = shiftDateKeyUtc(cursor, -1);
+    safety += 1;
+  }
+  return cursor;
+};
+
+const computeLastUsMarketCloseDateKey = (value, { dateKeyOverride } = {}) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+
+  const nyDateKey = formatDateKeyInTimeZone(date, 'America/New_York') || toISODateKey(date);
+  if (!nyDateKey) {
+    return null;
+  }
+
+  const afterClose = isAfterUsMarketClose(date, { dateKeyOverride });
+  if (afterClose) {
+    return isWeekendDateKey(nyDateKey) ? previousTradingDayKey(nyDateKey) : nyDateKey;
+  }
+
+  return previousTradingDayKey(nyDateKey);
+};
+
+const computeLastUsMarketCloseEndUtc = (value, { dateKeyOverride } = {}) => {
+  const closeKey = computeLastUsMarketCloseDateKey(value, { dateKeyOverride });
+  return closeKey ? new Date(`${closeKey}T23:59:59.999Z`) : null;
+};
+
 const normalizePriceSource = (value) => {
   if (!value) {
     return null;
@@ -1911,18 +1969,6 @@ const loadPriceData = async (
   calendarLookbackDays = DEFAULT_LOOKBACK_BARS,
   options = {}
 ) => {
-  const computePreviousTradingCloseEndUtc = (value) => {
-    const date = value instanceof Date ? new Date(value) : new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-    const dow = date.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    const daysBack = dow === 1 ? 3 : dow === 0 ? 2 : 1;
-    const prior = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
-    prior.setUTCDate(prior.getUTCDate() - daysBack);
-    return prior;
-  };
-
   const diffDaysUtc = (a, b) => {
     if (!a || !b) {
       return null;
@@ -1966,7 +2012,7 @@ const loadPriceData = async (
   const adjustment = options.dataAdjustment;
   const asOfMode = normalizeAsOfMode(options.asOfMode) || 'previous-close';
   const targetEnd = asOfMode === 'previous-close'
-    ? (computePreviousTradingCloseEndUtc(asOfDate) || asOfDate)
+    ? (computeLastUsMarketCloseEndUtc(asOfDate, { dateKeyOverride: asOfDateKeyOverride }) || asOfDate)
     : asOfDate;
   const targetEndDayKey = toISODateKey(targetEnd);
   const end = targetEnd;
@@ -2009,22 +2055,6 @@ const loadPriceData = async (
         });
       }
 
-      if (asOfMode === 'previous-close' && bars.length > 1) {
-        // Use a consistent day-key basis across the evaluator:
-        // - stale-series detection uses `toISODateKey()` (UTC-based)
-        // - some data sources timestamp daily bars at 00:00Z for the labeled session date
-        // So we compute the as-of drop keys using `toISODateKey()` as well.
-        const asOfDayKey = asOfDateKeyOverride ? asOfDateKeyOverride : toISODateKey(asOfDate);
-        const lastBar = bars[bars.length - 1];
-        const lastDayKey = lastBar?.t ? toISODateKey(lastBar.t) : null;
-        // Composer "previous-close" semantics evaluate window functions using the previous market session,
-        // so we never include the bar for the as-of day itself (even if the close is already published).
-        const shouldDropAsOfBar = asOfDayKey && lastDayKey && lastDayKey === asOfDayKey;
-        if (shouldDropAsOfBar) {
-          bars = bars.slice(0, -1);
-        }
-      }
-
       // If we were asked for a specific as-of date but only have stale cached bars,
       // force a refresh once to align with Composer's holdings decisions.
       const lastBarTimestamp = bars.length ? bars[bars.length - 1]?.t : null;
@@ -2045,14 +2075,6 @@ const loadPriceData = async (
             : refreshedBars;
           dataSource = refreshedResponse?.dataSource || dataSource;
           refreshedAt = refreshedResponse?.refreshedAt || refreshedAt;
-          if (asOfMode === 'previous-close' && bars.length > 1) {
-            const asOfDayKey = asOfDateKeyOverride ? asOfDateKeyOverride : toISODateKey(asOfDate);
-            const lastBar = bars[bars.length - 1];
-            const lastDayKey = lastBar?.t ? toISODateKey(lastBar.t) : null;
-            if (asOfDayKey && lastDayKey && lastDayKey === asOfDayKey) {
-              bars = bars.slice(0, -1);
-            }
-          }
         }
       }
       if (appendLivePrice) {
@@ -2247,19 +2269,8 @@ const evaluateDefsymphonyStrategy = async ({
   let missingFromCache = Array.isArray(missingFromCacheRaw) ? [...missingFromCacheRaw] : [];
   let effectiveAsOfDate = dataAsOfDate || resolvedAsOfDate;
 
-  const computeExpectedMarketCloseEndUtc = (value) => {
-    const date = value instanceof Date ? new Date(value) : new Date(value);
-    if (Number.isNaN(date.getTime())) {
-      return null;
-    }
-    const dow = date.getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
-    const daysBack = dow === 1 ? 3 : dow === 0 ? 2 : 1;
-    const prior = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate(), 23, 59, 59, 999));
-    prior.setUTCDate(prior.getUTCDate() - daysBack);
-    return prior;
-  };
   const expectedTargetEnd = (resolvedAsOfMode || resolvedDataAsOfMode) === 'previous-close'
-    ? (computeExpectedMarketCloseEndUtc(resolvedAsOfDate) || resolvedAsOfDate)
+    ? (computeLastUsMarketCloseEndUtc(resolvedAsOfDate, { dateKeyOverride: normalizeDateKeyInput(asOfDate) }) || resolvedAsOfDate)
     : resolvedAsOfDate;
   const expectedTargetEndKey = expectedTargetEnd ? toISODateKey(expectedTargetEnd) : null;
 
@@ -2417,16 +2428,15 @@ const evaluateDefsymphonyStrategy = async ({
     metricCache: new WeakMap(),
     missingSymbols: new Map(),
     nodeIdMap,
-	    enableGroupMetrics: false,
-	    debugIndicators: resolvedDebugIndicators,
-	    rsiMethod: resolvedRsiMethod,
-	    requireMarketData: resolvedRequireMarketData,
-	    allowFallbackAllocations: resolvedAllowFallbackAllocations,
-	    asOfMode: resolvedDataAsOfMode || resolvedAsOfMode,
+    enableGroupMetrics: false,
+    debugIndicators: resolvedDebugIndicators,
+    rsiMethod: resolvedRsiMethod,
+    requireMarketData: resolvedRequireMarketData,
+    allowFallbackAllocations: resolvedAllowFallbackAllocations,
+    asOfMode: resolvedDataAsOfMode || resolvedAsOfMode,
     priceSource: resolvedPriceSource,
-    // `loadPriceData()` already enforces "previous-close" semantics by dropping today's unfinished
-    // daily bar when needed. Only drop the latest bar from indicator calculations when we explicitly
-    // appended a live quote on top of the previous-close history.
+    // `loadPriceData()` enforces "previous-close" semantics by ending at the last completed US market close.
+    // Only drop the latest bar from indicator calculations when we explicitly appended a live quote on top.
     usePreviousBarForIndicators:
       (resolvedDataAsOfMode || resolvedAsOfMode) === 'previous-close' && Boolean(appendLivePrice),
     asOfDate: effectiveAsOfDate,
@@ -2456,14 +2466,14 @@ const evaluateDefsymphonyStrategy = async ({
     );
   }
 
-	  let rawPositions = evaluateNode(ast, 1, context);
-	  if (!rawPositions.length) {
-	    if (resolvedAllowFallbackAllocations && !resolvedRequireMarketData) {
-	      const fallbackSymbols = tickers.filter((symbol) => context.priceData.has(symbol));
-	      if (fallbackSymbols.length) {
-	        context.reasoning.push(
-	          `Step 2a: Primary evaluation returned no tradable allocations. Applying equal-weight fallback across ${fallbackSymbols.length} tickers that have price data.`
-	        );
+  let rawPositions = evaluateNode(ast, 1, context);
+  if (!rawPositions.length) {
+    if (resolvedAllowFallbackAllocations && !resolvedRequireMarketData) {
+      const fallbackSymbols = tickers.filter((symbol) => context.priceData.has(symbol));
+      if (fallbackSymbols.length) {
+        context.reasoning.push(
+          `Step 2a: Primary evaluation returned no tradable allocations. Applying equal-weight fallback across ${fallbackSymbols.length} tickers that have price data.`
+        );
         const equalWeight = 1 / fallbackSymbols.length;
         rawPositions = fallbackSymbols.map((symbol) => ({
           symbol,

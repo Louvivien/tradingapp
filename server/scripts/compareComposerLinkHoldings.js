@@ -69,15 +69,6 @@ const toDateKey = (date) => {
   return d.toISOString().slice(0, 10);
 };
 
-const addDays = (dayKey, days) => {
-  if (!dayKey || !/^\d{4}-\d{2}-\d{2}$/.test(String(dayKey))) {
-    return null;
-  }
-  const d = new Date(`${dayKey}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + Number(days || 0));
-  return toDateKey(d);
-};
-
 const normalizePositions = (positions = []) => {
   const rows = (positions || [])
     .map((pos) => {
@@ -180,12 +171,9 @@ const main = async () => {
     }
   }
 
-  // If Composer provides an effective holdings date and we run in previous-close mode, pass the next day
-  // so TradingApp aligns to that previous close (effective date key).
-  const asOfDate =
-    args.asOfDate ||
-    (asOfMode === 'previous-close' && remoteEffectiveAsOf ? addDays(remoteEffectiveAsOf, 1) : remoteEffectiveAsOf) ||
-    null;
+  // Default to Composer's effective holdings date key when present.
+  // The evaluator treats date keys as "after close", keeping previous-close runs aligned.
+  const asOfDate = args.asOfDate || remoteEffectiveAsOf || null;
 
   const localResult = await runComposerStrategy({
     strategyText: snapshot.strategyText,
