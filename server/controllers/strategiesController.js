@@ -3125,13 +3125,14 @@ exports.compareComposerHoldingsAll = async (req, res) => {
     const sleepMs = Math.max(0, Math.min(2000, Number(req.query?.sleepMs ?? 150)));
     const asOfMode = String(req.query?.asOfMode || 'previous-close').trim();
     const asOfDate = req.query?.asOfDate ? String(req.query.asOfDate).trim() : null;
+    const asOfTargetRaw = req.query?.asOfTarget ?? req.query?.target ?? null;
     const priceSource = req.query?.priceSource ? String(req.query.priceSource).trim() : null;
     const priceRefresh = req.query?.priceRefresh ?? null;
     const dataAdjustment = req.query?.dataAdjustment ? String(req.query.dataAdjustment).trim() : null;
     const rsiMethod = req.query?.rsiMethod ? String(req.query.rsiMethod).trim() : null;
     const debugIndicators = normalizeBoolean(req.query?.debugIndicators) ?? true;
     const simulateHoldings = normalizeBoolean(req.query?.simulateHoldings) ?? true;
-    const budget = Math.max(1, toNumber(req.query?.budget, 10000));
+    const budgetOverride = toNumber(req.query?.budget, null);
     const strategyTextSource = String(req.query?.strategyTextSource || 'db')
       .trim()
       .toLowerCase(); // db|link
@@ -3143,6 +3144,39 @@ exports.compareComposerHoldingsAll = async (req, res) => {
       });
     }
 
+    const normalizeAsOfTarget = (value) => {
+      const normalized = String(value || '').trim().toLowerCase();
+      if (!normalized) {
+        return 'next-rebalance';
+      }
+      if (['next', 'nextrebalance', 'next-rebalance', 'rebalance', 'schedule'].includes(normalized)) {
+        return 'next-rebalance';
+      }
+      if (['composer', 'composer-effective', 'effective', 'snapshot'].includes(normalized)) {
+        return 'composer-effective';
+      }
+      return null;
+    };
+
+    const asOfTarget = normalizeAsOfTarget(asOfTargetRaw);
+    if (!asOfTarget) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Invalid asOfTarget. Use "next-rebalance" or "composer-effective".',
+      });
+    }
+
+    const portfolios = await Portfolio.find({ userId })
+      .select('strategy_id recurrence nextRebalanceAt cashLimit budget lastRebalancedAt')
+      .lean();
+    const portfolioByStrategyId = new Map();
+    (portfolios || []).forEach((portfolio) => {
+      const key = portfolio?.strategy_id ? String(portfolio.strategy_id) : null;
+      if (key) {
+        portfolioByStrategyId.set(key, portfolio);
+      }
+    });
+
     const strategies = await Strategy.find({ userId })
       .sort({ updatedAt: -1 })
       .limit(limit)
@@ -3153,6 +3187,7 @@ exports.compareComposerHoldingsAll = async (req, res) => {
     for (const strategy of strategies) {
       const url = strategy?.symphonyUrl ? String(strategy.symphonyUrl).trim() : null;
       const provider = String(strategy?.provider || 'alpaca').trim().toLowerCase();
+      const portfolio = portfolioByStrategyId.get(String(strategy?.strategy_id || '')) || null;
 
       if (!url || provider === 'polymarket' || !isComposerUrl(url)) {
         continue;
@@ -3164,6 +3199,20 @@ exports.compareComposerHoldingsAll = async (req, res) => {
         symphonyUrl: url,
         status: 'ok',
         errors: [],
+        prediction: {
+          asOfTarget,
+          asOfSource: null,
+          requestedAsOf: null,
+          nextRebalanceAt: portfolio?.nextRebalanceAt ? new Date(portfolio.nextRebalanceAt).toISOString() : null,
+          cashLimit: Number.isFinite(portfolio?.cashLimit) ? Number(portfolio.cashLimit) : null,
+          budget: null,
+          strategyTextMatchesComposer: null,
+          usedIncompleteUniverse: false,
+          matchesComposer: false,
+          canGuaranteeMatchNextRebalance: false,
+          confidence: 'unknown',
+          reasons: [],
+        },
         composer: {
           effectiveAsOfDate: null,
           holdings: [],
@@ -3190,6 +3239,16 @@ exports.compareComposerHoldingsAll = async (req, res) => {
         const dbStrategyText = String(strategy?.strategy || '').trim();
         const strategyText = strategyTextSource === 'link' ? snapshot.strategyText : dbStrategyText;
 
+        const dbTextHash = dbStrategyText
+          ? crypto.createHash('sha256').update(dbStrategyText).digest('hex')
+          : null;
+        const linkTextHash = snapshot?.strategyText
+          ? crypto.createHash('sha256').update(String(snapshot.strategyText)).digest('hex')
+          : null;
+        if (dbTextHash && linkTextHash) {
+          entry.prediction.strategyTextMatchesComposer = dbTextHash === linkTextHash;
+        }
+
         if (!entry.composer.holdings.length) {
           entry.status = 'error';
           entry.errors.push('Unable to extract Composer holdings from link.');
@@ -3204,22 +3263,84 @@ exports.compareComposerHoldingsAll = async (req, res) => {
         }
 
         if (entry.status === 'ok') {
-          const resolvedAsOfDate =
-            asOfDate || entry.composer.effectiveAsOfDate || null;
+          const resolvedBudget = Math.max(
+            1,
+            Number.isFinite(budgetOverride)
+              ? budgetOverride
+              : toNumber(portfolio?.cashLimit, toNumber(portfolio?.budget, 10000))
+          );
 
-          const local = await runComposerStrategy({
-            strategyText,
-            budget,
-            asOfDate: resolvedAsOfDate,
-            rsiMethod,
-            dataAdjustment,
-            debugIndicators,
-            asOfMode,
-            priceSource,
-            priceRefresh,
-            requireAsOfDateCoverage: true,
-            simulateHoldings,
-          });
+          const nextRebalanceAt = portfolio?.nextRebalanceAt ? new Date(portfolio.nextRebalanceAt) : null;
+          const resolvedAsOf = (() => {
+            if (asOfDate) {
+              return { value: asOfDate, source: 'explicit' };
+            }
+            if (asOfTarget === 'next-rebalance' && nextRebalanceAt) {
+              // Use the scheduled rebalance timestamp so the evaluator derives the same "previous-close"
+              // effective date it will use during the live rebalance window.
+              return { value: nextRebalanceAt, source: 'nextRebalanceAt' };
+            }
+            return { value: entry.composer.effectiveAsOfDate || null, source: 'composerEffective' };
+          })();
+          const resolvedAsOfDate = resolvedAsOf.value;
+
+          entry.prediction.requestedAsOf =
+            resolvedAsOfDate instanceof Date ? resolvedAsOfDate.toISOString() : resolvedAsOfDate;
+          entry.prediction.asOfSource = resolvedAsOf.source;
+          entry.prediction.budget = resolvedBudget;
+
+          const maxMissingForFallback = (() => {
+            const parsed = Number(process.env.REBALANCE_MAX_MISSING_TICKERS);
+            return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 3;
+          })();
+
+          let local = null;
+          let usedIncompleteUniverse = false;
+          let strictError = null;
+          try {
+            local = await runComposerStrategy({
+              strategyText,
+              budget: resolvedBudget,
+              asOfDate: resolvedAsOfDate,
+              rsiMethod,
+              dataAdjustment,
+              debugIndicators,
+              asOfMode,
+              priceSource,
+              priceRefresh,
+              requireAsOfDateCoverage: true,
+              simulateHoldings,
+            });
+          } catch (error) {
+            strictError = error;
+            const missingSymbols = Array.isArray(error?.missingSymbols) ? error.missingSymbols : [];
+            const canRetryIncompleteUniverse =
+              error?.code === 'INSUFFICIENT_MARKET_DATA' &&
+              missingSymbols.length > 0 &&
+              missingSymbols.length <= maxMissingForFallback;
+
+            if (canRetryIncompleteUniverse) {
+              usedIncompleteUniverse = true;
+              local = await runComposerStrategy({
+                strategyText,
+                budget: resolvedBudget,
+                asOfDate: resolvedAsOfDate,
+                rsiMethod,
+                dataAdjustment,
+                debugIndicators,
+                asOfMode,
+                priceSource,
+                priceRefresh,
+                requireCompleteUniverse: false,
+                requireAsOfDateCoverage: true,
+                simulateHoldings,
+              });
+            } else {
+              throw error;
+            }
+          }
+
+          entry.prediction.usedIncompleteUniverse = usedIncompleteUniverse;
 
           entry.tradingApp.meta = local?.meta || null;
           entry.tradingApp.effectiveAsOfDate = local?.meta?.localEvaluator?.asOfDate
@@ -3269,6 +3390,58 @@ exports.compareComposerHoldingsAll = async (req, res) => {
             tradingApp: entry.tradingApp.holdings,
             tolerance,
           });
+
+          const predictionReasons = [];
+          const composerEffective = entry.composer.effectiveAsOfDate;
+          const tradingEffective = entry.tradingApp.effectiveAsOfDate;
+          const asOfAligned =
+            !composerEffective || !tradingEffective ? null : composerEffective === tradingEffective;
+          if (asOfAligned === false) {
+            predictionReasons.push(
+              `Effective as-of date differs (Composer=${composerEffective}, TradingApp=${tradingEffective}).`
+            );
+          }
+          if (entry.prediction.strategyTextMatchesComposer === false) {
+            predictionReasons.push(
+              'TradingApp strategy text differs from the defsymphony text extracted from the Composer link.'
+            );
+          }
+          if (usedIncompleteUniverse) {
+            predictionReasons.push(
+              'TradingApp evaluation required skipping missing/stale tickers; results may diverge if the missing tickers affect rankings/conditions.'
+            );
+          }
+          if (asOfTarget === 'next-rebalance' && entry.prediction.asOfSource !== 'nextRebalanceAt' && !asOfDate) {
+            predictionReasons.push('Missing nextRebalanceAt schedule; falling back to Composer effective date.');
+          }
+          const matchesComposer = (entry.comparison?.mismatches || []).length === 0;
+          entry.prediction.matchesComposer = matchesComposer;
+          const canGuarantee =
+            matchesComposer &&
+            asOfAligned === true &&
+            entry.prediction.strategyTextMatchesComposer === true &&
+            !usedIncompleteUniverse &&
+            (asOfTarget !== 'next-rebalance' ||
+              entry.prediction.asOfSource === 'nextRebalanceAt' ||
+              entry.prediction.asOfSource === 'explicit');
+          entry.prediction.canGuaranteeMatchNextRebalance = canGuarantee;
+          entry.prediction.reasons = predictionReasons;
+
+          if (!matchesComposer) {
+            entry.prediction.confidence = 'low';
+          } else if (canGuarantee) {
+            entry.prediction.confidence = 'high';
+          } else {
+            const hasCritical =
+              asOfAligned === false || entry.prediction.strategyTextMatchesComposer === false;
+            entry.prediction.confidence = hasCritical ? 'low' : 'medium';
+          }
+
+          if (strictError && usedIncompleteUniverse) {
+            entry.prediction.reasons.push(
+              `Strict evaluation failed (${strictError.message}); compared using incomplete-universe fallback.`
+            );
+          }
         }
       } catch (error) {
         entry.status = 'error';

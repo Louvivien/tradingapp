@@ -632,6 +632,25 @@ const buildRebalanceHumanSummary = ({
     if (warnings.length) {
       lines.push('• WARNING: ' + warnings.join(' '));
     }
+
+    const missingData = Array.isArray(localTool.missingData) ? localTool.missingData.filter(Boolean) : [];
+    if (missingData.length) {
+      const formatted = missingData
+        .slice(0, 6)
+        .map((entry) => {
+          const symbol = entry?.symbol ? String(entry.symbol).trim().toUpperCase() : null;
+          if (!symbol) {
+            return null;
+          }
+          const reason = entry?.reason ? String(entry.reason).trim() : null;
+          return reason ? `${symbol} (${reason})` : symbol;
+        })
+        .filter(Boolean);
+      const extra = missingData.length > 6 ? ` and ${missingData.length - 6} more` : '';
+      lines.push(
+        `• WARNING: Missing/stale market data for ${missingData.length} ticker(s): ${formatted.join(', ')}${extra}. Evaluator skipped these tickers.`
+      );
+    }
   }
 
   const decisionMap = new Map(
@@ -1469,6 +1488,7 @@ const rebalancePortfolio = async (portfolio) => {
   );
 
   let composerEvaluation = null;
+  let composerUsedIncompleteUniverse = false;
   if (strategy?.strategy && /\(defsymphony/i.test(strategy.strategy)) {
     const composerBudget = budget > 0 ? budget : currentTotal || accountCash;
     if (composerBudget && composerBudget > 0) {
@@ -1478,18 +1498,48 @@ const rebalancePortfolio = async (portfolio) => {
           budget: composerBudget,
         });
       } catch (error) {
-        console.warn('[Rebalance] Composer evaluation failed:', error.message);
-        const wrapped = new Error(`Composer evaluation failed: ${error.message}`);
-        if (error?.code) {
-          wrapped.code = error.code;
+        const missingSymbols = Array.isArray(error?.missingSymbols) ? error.missingSymbols : [];
+        const maxMissingForFallback = (() => {
+          const parsed = Number(process.env.REBALANCE_MAX_MISSING_TICKERS);
+          return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 3;
+        })();
+        const canRetryIncompleteUniverse =
+          error?.code === 'INSUFFICIENT_MARKET_DATA' &&
+          missingSymbols.length > 0 &&
+          missingSymbols.length <= maxMissingForFallback;
+
+        if (canRetryIncompleteUniverse) {
+          try {
+            console.warn(
+              `[Rebalance] Composer evaluation missing market data for ${missingSymbols.length} tickers; retrying with incomplete universe (max ${maxMissingForFallback}).`
+            );
+            composerUsedIncompleteUniverse = true;
+            composerEvaluation = await runComposerStrategy({
+              strategyText: strategy.strategy,
+              budget: composerBudget,
+              requireCompleteUniverse: false,
+            });
+          } catch (fallbackError) {
+            error = fallbackError;
+          }
         }
-        if (error?.missingSymbols) {
-          wrapped.missingSymbols = error.missingSymbols;
+
+        if (composerEvaluation) {
+          // Continue with the fallback evaluation; any missing symbols will be surfaced via localEvaluator.missingData.
+        } else {
+          console.warn('[Rebalance] Composer evaluation failed:', error.message);
+          const wrapped = new Error(`Composer evaluation failed: ${error.message}`);
+          if (error?.code) {
+            wrapped.code = error.code;
+          }
+          if (error?.missingSymbols) {
+            wrapped.missingSymbols = error.missingSymbols;
+          }
+          if (error?.dataContext) {
+            wrapped.dataContext = error.dataContext;
+          }
+          throw wrapped;
         }
-        if (error?.dataContext) {
-          wrapped.dataContext = error.dataContext;
-        }
-        throw wrapped;
       }
     }
   }
@@ -1509,6 +1559,9 @@ const rebalancePortfolio = async (portfolio) => {
     const meta = composerEvaluation.meta || {};
     const localMeta = meta.localEvaluator || {};
     if (localMeta.used) {
+      const fallbackReason = composerUsedIncompleteUniverse
+        ? 'Evaluator proceeded with an incomplete universe due to missing/stale ticker data.'
+        : null;
       baseThoughtProcess.tooling = {
         ...baseThoughtProcess.tooling,
         localEvaluator: {
@@ -1521,7 +1574,7 @@ const rebalancePortfolio = async (portfolio) => {
           priceSource: localMeta.priceSource || null,
           priceRefresh: localMeta.priceRefresh || null,
           dataAdjustment: localMeta.dataAdjustment || null,
-          fallbackReason: meta.fallbackReason || localMeta.fallbackReason || null,
+          fallbackReason: meta.fallbackReason || localMeta.fallbackReason || fallbackReason,
           note: 'Composer strategy evaluated via local defsymphony interpreter.',
         },
       };

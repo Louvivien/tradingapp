@@ -2,6 +2,10 @@ jest.mock('../../models/strategyModel', () => ({
   find: jest.fn(),
 }));
 
+jest.mock('../../models/portfolioModel', () => ({
+  find: jest.fn(),
+}));
+
 jest.mock('../../utils/composerLinkClient', () => ({
   fetchComposerLinkSnapshot: jest.fn(),
 }));
@@ -11,6 +15,7 @@ jest.mock('../../utils/openaiComposerStrategy', () => ({
 }));
 
 const Strategy = require('../../models/strategyModel');
+const Portfolio = require('../../models/portfolioModel');
 const { fetchComposerLinkSnapshot } = require('../../utils/composerLinkClient');
 const { runComposerStrategy } = require('../../utils/openaiComposerStrategy');
 const { compareComposerHoldingsAll } = require('../strategiesController');
@@ -34,11 +39,25 @@ const mockRes = () => {
 describe('compareComposerHoldingsAll', () => {
   beforeEach(() => {
     Strategy.find.mockReset();
+    Portfolio.find.mockReset();
     fetchComposerLinkSnapshot.mockReset();
     runComposerStrategy.mockReset();
   });
 
   it('skips polymarket and non-composer links, compares composer vs tradingapp holdings', async () => {
+    Portfolio.find.mockReturnValue({
+      select: () => ({
+        lean: async () => [
+          {
+            strategy_id: '1',
+            recurrence: 'daily',
+            cashLimit: 10000,
+            nextRebalanceAt: new Date('2026-01-08T20:30:00.000Z'),
+          },
+        ],
+      }),
+    });
+
     Strategy.find.mockReturnValue({
       sort: () => ({
         limit: () => ({
@@ -104,4 +123,3 @@ describe('compareComposerHoldingsAll', () => {
     expect(res.body.results[0].comparison.mismatches).toEqual([]);
   });
 });
-

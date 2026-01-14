@@ -5,6 +5,9 @@ const Axios = require('axios');
 const ENABLE_ALPACA_HTTP_DEBUG =
   String(process.env.ALPACA_HTTP_DEBUG ?? '').trim().toLowerCase() === 'true';
 
+const ENABLE_ALPACA_CONFIG_DEBUG =
+  String(process.env.ALPACA_CONFIG_DEBUG ?? '').trim().toLowerCase() === 'true';
+
 // Create a custom Axios instance for Alpaca API calls
 const createAlpacaClient = (config) => {
   const client = Axios.create({
@@ -94,27 +97,36 @@ const setAlpaca = async (userId, forceMode = null) => {
     let liveKeyId = process.env.ALPACA_LIVE_API_KEY_ID;
     let liveSecretKey = process.env.ALPACA_LIVE_API_SECRET_KEY;
 
-    // Debug logging for environment variables
-    console.log('[Debug] Environment variables loaded:');
-    console.log('[Debug] - Paper Key ID:', paperKeyId ? paperKeyId.substring(0, 5) + '...' : 'missing');
-    console.log('[Debug] - Paper Secret:', paperSecretKey ? paperSecretKey.substring(0, 5) + '...' : 'missing');
-    console.log('[Debug] - Live Key ID:', liveKeyId ? liveKeyId.substring(0, 5) + '...' : 'missing');
-    console.log('[Debug] - Live Secret:', liveSecretKey ? liveSecretKey.substring(0, 5) + '...' : 'missing');
+    if (ENABLE_ALPACA_CONFIG_DEBUG) {
+      console.log('[Alpaca Config] Environment key presence:', {
+        paperKeyId: Boolean(paperKeyId),
+        paperSecretKey: Boolean(paperSecretKey),
+        liveKeyId: Boolean(liveKeyId),
+        liveSecretKey: Boolean(liveSecretKey),
+      });
+    }
 
     // If userId is provided, try to get keys from user document
     if (userId) {
       const user = await User.findById(userId);
       if (user) {
-        console.log('[Debug] User document found, checking for API keys');
+        if (ENABLE_ALPACA_CONFIG_DEBUG) {
+          console.log('[Alpaca Config] User document found; checking for API keys.');
+        }
         // Only use user document keys if environment variables are not set
         paperKeyId = paperKeyId || user.ALPACA_API_KEY_ID;
         paperSecretKey = paperSecretKey || user.ALPACA_API_SECRET_KEY;
         liveKeyId = liveKeyId || user.ALPACA_LIVE_API_KEY_ID;
         liveSecretKey = liveSecretKey || user.ALPACA_LIVE_API_SECRET_KEY;
-        
-        console.log('[Debug] After user document check:');
-        console.log('[Debug] - Paper Key ID:', paperKeyId ? paperKeyId.substring(0, 5) + '...' : 'missing');
-        console.log('[Debug] - Paper Secret:', paperSecretKey ? paperSecretKey.substring(0, 5) + '...' : 'missing');
+
+        if (ENABLE_ALPACA_CONFIG_DEBUG) {
+          console.log('[Alpaca Config] Key presence after user lookup:', {
+            paperKeyId: Boolean(paperKeyId),
+            paperSecretKey: Boolean(paperSecretKey),
+            liveKeyId: Boolean(liveKeyId),
+            liveSecretKey: Boolean(liveSecretKey),
+          });
+        }
       }
     }
 

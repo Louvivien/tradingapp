@@ -26,6 +26,7 @@ const runComposerStrategy = async ({
   asOfMode = null,
   priceSource = null,
   priceRefresh = null,
+  requireCompleteUniverse = null,
   requireAsOfDateCoverage = null,
   simulateHoldings = null,
 }) => {
@@ -73,6 +74,7 @@ const runComposerStrategy = async ({
     asOfMode: resolvedAsOfMode,
     priceSource: resolvedPriceSource,
     priceRefresh: resolvedPriceRefresh,
+    requireCompleteUniverse,
     requireAsOfDateCoverage,
     simulateHoldings,
   });
