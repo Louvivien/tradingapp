@@ -680,10 +680,11 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       requestedMode === 'backfill' &&
       allowLiveRebalanceDuringBackfill === true &&
       sizeToBudget === true;
-    if (allowBackfillLiveRebalance) {
-      executionDisabledReason = null;
-    } else {
-    executionEnabled = false;
+    if (!allowBackfillLiveRebalance && executionEnabled) {
+      executionEnabled = false;
+      executionDisabledReason =
+        executionDisabledReason ||
+        'Backfill sync: live execution disabled (set POLYMARKET_BACKFILL_LIVE_REBALANCE=true to allow the final size-to-budget rebalance).';
     }
   }
 
