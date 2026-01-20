@@ -419,7 +419,9 @@ const fetchDataApiTradesPage = async ({ userAddress, offset, limit, takerOnly })
 
   const cleanedOffset = Number.isFinite(Number(offset)) && Number(offset) >= 0 ? Math.floor(Number(offset)) : 0;
   const cleanedLimit = Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.floor(Number(limit)) : 100;
-  const maxLimit = 10000;
+  // The public data API appears to cap responses around ~1000 rows even if a larger limit is requested.
+  // Keep our page size within that cap so offset pagination works and we don't prematurely stop backfills.
+  const maxLimit = 1000;
   const finalLimit = Math.max(1, Math.min(cleanedLimit, maxLimit));
 
   const takerOnlyFlag = parseBooleanEnvDefault(takerOnly, false);
@@ -445,7 +447,12 @@ const fetchDataApiTradesPage = async ({ userAddress, offset, limit, takerOnly })
     seen.add(mapped.id);
     normalizedTrades.push(mapped);
   }
-  return { trades: normalizedTrades, nextOffset: cleanedOffset + finalLimit, requestedLimit: finalLimit };
+  return {
+    trades: normalizedTrades,
+    rawCount: data.length,
+    nextOffset: cleanedOffset + finalLimit,
+    requestedLimit: finalLimit,
+  };
 };
 
 const fetchMarket = async (conditionId) => {
@@ -869,57 +876,59 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       throw err;
     }
 
-    if (mode === 'backfill') {
-      while (nextToken !== null && pendingTrades.length < maxTradesBackfill) {
-        pagesFetched += 1;
-        const shouldLogPage = pagesFetched === 1 || pagesFetched % POLYMARKET_PROGRESS_LOG_EVERY_PAGES === 0;
-        const cursorBefore = nextToken;
-        if (shouldLogPage) {
-          void recordStrategyLog({
-            strategyId: portfolio.strategy_id,
-            userId: portfolio.userId,
-            strategyName: portfolio.name,
-            message: 'Polymarket backfill fetching trades page',
+	    if (mode === 'backfill') {
+	      while (nextToken !== null && pendingTrades.length < maxTradesBackfill) {
+	        pagesFetched += 1;
+	        const shouldLogPage = pagesFetched === 1 || pagesFetched % POLYMARKET_PROGRESS_LOG_EVERY_PAGES === 0;
+	        const cursorBefore = nextToken;
+	        if (shouldLogPage) {
+	          void recordStrategyLog({
+	            strategyId: portfolio.strategy_id,
+	            userId: portfolio.userId,
+	            strategyName: portfolio.name,
+	            message: 'Polymarket backfill fetching trades page',
             details: {
               provider: 'polymarket',
               mode,
               tradeSource,
               page: pagesFetched,
-              cursor: tradeSource === 'data-api' ? `offset:${cursorBefore}` : cursorBefore,
-              tradesCollected: pendingTrades.length,
-            },
-          });
-        }
+	              cursor: tradeSource === 'data-api' ? `offset:${cursorBefore}` : cursorBefore,
+	              tradesCollected: pendingTrades.length,
+	            },
+	          });
+	        }
 
-        let trades = [];
-        let requestedLimit = null;
-        try {
-          if (tradeSource === 'data-api') {
-            const remaining = Math.max(0, maxTradesBackfill - pendingTrades.length);
-            requestedLimit = Math.max(1, Math.min(remaining, 10000));
-            const fetched = await fetchDataApiTradesPage({
-              userAddress: address,
-              offset: cursorBefore,
-              limit: requestedLimit,
-              takerOnly: dataApiTakerOnly,
-            });
-            trades = Array.isArray(fetched?.trades) ? fetched.trades : [];
-            requestedLimit = fetched?.requestedLimit ?? requestedLimit;
-            const nextOffset =
-              fetched?.nextOffset !== undefined && fetched?.nextOffset !== null ? Number(fetched.nextOffset) : null;
-            nextToken = Number.isFinite(nextOffset) ? nextOffset : null;
-          } else {
-            const fetched = await fetchClobPage(cursorBefore);
-            const page = fetched?.page;
-            trades = Array.isArray(page?.data) ? page.data : [];
-            const cursor = page?.next_cursor ? String(page.next_cursor) : null;
+	        let trades = [];
+	        let requestedLimit = null;
+	        let rawCount = null;
+	        try {
+	          if (tradeSource === 'data-api') {
+	            const remaining = Math.max(0, maxTradesBackfill - pendingTrades.length);
+	            requestedLimit = Math.max(1, Math.min(remaining, 10000));
+	            const fetched = await fetchDataApiTradesPage({
+	              userAddress: address,
+	              offset: cursorBefore,
+	              limit: requestedLimit,
+	              takerOnly: dataApiTakerOnly,
+	            });
+	            trades = Array.isArray(fetched?.trades) ? fetched.trades : [];
+	            requestedLimit = fetched?.requestedLimit ?? requestedLimit;
+	            rawCount = fetched?.rawCount !== undefined && fetched?.rawCount !== null ? Number(fetched.rawCount) : null;
+	            const nextOffset =
+	              fetched?.nextOffset !== undefined && fetched?.nextOffset !== null ? Number(fetched.nextOffset) : null;
+	            nextToken = Number.isFinite(nextOffset) ? nextOffset : null;
+	          } else {
+	            const fetched = await fetchClobPage(cursorBefore);
+	            const page = fetched?.page;
+	            trades = Array.isArray(page?.data) ? page.data : [];
+	            const cursor = page?.next_cursor ? String(page.next_cursor) : null;
             if (!cursor || cursor === cursorBefore || cursor === END_CURSOR) {
               nextToken = null;
             } else {
-              nextToken = cursor;
-            }
-          }
-        } catch (error) {
+	              nextToken = cursor;
+	            }
+	          }
+	        } catch (error) {
           await recordStrategyLog({
             strategyId: portfolio.strategy_id,
             userId: portfolio.userId,
@@ -939,22 +948,25 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
           throw error;
         }
 
-        if (!trades.length) {
-          break;
-        }
-        for (const trade of trades) {
-          if (pendingTrades.length >= maxTradesBackfill) {
-            break;
-          }
-          pushTrade(trade);
-        }
+	        if (!trades.length) {
+	          break;
+	        }
+	        for (const trade of trades) {
+	          if (pendingTrades.length >= maxTradesBackfill) {
+	            break;
+	          }
+	          pushTrade(trade);
+	        }
 
-        if (tradeSource === 'data-api' && requestedLimit !== null && trades.length < requestedLimit) {
-          nextToken = null;
-        }
+	        if (tradeSource === 'data-api' && requestedLimit !== null) {
+	          const pageCount = Number.isFinite(rawCount) ? rawCount : trades.length;
+	          if (pageCount < requestedLimit) {
+	            nextToken = null;
+	          }
+	        }
 
-        if (shouldLogPage) {
-          void recordStrategyLog({
+	        if (shouldLogPage) {
+	          void recordStrategyLog({
             strategyId: portfolio.strategy_id,
             userId: portfolio.userId,
             strategyName: portfolio.name,
@@ -998,72 +1010,77 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
           });
           nextProgressLogAt += POLYMARKET_PROGRESS_LOG_EVERY_TRADES;
         }
-      }
-    } else {
-      while (nextToken !== null && pendingTrades.length < MAX_TRADES_PER_SYNC && !foundLastTrade) {
-        pagesFetched += 1;
+	      }
+	    } else {
+	      while (nextToken !== null && pendingTrades.length < MAX_TRADES_PER_SYNC && !foundLastTrade) {
+	        pagesFetched += 1;
 
-        let trades = [];
-        let requestedLimit = null;
-        if (tradeSource === 'data-api') {
-          const remaining = Math.max(0, MAX_TRADES_PER_SYNC - pendingTrades.length);
-          requestedLimit = Math.max(1, Math.min(remaining, 10000));
-          const fetched = await fetchDataApiTradesPage({
-            userAddress: address,
-            offset: nextToken,
-            limit: requestedLimit,
-            takerOnly: dataApiTakerOnly,
-          });
-          trades = Array.isArray(fetched?.trades) ? fetched.trades : [];
-          const nextOffset =
-            fetched?.nextOffset !== undefined && fetched?.nextOffset !== null ? Number(fetched.nextOffset) : null;
-          nextToken = Number.isFinite(nextOffset) ? nextOffset : null;
-          requestedLimit = fetched?.requestedLimit ?? requestedLimit;
-          if (requestedLimit !== null && trades.length < requestedLimit) {
-            nextToken = null;
-          }
-        } else {
-          const fetched = await fetchClobPage(nextToken);
-          const page = fetched?.page;
-          trades = Array.isArray(page?.data) ? page.data : [];
-          const cursor = page?.next_cursor ? String(page.next_cursor) : null;
-          if (!cursor || cursor === nextToken || cursor === END_CURSOR) {
-            nextToken = null;
-          } else {
-            nextToken = cursor;
-          }
-        }
+	        let trades = [];
+	        let requestedLimit = null;
+	        let rawCount = null;
+	        if (tradeSource === 'data-api') {
+	          const remaining = Math.max(0, MAX_TRADES_PER_SYNC - pendingTrades.length);
+	          requestedLimit = Math.max(1, Math.min(remaining, 10000));
+	          const fetched = await fetchDataApiTradesPage({
+	            userAddress: address,
+	            offset: nextToken,
+	            limit: requestedLimit,
+	            takerOnly: dataApiTakerOnly,
+	          });
+	          trades = Array.isArray(fetched?.trades) ? fetched.trades : [];
+	          rawCount = fetched?.rawCount !== undefined && fetched?.rawCount !== null ? Number(fetched.rawCount) : null;
+	          const nextOffset =
+	            fetched?.nextOffset !== undefined && fetched?.nextOffset !== null ? Number(fetched.nextOffset) : null;
+	          nextToken = Number.isFinite(nextOffset) ? nextOffset : null;
+	          requestedLimit = fetched?.requestedLimit ?? requestedLimit;
+	          if (requestedLimit !== null) {
+	            const pageCount = Number.isFinite(rawCount) ? rawCount : trades.length;
+	            if (pageCount < requestedLimit) {
+	              nextToken = null;
+	            }
+	          }
+	        } else {
+	          const fetched = await fetchClobPage(nextToken);
+	          const page = fetched?.page;
+	          trades = Array.isArray(page?.data) ? page.data : [];
+	          const cursor = page?.next_cursor ? String(page.next_cursor) : null;
+	          if (!cursor || cursor === nextToken || cursor === END_CURSOR) {
+	            nextToken = null;
+	          } else {
+	            nextToken = cursor;
+	          }
+	        }
 
-        for (const trade of trades) {
-          const id = trade?.id ? String(trade.id) : null;
-          if (!id) {
-            continue;
-          }
-          if (lastTradeId) {
-            if (id === lastTradeId) {
-              foundLastTrade = true;
-              break;
-            }
-            pushTrade(trade);
-            continue;
-          }
+	        for (const trade of trades) {
+	          const id = trade?.id ? String(trade.id) : null;
+	          if (!id) {
+	            continue;
+	          }
+	          if (lastTradeId) {
+	            if (id === lastTradeId) {
+	              foundLastTrade = true;
+	              break;
+	            }
+	            pushTrade(trade);
+	            continue;
+	          }
 
-          const matchTime = trade?.match_time ? String(trade.match_time) : null;
-          if (!matchTime) {
-            continue;
-          }
-          if (anchorMatchTime && !isTradeAfterAnchor(matchTime, anchorMatchTime)) {
-            foundAnchor = true;
-            break;
-          }
-          pushTrade(trade);
-        }
+	          const matchTime = trade?.match_time ? String(trade.match_time) : null;
+	          if (!matchTime) {
+	            continue;
+	          }
+	          if (anchorMatchTime && !isTradeAfterAnchor(matchTime, anchorMatchTime)) {
+	            foundAnchor = true;
+	            break;
+	          }
+	          pushTrade(trade);
+	        }
 
-        if (!lastTradeId && foundAnchor) {
-          break;
-        }
-      }
-    }
+	        if (!lastTradeId && foundAnchor) {
+	          break;
+	        }
+	      }
+	    }
 
     return { pendingTrades, pagesFetched };
   };

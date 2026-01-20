@@ -241,6 +241,80 @@ jest.mock('../strategyLogger', () => ({
     expect(portfolio.stocks[0].quantity).toBeCloseTo(10, 6);
   });
 
+  it('paginates Polymarket data-api backfills beyond 1000 trades', async () => {
+    const makerAddress = '0x3333333333333333333333333333333333333333';
+
+    process.env.POLYMARKET_TRADES_SOURCE = 'data-api';
+
+    const makeTrade = (idx) => {
+      const hex = (idx + 1).toString(16).padStart(64, '0');
+      return {
+        transactionHash: `0x${hex}`,
+        asset: 'asset-1',
+        conditionId: 'cond-1',
+        outcome: 'Yes',
+        side: 'BUY',
+        timestamp: 1700000000 + idx,
+        price: 0.5,
+        size: 1,
+      };
+    };
+
+    const firstPage = Array.from({ length: 1000 }, (_, idx) => makeTrade(idx));
+    const secondPage = [makeTrade(1000)];
+
+    const dataApi = nock('https://data-api.polymarket.com');
+    dataApi
+      .get('/trades')
+      .query((query) => query.user === makerAddress && Number(query.offset) === 0 && Number(query.limit) === 1000)
+      .reply(200, firstPage);
+    dataApi
+      .get('/trades')
+      .query((query) => query.user === makerAddress && Number(query.offset) === 1000 && Number(query.limit) === 1000)
+      .reply(200, secondPage);
+
+    const clob = nock('https://clob.polymarket.com');
+    clob
+      .get('/markets/cond-1')
+      .query(true)
+      .reply(200, {
+        tokens: [{ token_id: 'asset-1', price: 0.5, outcome: 'Yes' }],
+      })
+      .persist();
+
+    const { syncPolymarketPortfolio } = require('../polymarketCopyService');
+
+    const portfolio = {
+      provider: 'polymarket',
+      userId: 'user-1',
+      strategy_id: 'strategy-1',
+      name: 'Polymarket Data API Pagination',
+      recurrence: 'every_minute',
+      stocks: [],
+      retainedCash: 100,
+      cashBuffer: 100,
+      budget: 100,
+      cashLimit: 100,
+      initialInvestment: 100,
+      rebalanceCount: 0,
+      save: jest.fn(async () => {}),
+      polymarket: {
+        address: makerAddress,
+        sizeToBudget: true,
+        backfillPending: true,
+        backfilledAt: null,
+        lastTradeMatchTime: '1970-01-01T00:00:00.000Z',
+        lastTradeId: null,
+      },
+    };
+
+    const result = await syncPolymarketPortfolio(portfolio, { mode: 'backfill' });
+    expect(result.mode).toBe('backfill');
+    expect(result.pagesFetched).toBe(2);
+    expect(result.processed).toBe(1001);
+    expect(dataApi.isDone()).toBe(true);
+  });
+
   it('executes a live rebalance when size-to-budget target changes', async () => {
     const executionModulePath = require.resolve('../polymarketExecutionService');
     jest.doMock(executionModulePath, () => ({
