@@ -1,6 +1,6 @@
 const crypto = require('crypto');
 const CryptoJS = require('crypto-js');
-const { Wallet } = require('ethers');
+const { Wallet, providers, Contract, utils } = require('ethers');
 
 const normalizeEnvValue = (value) => String(value || '').trim();
 
@@ -196,6 +196,45 @@ const loadClobModule = async () => {
   return await clobModulePromise;
 };
 
+const normalizeRpcUrl = (value) => {
+  const raw = normalizeEnvValue(value);
+  if (!raw) return '';
+  return raw.replace(/\/+$/, '');
+};
+
+const getDefaultRpcUrlForChain = (chainId) => {
+  if (chainId === 80002) {
+    return 'https://rpc-amoy.polygon.technology';
+  }
+  return 'https://polygon-rpc.com';
+};
+
+const getPolymarketRpcUrl = (chainId) => {
+  const configured = normalizeRpcUrl(
+    process.env.POLYMARKET_RPC_URL ||
+      process.env.POLYGON_RPC_URL ||
+      process.env.POLYGON_RPC ||
+      process.env.RPC_URL ||
+      process.env.JSON_RPC_URL
+  );
+  return configured || getDefaultRpcUrlForChain(chainId);
+};
+
+const getContractConfig = (chainId) => {
+  if (chainId === 80002) {
+    return {
+      exchange: '0xdFE02Eb6733538f8Ea35D585af8DE5958AD99E40',
+      negRiskExchange: '0xC5d563A36AE78145C45a50134d48A1215220f80a',
+      collateral: '0x9c4e1703476e875070ee25b56a58b008cfb8fa78',
+    };
+  }
+  return {
+    exchange: '0x4bFb41d5B3570DeFd03C39a9A4D8dE6Bd8B8982E',
+    negRiskExchange: '0xC5d563A36AE78145C45a50134d48A1215220f80a',
+    collateral: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+  };
+};
+
 let cachedClient = null;
 let cachedClientKey = null;
 
@@ -265,13 +304,51 @@ const getPolymarketClobClient = async (options = {}) => {
 };
 
 const getPolymarketBalanceAllowance = async () => {
-  const clobClient = await getPolymarketClobClient({ requireLiveMode: false });
-  const { AssetType } = await loadClobModule();
-  const response = await clobClient.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
-  const payload = response?.data || response || null;
+  const chainId = getPolymarketChainId();
+  const rpcUrl = getPolymarketRpcUrl(chainId);
+  const contracts = getContractConfig(chainId);
+
+  const funderRaw = normalizeEnvValue(process.env.POLYMARKET_FUNDER_ADDRESS || process.env.POLYMARKET_PROFILE_ADDRESS);
+  const funderAddress = isValidHexAddress(funderRaw) ? funderRaw : null;
+
+  const authRaw = normalizeEnvValue(process.env.POLYMARKET_AUTH_ADDRESS || process.env.POLYMARKET_ADDRESS);
+  const authAddress = isValidHexAddress(authRaw) ? authRaw : null;
+
+  const address = funderAddress || authAddress;
+  if (!address) {
+    throw new Error(
+      'Missing deposit address. Set POLYMARKET_FUNDER_ADDRESS (preferred) or POLYMARKET_AUTH_ADDRESS.'
+    );
+  }
+
+  const provider = new providers.JsonRpcProvider(rpcUrl, chainId);
+  const erc20 = new Contract(
+    contracts.collateral,
+    ['function balanceOf(address) view returns (uint256)', 'function allowance(address,address) view returns (uint256)'],
+    provider
+  );
+
+  const [balanceBaseUnits, allowanceBaseUnits] = await Promise.all([
+    erc20.balanceOf(address),
+    erc20.allowance(address, contracts.exchange),
+  ]);
+
+  const balance = Number(utils.formatUnits(balanceBaseUnits, 6));
+  const allowance = Number(utils.formatUnits(allowanceBaseUnits, 6));
+
   return {
-    balance: payload?.balance ?? null,
-    allowance: payload?.allowance ?? null,
+    source: 'onchain',
+    chainId,
+    rpcUrl,
+    address,
+    collateral: contracts.collateral,
+    spender: contracts.exchange,
+    balance,
+    allowance,
+    raw: {
+      balanceBaseUnits: balanceBaseUnits?.toString?.() ?? null,
+      allowanceBaseUnits: allowanceBaseUnits?.toString?.() ?? null,
+    },
   };
 };
 

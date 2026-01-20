@@ -132,6 +132,8 @@ const Strategies = () => {
       const response = await Axios.get(url, { headers });
       if (response.status === 200 && response.data?.status === "success") {
         setPolymarketBalance({
+          source: response.data.source ?? null,
+          address: response.data.address ?? null,
           balance: response.data.balance ?? null,
           allowance: response.data.allowance ?? null,
           available: response.data.available ?? null,
@@ -1396,6 +1398,11 @@ const Strategies = () => {
 	                      <Typography variant="body2" color="textSecondary">
 	                        Available funds: {polymarketBalance.available ?? polymarketBalance.balance ?? "—"}
 	                      </Typography>
+	                      {polymarketBalance.address && (
+	                        <Typography variant="body2" color="textSecondary">
+	                          Deposit address: {polymarketBalance.address}
+	                        </Typography>
+	                      )}
 	                      <Typography variant="body2" color="textSecondary">
 	                        Tradable now: {polymarketBalance.tradable ?? "—"}{" "}
 	                        {polymarketBalance.allowance !== null && polymarketBalance.allowance !== undefined

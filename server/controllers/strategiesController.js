@@ -2376,23 +2376,26 @@ exports.getPolymarketBalanceAllowance = async (req, res) => {
       });
     }
 
-    const { balance, allowance } = await fetchPolymarketBalanceAllowance();
-    const balanceValue = toNumber(balance, null);
-    const allowanceValue = toNumber(allowance, null);
+    const snapshot = await fetchPolymarketBalanceAllowance();
+    const balanceValue = toNumber(snapshot?.balance, null);
+    const allowanceValue = toNumber(snapshot?.allowance, null);
     const available = balanceValue;
     const tradable =
       balanceValue !== null && allowanceValue !== null ? Math.min(balanceValue, allowanceValue) : null;
 
     return res.status(200).json({
       status: 'success',
+      source: snapshot?.source || null,
+      address: snapshot?.address || null,
+      chainId: snapshot?.chainId ?? null,
+      collateral: snapshot?.collateral || null,
+      spender: snapshot?.spender || null,
+      rpcUrl: snapshot?.rpcUrl || null,
       balance: balanceValue,
       allowance: allowanceValue,
       available,
       tradable,
-      raw: {
-        balance,
-        allowance,
-      },
+      raw: snapshot?.raw || null,
     });
   } catch (error) {
     return res.status(500).json({
