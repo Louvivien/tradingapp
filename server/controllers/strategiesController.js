@@ -2377,16 +2377,22 @@ exports.getPolymarketBalanceAllowance = async (req, res) => {
     }
 
     const { balance, allowance } = await fetchPolymarketBalanceAllowance();
-    const balanceNum = Number(balance);
-    const allowanceNum = Number(allowance);
-    const available =
-      Number.isFinite(balanceNum) && Number.isFinite(allowanceNum) ? Math.min(balanceNum, allowanceNum) : null;
+    const balanceValue = toNumber(balance, null);
+    const allowanceValue = toNumber(allowance, null);
+    const available = balanceValue;
+    const tradable =
+      balanceValue !== null && allowanceValue !== null ? Math.min(balanceValue, allowanceValue) : null;
 
     return res.status(200).json({
       status: 'success',
-      balance,
-      allowance,
+      balance: balanceValue,
+      allowance: allowanceValue,
       available,
+      tradable,
+      raw: {
+        balance,
+        allowance,
+      },
     });
   } catch (error) {
     return res.status(500).json({

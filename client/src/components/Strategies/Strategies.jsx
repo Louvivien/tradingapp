@@ -135,6 +135,7 @@ const Strategies = () => {
           balance: response.data.balance ?? null,
           allowance: response.data.allowance ?? null,
           available: response.data.available ?? null,
+          tradable: response.data.tradable ?? null,
         });
       } else {
         setPolymarketBalance(null);
@@ -1391,12 +1392,24 @@ const Strategies = () => {
 	                      {polymarketBalanceError}
 	                    </Typography>
 	                  ) : polymarketBalance ? (
-	                    <Typography variant="body2" color="textSecondary">
-	                      Available funds: {polymarketBalance.available ?? polymarketBalance.balance ?? "—"}{" "}
-	                      {polymarketBalance.allowance !== null && polymarketBalance.allowance !== undefined
-	                        ? `(allowance: ${polymarketBalance.allowance})`
-	                        : ""}
-	                    </Typography>
+	                    <Box>
+	                      <Typography variant="body2" color="textSecondary">
+	                        Available funds: {polymarketBalance.available ?? polymarketBalance.balance ?? "—"}
+	                      </Typography>
+	                      <Typography variant="body2" color="textSecondary">
+	                        Tradable now: {polymarketBalance.tradable ?? "—"}{" "}
+	                        {polymarketBalance.allowance !== null && polymarketBalance.allowance !== undefined
+	                          ? `(allowance: ${polymarketBalance.allowance})`
+	                          : ""}
+	                      </Typography>
+	                      {polymarketBalance.available > 0 &&
+	                        (polymarketBalance.tradable === 0 || polymarketBalance.tradable === null) && (
+	                          <Typography variant="body2" sx={{ mt: 0.5, color: "warning.main" }}>
+	                            If tradable is 0, your USDC allowance may need to be approved in Polymarket before live
+	                            orders can execute.
+	                          </Typography>
+	                        )}
+	                    </Box>
 	                  ) : (
 	                    <Typography variant="body2" color="textSecondary">
 	                      Available funds: —
