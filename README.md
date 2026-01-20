@@ -120,7 +120,7 @@ Server env vars (in `tradingapp/server/config/.env`):
 - Execution mode: `POLYMARKET_EXECUTION_MODE=paper|live` (default: `paper`)
   - Live trading requires: `POLYMARKET_PRIVATE_KEY` (signer), plus the CLOB L2 creds above.
   - Optional live settings: `POLYMARKET_CHAIN_ID=137|80002`, `POLYMARKET_SIGNATURE_TYPE=0|1`, `POLYMARKET_FUNDER_ADDRESS=0x...`, `POLYMARKET_MARKET_ORDER_TYPE=fak|fok`
-  - Safety: live execution runs only for incremental syncs (never during backfills).
+  - Safety: live execution runs only for incremental syncs by default; to allow a one-time live rebalance after a backfill (to enter the copied positions), set `POLYMARKET_BACKFILL_LIVE_REBALANCE=true` (requires “Size trades to my budget”).
 - Data API options (optional): `POLYMARKET_DATA_API_HOST`, `POLYMARKET_DATA_API_TAKER_ONLY`, `POLYMARKET_DATA_API_USER_AGENT`
 - CLOB auth retry cooldown in `auto` mode (optional, default 1h): `POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS`
 

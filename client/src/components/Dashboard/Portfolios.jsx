@@ -723,6 +723,16 @@ const deleteStrategy = async (strategyId) => {
                     onClick={(event) => event.stopPropagation()}
                   />
                 )}
+                {portfolio.provider === "polymarket" && !portfolio.isRealMoney && Boolean(portfolio.isRealMoneyRequested) && (
+                  <Chip
+                    label="real money (disabled)"
+                    size="small"
+                    color="warning"
+                    variant="outlined"
+                    sx={{ ml: 1 }}
+                    onClick={(event) => event.stopPropagation()}
+                  />
+                )}
 
                 <Tooltip title="Edit strategy title & symphony link" arrow>
                   <IconButton size="small" onClick={(event) => openMetadataEditor(portfolio, event)}>

@@ -29,7 +29,10 @@ const {
   alignToRebalanceWindowStart,
 } = require('../services/rebalanceService');
 const { syncPolymarketPortfolio, isValidHexAddress } = require('../services/polymarketCopyService');
-const { getPolymarketBalanceAllowance: fetchPolymarketBalanceAllowance } = require('../services/polymarketExecutionService');
+const {
+  getPolymarketExecutionMode: getEnvPolymarketExecutionMode,
+  getPolymarketBalanceAllowance: fetchPolymarketBalanceAllowance,
+} = require('../services/polymarketExecutionService');
 const { runEquityBackfill, TASK_NAME: EQUITY_BACKFILL_TASK } = require('../services/equityBackfillService');
 const {
   addSubscriber,
@@ -4048,6 +4051,7 @@ exports.getPortfolios = async (req, res) => {
     }
     const enhancedPortfolios = rawPortfolios.map((portfolio) => {
       const provider = String(portfolio?.provider || 'alpaca');
+      const envExecutionMode = provider === 'polymarket' ? getEnvPolymarketExecutionMode() : null;
       let normalizedTargets = normalizeTargetPositions(portfolio.targetPositions || []);
       if (!normalizedTargets.length) {
         normalizedTargets = normalizeTargetPositions(
@@ -4210,12 +4214,25 @@ exports.getPortfolios = async (req, res) => {
         stocks,
         polymarket: provider === 'polymarket'
           ? {
+              envExecutionMode,
               executionMode: portfolio?.polymarket?.executionMode
                 ? String(portfolio.polymarket.executionMode).trim().toLowerCase()
-                : null,
+                : 'paper',
+              requestedExecutionMode: portfolio?.polymarket?.executionMode
+                ? String(portfolio.polymarket.executionMode).trim().toLowerCase()
+                : 'paper',
+              effectiveExecutionMode: envExecutionMode === 'live'
+                ? (portfolio?.polymarket?.executionMode
+                  ? String(portfolio.polymarket.executionMode).trim().toLowerCase()
+                  : 'paper')
+                : 'paper',
             }
           : null,
         isRealMoney:
+          provider === 'polymarket' &&
+          envExecutionMode === 'live' &&
+          String(portfolio?.polymarket?.executionMode || '').trim().toLowerCase() === 'live',
+        isRealMoneyRequested:
           provider === 'polymarket' &&
           String(portfolio?.polymarket?.executionMode || '').trim().toLowerCase() === 'live',
       };

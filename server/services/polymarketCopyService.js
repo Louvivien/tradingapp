@@ -621,8 +621,8 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   const requestedMode = String(options?.mode || '').trim().toLowerCase();
 
   const envExecutionMode = getPolymarketExecutionMode();
-  const portfolioExecutionMode = normalizeExecutionModeOverride(poly.executionMode);
-  const executionMode = envExecutionMode === 'live' ? (portfolioExecutionMode || envExecutionMode) : envExecutionMode;
+  const portfolioExecutionMode = normalizeExecutionModeOverride(poly.executionMode) || 'paper';
+  const executionMode = envExecutionMode === 'live' ? portfolioExecutionMode : 'paper';
   let executionEnabled = executionMode === 'live';
   let executionDisabledReason = null;
   const address = String(poly.address || '').trim();
@@ -658,8 +658,10 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     return !Number.isFinite(makerCash) || holdings.length === 0;
   })();
 
-  const bootstrapBackfill =
-    sizingStateMissing && requestedMode !== 'backfill' && poly.backfillPending !== true;
+  // Only auto-bootstrap sizing state after a user has opted into importing positions via backfill.
+  // If the user created the strategy with backfill disabled, stay in incremental mode and fall back
+  // to cash-capped copy sizing until a backfill is explicitly run.
+  const bootstrapBackfill = sizingStateMissing && requestedMode !== 'backfill' && Boolean(poly.backfilledAt);
 
   const mode = requestedMode === 'backfill'
     ? 'backfill'
@@ -667,8 +669,22 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       ? 'backfill'
       : 'incremental';
 
+  const allowLiveRebalanceDuringBackfill = parseBoolean(
+    options?.allowLiveRebalanceDuringBackfill,
+    parseBoolean(process.env.POLYMARKET_BACKFILL_LIVE_REBALANCE, false)
+  );
+
   if (mode !== 'incremental') {
+    const allowBackfillLiveRebalance =
+      mode === 'backfill' &&
+      requestedMode === 'backfill' &&
+      allowLiveRebalanceDuringBackfill === true &&
+      sizeToBudget === true;
+    if (allowBackfillLiveRebalance) {
+      executionDisabledReason = null;
+    } else {
     executionEnabled = false;
+    }
   }
 
   const resetPortfolio = mode === 'backfill' ? options?.reset !== false : false;
