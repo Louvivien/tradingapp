@@ -115,6 +115,19 @@ const normalizeTradesSourceSetting = (value) => {
 
 const getTradesSourceSetting = () => normalizeTradesSourceSetting(process.env.POLYMARKET_TRADES_SOURCE || 'auto');
 
+const normalizeExecutionModeOverride = (value) => {
+  if (typeof value === 'boolean') {
+    return value ? 'live' : 'paper';
+  }
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === 'live' || raw === 'real') return 'live';
+  if (raw === 'paper' || raw === 'dry' || raw === 'dry-run' || raw === 'dryrun') return 'paper';
+  if (raw === 'true' || raw === '1' || raw === 'yes') return 'live';
+  if (raw === 'false' || raw === '0' || raw === 'no') return 'paper';
+  return null;
+};
+
 const parseBoolean = (value, fallback = false) => {
   if (typeof value === 'boolean') {
     return value;
@@ -607,7 +620,9 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   const poly = portfolio.polymarket || {};
   const requestedMode = String(options?.mode || '').trim().toLowerCase();
 
-  const executionMode = getPolymarketExecutionMode();
+  const envExecutionMode = getPolymarketExecutionMode();
+  const portfolioExecutionMode = normalizeExecutionModeOverride(poly.executionMode);
+  const executionMode = envExecutionMode === 'live' ? (portfolioExecutionMode || envExecutionMode) : envExecutionMode;
   let executionEnabled = executionMode === 'live';
   let executionDisabledReason = null;
   const address = String(poly.address || '').trim();
@@ -2139,6 +2154,8 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	      mode,
 	      tradeSource: tradeSourceUsed,
 	      tradesSourceSetting,
+        envExecutionMode,
+        portfolioExecutionMode,
 	      executionMode,
 	      executionEnabled,
 	      executionDisabledReason,

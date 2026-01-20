@@ -9,6 +9,7 @@ const {
   guessEffectiveAsOfDateKey,
   scoreTreeToStrategyText,
   fetchComposerLinkSnapshot,
+  fetchPublicSymphonyBacktestById,
 } = require('../composerLinkClient');
 
 describe('composerLinkClient', () => {
@@ -173,5 +174,61 @@ describe('composerLinkClient', () => {
     expect(script).toContain('(rsi "SPY" {:window 10})');
     expect(script).toContain(' 80)');
     expect(script).not.toContain('0.8');
+  });
+
+  it('fetches public backtest holdings for a given date and converts last_market_day to a date key', async () => {
+    const apiScope = nock('https://backtest-api.composer.trade')
+      .post('/api/v2/public/symphonies/ABC/backtest', (body) => body?.end_date === '2026-01-13')
+      .reply(200, {
+        last_market_day: 20466,
+        last_market_days_value: 10000,
+        last_market_days_holdings: {
+          'EQUITIES::SPY//USD': 10000,
+          $USD: 0,
+        },
+      });
+
+    const result = await fetchPublicSymphonyBacktestById({
+      symphonyId: 'ABC',
+      capital: 10000,
+      startDate: '2026-01-01',
+      endDate: '2026-01-13',
+      broker: 'alpaca',
+      abbreviateDays: 1,
+    });
+
+    expect(result.effectiveAsOfDateKey).toEqual('2026-01-13');
+    expect(result.holdingsObject).toEqual({ SPY: 10000, $USD: 0 });
+    apiScope.done();
+  });
+
+  it('surfaces outdated_series tickers when the public backtest cannot run', async () => {
+    const apiScope = nock('https://backtest-api.composer.trade')
+      .post('/api/v2/public/symphonies/DEF/backtest')
+      .reply(400, {
+        code: 'no-data-in-date-range',
+        message: 'No data available in the requested date range.',
+        meta: {
+          outdated_series: ['Close price of EQUITIES::HKND//USD'],
+        },
+      });
+
+    await expect(
+      fetchPublicSymphonyBacktestById({
+        symphonyId: 'DEF',
+        capital: 10000,
+        startDate: '2026-01-01',
+        endDate: '2026-01-13',
+        broker: 'alpaca',
+        abbreviateDays: 1,
+      })
+    ).rejects.toMatchObject({
+      name: 'ComposerPublicBacktestError',
+      status: 400,
+      code: 'no-data-in-date-range',
+      outdatedSeries: ['HKND'],
+    });
+
+    apiScope.done();
   });
 });

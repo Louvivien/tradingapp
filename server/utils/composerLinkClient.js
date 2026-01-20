@@ -282,6 +282,278 @@ const extractSymbolFromComposerTicker = (ticker) => {
   return symbol || null;
 };
 
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+const toISODateKey = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date.toISOString().slice(0, 10);
+};
+
+const formatDateKeyInTimeZone = (value, timeZone) => {
+  try {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(date);
+  } catch {
+    return null;
+  }
+};
+
+const getTimePartsInTimeZone = (value, timeZone) => {
+  try {
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) {
+      return null;
+    }
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      hour12: false,
+      hour: '2-digit',
+      minute: '2-digit',
+    }).formatToParts(date);
+    const hour = Number(parts.find((part) => part.type === 'hour')?.value);
+    const minute = Number(parts.find((part) => part.type === 'minute')?.value);
+    if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+      return null;
+    }
+    return { hour, minute };
+  } catch {
+    return null;
+  }
+};
+
+const shiftDateKeyUtc = (dateKey, days) => {
+  if (!dateKey || !DATE_KEY_RE.test(String(dateKey))) {
+    return null;
+  }
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  date.setUTCDate(date.getUTCDate() + Number(days || 0));
+  return toISODateKey(date);
+};
+
+const isWeekendDateKey = (dateKey) => {
+  if (!dateKey || !DATE_KEY_RE.test(String(dateKey))) {
+    return false;
+  }
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+  const dow = date.getUTCDay(); // 0=Sun, 6=Sat
+  return dow === 0 || dow === 6;
+};
+
+const previousTradingDayKey = (dateKey) => {
+  let cursor = shiftDateKeyUtc(dateKey, -1);
+  let safety = 0;
+  while (cursor && isWeekendDateKey(cursor) && safety < 7) {
+    cursor = shiftDateKeyUtc(cursor, -1);
+    safety += 1;
+  }
+  return cursor;
+};
+
+const isAfterUsMarketClose = (date) => {
+  const parts = getTimePartsInTimeZone(date, 'America/New_York');
+  if (!parts) {
+    return false;
+  }
+  return parts.hour > 16 || (parts.hour === 16 && parts.minute >= 0);
+};
+
+const computeLastUsMarketCloseDateKey = (value) => {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  const nyDateKey = formatDateKeyInTimeZone(date, 'America/New_York') || toISODateKey(date);
+  if (!nyDateKey) {
+    return null;
+  }
+  const afterClose = isAfterUsMarketClose(date);
+  if (afterClose) {
+    return isWeekendDateKey(nyDateKey) ? previousTradingDayKey(nyDateKey) : nyDateKey;
+  }
+  return previousTradingDayKey(nyDateKey);
+};
+
+const epochDayToDateKey = (epochDay) => {
+  const day = Number(epochDay);
+  if (!Number.isFinite(day)) {
+    return null;
+  }
+  const ms = day * 86400 * 1000;
+  const date = new Date(Date.UTC(1970, 0, 1) + ms);
+  return toISODateKey(date);
+};
+
+const normalizeHoldingsObjectSymbols = (holdingsObject) => {
+  if (!isObject(holdingsObject)) {
+    return null;
+  }
+  const normalized = {};
+  for (const [rawKey, rawValue] of Object.entries(holdingsObject)) {
+    const symbol = extractSymbolFromComposerTicker(rawKey) || normalizeSymbol(rawKey);
+    const value = Number(rawValue);
+    if (!symbol || !Number.isFinite(value)) {
+      continue;
+    }
+    normalized[symbol] = value;
+  }
+  return normalized;
+};
+
+const extractOutdatedSeriesSymbols = (outdatedSeries) => {
+  if (!Array.isArray(outdatedSeries)) {
+    return [];
+  }
+  return outdatedSeries
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        const match = entry.match(/[A-Z]+::([A-Z0-9\.\-]+)\/\//);
+        if (match?.[1]) {
+          return normalizeSymbol(match[1]);
+        }
+      }
+      if (isObject(entry) && entry.ticker) {
+        return extractSymbolFromComposerTicker(entry.ticker);
+      }
+      return null;
+    })
+    .filter(Boolean);
+};
+
+const extractBacktestWeightsForDay = ({ backtest, epochDay }) => {
+  const raw = backtest?.raw ?? null;
+  const tdvmWeights = raw?.tdvm_weights ?? null;
+  const marketDay = epochDay ?? backtest?.lastMarketDay ?? raw?.last_market_day ?? null;
+  const dayKey = marketDay != null ? String(marketDay) : null;
+  if (!dayKey || !isObject(tdvmWeights)) {
+    return [];
+  }
+  const rows = Object.entries(tdvmWeights)
+    .map(([rawSymbol, byDay]) => {
+      const symbol = normalizeSymbol(rawSymbol);
+      if (!symbol || symbol === '$USD' || symbol === 'USD' || symbol === 'CASH') {
+        return null;
+      }
+      if (!isObject(byDay)) {
+        return null;
+      }
+      const weight = Number(byDay[dayKey]);
+      if (!Number.isFinite(weight) || weight <= 0) {
+        return null;
+      }
+      return { symbol, weight };
+    })
+    .filter(Boolean);
+  if (!rows.length) {
+    return [];
+  }
+  const total = rows.reduce((sum, row) => sum + row.weight, 0);
+  if (!Number.isFinite(total) || total <= 0) {
+    return [];
+  }
+  const normalized = rows.map((row) => ({ ...row, weight: row.weight / total }));
+  normalized.sort((a, b) => a.symbol.localeCompare(b.symbol));
+  return normalized;
+};
+
+const fetchPublicSymphonyBacktestById = async ({
+  symphonyId,
+  capital,
+  startDate,
+  endDate,
+  broker = 'alpaca',
+  abbreviateDays = 1,
+  slippagePercent = 0,
+  applyRegFee = false,
+  applyTafFee = false,
+}) => {
+  if (!symphonyId) {
+    throw new Error('Missing symphony id.');
+  }
+  if (!DATE_KEY_RE.test(String(startDate || ''))) {
+    throw new Error(`Missing/invalid backtest start date ("${startDate}").`);
+  }
+  if (!DATE_KEY_RE.test(String(endDate || ''))) {
+    throw new Error(`Missing/invalid backtest end date ("${endDate}").`);
+  }
+  const resolvedCapital = Number(capital);
+  if (!Number.isFinite(resolvedCapital) || resolvedCapital <= 0) {
+    throw new Error(`Missing/invalid backtest capital ("${capital}").`);
+  }
+
+  const url = `https://backtest-api.composer.trade/api/v2/public/symphonies/${encodeURIComponent(
+    symphonyId
+  )}/backtest`;
+  const body = {
+    capital: resolvedCapital,
+    apply_reg_fee: Boolean(applyRegFee),
+    apply_taf_fee: Boolean(applyTafFee),
+    slippage_percent: Number.isFinite(Number(slippagePercent)) ? Number(slippagePercent) : 0,
+    broker: String(broker || 'alpaca'),
+    start_date: String(startDate),
+    end_date: String(endDate),
+    abbreviate_days: Number.isFinite(Number(abbreviateDays)) ? Number(abbreviateDays) : 1,
+  };
+
+  try {
+    const response = await Axios.post(url, body, {
+      headers: {
+        'User-Agent': 'tradingapp/compareComposerLinkHoldings',
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+      },
+      timeout: 45000,
+    });
+    const payload = response.data;
+    const effectiveAsOfDateKey = epochDayToDateKey(payload?.last_market_day);
+    const holdingsObject = normalizeHoldingsObjectSymbols(payload?.last_market_days_holdings) || {};
+    return {
+      symphonyId,
+      requested: {
+        startDate: String(startDate),
+        endDate: String(endDate),
+        capital: resolvedCapital,
+        broker: String(broker || 'alpaca'),
+      },
+      effectiveAsOfDateKey,
+      lastMarketDay: payload?.last_market_day ?? null,
+      holdingsObject,
+      lastBacktestValue: payload?.last_market_days_value ?? null,
+      raw: payload,
+    };
+  } catch (error) {
+    const status = error?.response?.status ?? null;
+    const payload = error?.response?.data ?? null;
+    const code = payload?.code || payload?.error || null;
+    const message = payload?.message || error?.message || 'Composer backtest request failed.';
+    const outdatedSeries = extractOutdatedSeriesSymbols(payload?.meta?.outdated_series);
+    const err = new Error(message);
+    err.name = 'ComposerPublicBacktestError';
+    err.status = status;
+    err.code = code;
+    err.meta = payload?.meta ?? null;
+    err.outdatedSeries = outdatedSeries;
+    err.raw = payload;
+    throw err;
+  }
+};
+
 const getScoreFnName = (expr) => {
   if (Array.isArray(expr) && typeof expr[0] === 'string') {
     return expr[0];
@@ -711,6 +983,9 @@ module.exports = {
   holdingsObjectToWeights,
   guessEffectiveAsOfDateKey,
   fetchPublicSymphonyDetailsById,
+  fetchPublicSymphonyBacktestById,
+  computeLastUsMarketCloseDateKey,
+  extractBacktestWeightsForDay,
   fetchPublicSymphonyScoreById,
   scoreTreeToStrategyText,
   fetchComposerLinkSnapshot,

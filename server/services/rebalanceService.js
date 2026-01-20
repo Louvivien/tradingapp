@@ -5,6 +5,13 @@ const { getAlpacaConfig } = require('../config/alpacaConfig');
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('./strategyLogger');
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
+const {
+  parseSymphonyIdFromUrl,
+  fetchPublicSymphonyDetailsById,
+  fetchPublicSymphonyBacktestById,
+  computeLastUsMarketCloseDateKey,
+  extractBacktestWeightsForDay,
+} = require('../utils/composerLinkClient');
 const { syncPolymarketPortfolio } = require('./polymarketCopyService');
 
 const TOLERANCE = 0.01;

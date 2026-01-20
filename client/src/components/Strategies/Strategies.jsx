@@ -72,6 +72,10 @@ const Strategies = () => {
   const [polymarketCashLimit, setPolymarketCashLimit] = useState("");
   const [polymarketBackfill, setPolymarketBackfill] = useState(true);
   const [polymarketSizeToBudget, setPolymarketSizeToBudget] = useState(true);
+  const [polymarketRealMoney, setPolymarketRealMoney] = useState(false);
+  const [polymarketBalance, setPolymarketBalance] = useState(null);
+  const [polymarketBalanceLoading, setPolymarketBalanceLoading] = useState(false);
+  const [polymarketBalanceError, setPolymarketBalanceError] = useState(null);
   const [polymarketRecurrence, setPolymarketRecurrence] = useState("every_minute");
   const [polymarketSchedule, setPolymarketSchedule] = useState(null);
   const [polymarketResponseReceived, setPolymarketResponseReceived] = useState(false);
@@ -110,6 +114,41 @@ const Strategies = () => {
   const [backtestLoading, setBacktestLoading] = useState(false);
   const [backtestResult, setBacktestResult] = useState(null);
   const [backtestError, setBacktestError] = useState(null);
+
+  const fetchPolymarketBalanceAllowance = useCallback(async () => {
+    if (!authToken || !userId) {
+      setPolymarketBalanceError("Please log in again.");
+      return;
+    }
+
+    setPolymarketBalanceLoading(true);
+    setPolymarketBalanceError(null);
+
+    try {
+      const headers = {
+        "x-auth-token": authToken,
+      };
+      const url = config.base_url + `/api/strategies/polymarket/balance/${userId}`;
+      const response = await Axios.get(url, { headers });
+      if (response.status === 200 && response.data?.status === "success") {
+        setPolymarketBalance({
+          balance: response.data.balance ?? null,
+          allowance: response.data.allowance ?? null,
+          available: response.data.available ?? null,
+        });
+      } else {
+        setPolymarketBalance(null);
+        setPolymarketBalanceError(response.data?.message || "Failed to fetch Polymarket balance.");
+      }
+    } catch (err) {
+      setPolymarketBalance(null);
+      setPolymarketBalanceError(
+        err.response?.data?.message || err.message || "Failed to fetch Polymarket balance."
+      );
+    } finally {
+      setPolymarketBalanceLoading(false);
+    }
+  }, [authToken, userId]);
 
   const toISODateInput = (value) => {
     const date = value instanceof Date ? value : new Date(value);
@@ -668,6 +707,7 @@ const Strategies = () => {
         strategyName: polymarketStrategyName,
         address: polymarketAddress,
         cashLimit: polymarketCashLimit,
+        realMoney: polymarketRealMoney,
         backfill: polymarketBackfill,
         sizeToBudget: polymarketSizeToBudget,
         recurrence: polymarketRecurrence,
@@ -1269,7 +1309,9 @@ const Strategies = () => {
 	        <Box>
 	          <Title>Polymarket strategy</Title>
 	          <Typography color="textSecondary" align="left">
-	            Copy trades from a Polymarket account into a paper portfolio.
+	            {polymarketRealMoney
+	              ? "Copy trades from a Polymarket account and execute them with real money."
+	              : "Copy trades from a Polymarket account into a paper portfolio."}
 	          </Typography>
 
 	          {loading ? (
@@ -1315,12 +1357,62 @@ const Strategies = () => {
 	              />
 	              <TextField
 	                variant="outlined"
-	                label="Cash limit (virtual USDC)"
+	                label={polymarketRealMoney ? "Max cash limit (USDC)" : "Cash limit (virtual USDC)"}
 	                value={polymarketCashLimit}
 	                onChange={(e) => setPolymarketCashLimit(e.target.value)}
 	                fullWidth
 	                margin="normal"
 	              />
+	              <FormControlLabel
+	                control={
+	                  <Checkbox
+	                    checked={polymarketRealMoney}
+	                    onChange={async (event) => {
+	                      const nextValue = event.target.checked;
+	                      setPolymarketRealMoney(nextValue);
+	                      setPolymarketBalance(null);
+	                      setPolymarketBalanceError(null);
+	                      if (nextValue) {
+	                        await fetchPolymarketBalanceAllowance();
+	                      }
+	                    }}
+	                  />
+	                }
+	                label="Enable real money trading"
+	              />
+	              {polymarketRealMoney && (
+	                <Box sx={{ mt: 1 }}>
+	                  {polymarketBalanceLoading ? (
+	                    <Typography variant="body2" color="textSecondary">
+	                      Fetching available funds…
+	                    </Typography>
+	                  ) : polymarketBalanceError ? (
+	                    <Typography variant="body2" color="error">
+	                      {polymarketBalanceError}
+	                    </Typography>
+	                  ) : polymarketBalance ? (
+	                    <Typography variant="body2" color="textSecondary">
+	                      Available funds: {polymarketBalance.available ?? polymarketBalance.balance ?? "—"}{" "}
+	                      {polymarketBalance.allowance !== null && polymarketBalance.allowance !== undefined
+	                        ? `(allowance: ${polymarketBalance.allowance})`
+	                        : ""}
+	                    </Typography>
+	                  ) : (
+	                    <Typography variant="body2" color="textSecondary">
+	                      Available funds: —
+	                    </Typography>
+	                  )}
+	                  <Button
+	                    size="small"
+	                    variant="text"
+	                    sx={{ mt: 0.5 }}
+	                    disabled={polymarketBalanceLoading}
+	                    onClick={fetchPolymarketBalanceAllowance}
+	                  >
+	                    Refresh funds
+	                  </Button>
+	                </Box>
+	              )}
 	              <FormControlLabel
 	                control={
 	                  <Checkbox

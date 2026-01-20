@@ -152,6 +152,11 @@ const portfolioSchema = new Schema({
       default: null,
       trim: true,
     },
+    executionMode: {
+      type: String,
+      default: null,
+      trim: true,
+    },
     sizeToBudget: {
       type: Boolean,
       default: false,

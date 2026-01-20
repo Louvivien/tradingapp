@@ -27,6 +27,7 @@ const {
   diagnoseAllocationMismatch,
   rebalanceNow,
   createPolymarketCopyTrader,
+  getPolymarketBalanceAllowance,
 } = require("../controllers/strategiesController");
 
 
@@ -40,6 +41,7 @@ router.route("/aifund/").post(auth, createCollaborative);
 router.route("/aifund/enable").post(auth, enableAIFund);
 router.route("/aifund/disable").post(auth, disableAIFund);
 router.route("/polymarket/").post(auth, createPolymarketCopyTrader);
+router.route("/polymarket/balance/:userId").get(auth, getPolymarketBalanceAllowance);
 router.route("/all/:userId").get(auth, getStrategies);
 router.route("/templates/:userId").get(auth, getStrategyTemplates);
 router.route("/logs/:userId/:strategyId").get(auth, getStrategyLogs);

@@ -29,6 +29,7 @@ const {
   alignToRebalanceWindowStart,
 } = require('../services/rebalanceService');
 const { syncPolymarketPortfolio, isValidHexAddress } = require('../services/polymarketCopyService');
+const { getPolymarketBalanceAllowance: fetchPolymarketBalanceAllowance } = require('../services/polymarketExecutionService');
 const { runEquityBackfill, TASK_NAME: EQUITY_BACKFILL_TASK } = require('../services/equityBackfillService');
 const {
   addSubscriber,
@@ -36,8 +37,9 @@ const {
   publishProgress,
   completeProgress,
 } = require('../utils/progressBus');
-const { fetchComposerLinkSnapshot } = require('../utils/composerLinkClient');
-const { computeComposerHoldingsWeights } = require('../utils/composerHoldingsWeights');
+	const { fetchComposerLinkSnapshot, fetchPublicSymphonyBacktestById, parseSymphonyIdFromUrl } = require('../utils/composerLinkClient');
+	const { computeComposerHoldingsWeights } = require('../utils/composerHoldingsWeights');
+	const { compareComposerStrategySemantics } = require('../utils/composerStrategySemantics');
 
 const RECURRENCE_LABELS = {
   every_minute: 'Every minute',
@@ -2164,6 +2166,32 @@ exports.createPolymarketCopyTrader = async (req, res) => {
       return normalized === 'true' || normalized === '1' || normalized === 'yes';
     })();
 
+    const requestedExecutionMode = (() => {
+      const raw = String(req.body.executionMode ?? '').trim().toLowerCase();
+      if (raw === 'live' || raw === 'real') {
+        return 'live';
+      }
+      if (raw === 'paper' || raw === 'dry' || raw === 'dry-run' || raw === 'dryrun') {
+        return 'paper';
+      }
+
+      const realMoneyRaw = req.body.realMoney ?? req.body.realTrading ?? req.body.liveTrading ?? req.body.enableRealTrading;
+      if (realMoneyRaw === true) {
+        return 'live';
+      }
+      if (realMoneyRaw === false) {
+        return 'paper';
+      }
+      const normalized = String(realMoneyRaw ?? '').trim().toLowerCase();
+      if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+        return 'live';
+      }
+      if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+        return 'paper';
+      }
+      return 'paper';
+    })();
+
     const encryptionKey = String(process.env.ENCRYPTION_KEY || process.env.CryptoJS_secret_key || '').trim();
     const encryptIfPossible = (value) => {
       const raw = String(value || '').trim();
@@ -2185,15 +2213,21 @@ exports.createPolymarketCopyTrader = async (req, res) => {
 
     const now = new Date();
     const strategy_id = crypto.randomBytes(16).toString('hex');
+    const strategyLabel = requestedExecutionMode === 'live'
+      ? 'Polymarket copy trader (real money)'
+      : 'Polymarket copy trader (paper)';
+    const strategySummary = requestedExecutionMode === 'live'
+      ? 'Copies trades from a Polymarket account and executes them with real money.'
+      : 'Copies trades from a Polymarket account into a paper portfolio.';
 
     const strategy = new Strategy({
       userId: userKey,
       provider: 'polymarket',
       name: rawName,
-      strategy: 'Polymarket copy trader (paper)',
+      strategy: strategyLabel,
       strategy_id,
       recurrence: normalizedRecurrence,
-      summary: 'Copies trades from a Polymarket account into a paper portfolio.',
+      summary: strategySummary,
       decisions: [],
       symphonyUrl: null,
     });
@@ -2220,6 +2254,7 @@ exports.createPolymarketCopyTrader = async (req, res) => {
       stocks: [],
       polymarket: {
         address,
+        executionMode: requestedExecutionMode,
         sizeToBudget,
         authAddress: authAddressEnv || null,
         backfillPending: backfillRequested,
@@ -2244,6 +2279,7 @@ exports.createPolymarketCopyTrader = async (req, res) => {
         provider: 'polymarket',
         recurrence: normalizedRecurrence,
         nextRebalanceAt: portfolio.nextRebalanceAt,
+        executionMode: requestedExecutionMode,
         cashLimit,
         address,
         backfill: backfillRequested,
@@ -2325,6 +2361,37 @@ exports.createPolymarketCopyTrader = async (req, res) => {
     return res.status(500).json({
       status: 'fail',
       message: error.message || 'Failed to create Polymarket strategy.',
+    });
+  }
+};
+
+exports.getPolymarketBalanceAllowance = async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const userKey = String(userId || '');
+    if (!userKey || req.user !== userKey) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const { balance, allowance } = await fetchPolymarketBalanceAllowance();
+    const balanceNum = Number(balance);
+    const allowanceNum = Number(allowance);
+    const available =
+      Number.isFinite(balanceNum) && Number.isFinite(allowanceNum) ? Math.min(balanceNum, allowanceNum) : null;
+
+    return res.status(200).json({
+      status: 'success',
+      balance,
+      allowance,
+      available,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      status: 'fail',
+      message: error?.message || 'Failed to fetch Polymarket balance.',
     });
   }
 };
@@ -3096,11 +3163,11 @@ const addDays = (dayKey, days) => {
   return toDateKey(date);
 };
 
-const compareWeightRows = ({ composer, tradingApp, tolerance }) => {
-  const composerMap = new Map(composer.map((row) => [row.symbol, row.weight]));
-  const tradingMap = new Map(tradingApp.map((row) => [row.symbol, row.weight]));
-  const symbols = Array.from(new Set([...composerMap.keys(), ...tradingMap.keys()])).sort();
-  const diffs = symbols.map((symbol) => {
+	const compareWeightRows = ({ composer, tradingApp, tolerance }) => {
+	  const composerMap = new Map(composer.map((row) => [row.symbol, row.weight]));
+	  const tradingMap = new Map(tradingApp.map((row) => [row.symbol, row.weight]));
+	  const symbols = Array.from(new Set([...composerMap.keys(), ...tradingMap.keys()])).sort();
+	  const diffs = symbols.map((symbol) => {
     const composerWeight = composerMap.get(symbol) ?? 0;
     const tradingAppWeight = tradingMap.get(symbol) ?? 0;
     const diff = Math.abs(composerWeight - tradingAppWeight);
@@ -3208,6 +3275,7 @@ exports.compareComposerHoldingsAll = async (req, res) => {
           budget: null,
           strategyTextMatchesComposer: null,
           usedIncompleteUniverse: false,
+          usedComposerBacktest: false,
           matchesComposer: false,
           canGuaranteeMatchNextRebalance: false,
           confidence: 'unknown',
@@ -3239,15 +3307,10 @@ exports.compareComposerHoldingsAll = async (req, res) => {
         const dbStrategyText = String(strategy?.strategy || '').trim();
         const strategyText = strategyTextSource === 'link' ? snapshot.strategyText : dbStrategyText;
 
-        const dbTextHash = dbStrategyText
-          ? crypto.createHash('sha256').update(dbStrategyText).digest('hex')
-          : null;
-        const linkTextHash = snapshot?.strategyText
-          ? crypto.createHash('sha256').update(String(snapshot.strategyText)).digest('hex')
-          : null;
-        if (dbTextHash && linkTextHash) {
-          entry.prediction.strategyTextMatchesComposer = dbTextHash === linkTextHash;
-        }
+        entry.prediction.strategyTextMatchesComposer = compareComposerStrategySemantics({
+          dbStrategyText,
+          linkStrategyText: snapshot?.strategyText ? String(snapshot.strategyText) : null,
+        });
 
         if (!entry.composer.holdings.length) {
           entry.status = 'error';
@@ -3352,15 +3415,52 @@ exports.compareComposerHoldingsAll = async (req, res) => {
               : local?.positions || [];
           entry.tradingApp.holdings = normalizeWeightRows(tradingHoldingsSource);
 
-          if (composerHoldingsObject) {
+          const symphonyId = parseSymphonyIdFromUrl(url);
+          let composerHoldingsObjectToUse = composerHoldingsObject;
+          let composerLastBacktestValueToUse = composerLastBacktestValue;
+          let composerBacktestError = null;
+
+          if (asOfTarget === 'next-rebalance' && symphonyId && entry.tradingApp.effectiveAsOfDate) {
+            const localMeta = local?.meta?.localEvaluator || {};
+            const lookbackDays = Number(localMeta.lookbackDays);
+            const resolvedLookback = Number.isFinite(lookbackDays) ? Math.max(30, Math.ceil(lookbackDays)) : 400;
+            const endDateKey = entry.tradingApp.effectiveAsOfDate;
+            const startDateKey = addDays(endDateKey, -resolvedLookback) || endDateKey;
+
+            try {
+              const backtest = await fetchPublicSymphonyBacktestById({
+                symphonyId,
+                capital: resolvedBudget,
+                startDate: startDateKey,
+                endDate: endDateKey,
+                broker: provider === 'alpaca' ? 'alpaca' : 'alpaca',
+                abbreviateDays: 1,
+              });
+              entry.prediction.usedComposerBacktest = true;
+              if (backtest?.effectiveAsOfDateKey) {
+                entry.composer.effectiveAsOfDate = backtest.effectiveAsOfDateKey;
+              }
+              if (backtest?.holdingsObject && Object.keys(backtest.holdingsObject).length) {
+                composerHoldingsObjectToUse = backtest.holdingsObject;
+              }
+              if (backtest?.lastBacktestValue != null) {
+                composerLastBacktestValueToUse = backtest.lastBacktestValue;
+              }
+            } catch (error) {
+              entry.prediction.usedComposerBacktest = false;
+              composerBacktestError = error;
+            }
+          }
+
+          if (composerHoldingsObjectToUse) {
             const localMeta = local?.meta?.localEvaluator || {};
             const composerPriceSource = localMeta.priceSource || priceSource || null;
             const composerAdjustment = localMeta.dataAdjustment || dataAdjustment || 'all';
             try {
               const computed = await computeComposerHoldingsWeights({
-                holdingsObject: composerHoldingsObject,
+                holdingsObject: composerHoldingsObjectToUse,
                 effectiveAsOfDateKey: entry.composer.effectiveAsOfDate,
-                lastBacktestValue: composerLastBacktestValue,
+                lastBacktestValue: composerLastBacktestValueToUse,
                 priceSource: composerPriceSource,
                 dataAdjustment: composerAdjustment,
                 cacheOnly: true,
@@ -3371,9 +3471,9 @@ exports.compareComposerHoldingsAll = async (req, res) => {
               entry.composer.meta = computed.meta || null;
             } catch (error) {
               const computed = await computeComposerHoldingsWeights({
-                holdingsObject: composerHoldingsObject,
+                holdingsObject: composerHoldingsObjectToUse,
                 effectiveAsOfDateKey: entry.composer.effectiveAsOfDate,
-                lastBacktestValue: composerLastBacktestValue,
+                lastBacktestValue: composerLastBacktestValueToUse,
                 priceSource: composerPriceSource,
                 dataAdjustment: composerAdjustment,
                 cacheOnly: false,
@@ -3391,6 +3491,9 @@ exports.compareComposerHoldingsAll = async (req, res) => {
             tolerance,
           });
 
+          const matchesComposer = (entry.comparison?.mismatches || []).length === 0;
+          entry.prediction.matchesComposer = matchesComposer;
+
           const predictionReasons = [];
           const composerEffective = entry.composer.effectiveAsOfDate;
           const tradingEffective = entry.tradingApp.effectiveAsOfDate;
@@ -3403,8 +3506,27 @@ exports.compareComposerHoldingsAll = async (req, res) => {
           }
           if (entry.prediction.strategyTextMatchesComposer === false) {
             predictionReasons.push(
-              'TradingApp strategy text differs from the defsymphony text extracted from the Composer link.'
+              matchesComposer
+                ? 'TradingApp strategy text differs from the defsymphony text extracted from the Composer link (allocations still match for the requested date).'
+                : 'TradingApp strategy text differs from the defsymphony text extracted from the Composer link.'
             );
+          }
+          if (entry.prediction.strategyTextMatchesComposer == null) {
+            predictionReasons.push(
+              'Unable to verify TradingApp strategy text equivalence with the Composer strategy definition.'
+            );
+          }
+          if (asOfTarget === 'next-rebalance' && !entry.prediction.usedComposerBacktest) {
+            const base = 'Composer public backtest did not run for the requested effective date; cannot guarantee parity with Composer at the next rebalance.';
+            if (composerBacktestError?.outdatedSeries?.length) {
+              predictionReasons.push(
+                `${base} Outdated series: ${composerBacktestError.outdatedSeries.join(', ')}.`
+              );
+            } else if (composerBacktestError?.message) {
+              predictionReasons.push(`${base} (${composerBacktestError.message})`);
+            } else {
+              predictionReasons.push(base);
+            }
           }
           if (usedIncompleteUniverse) {
             predictionReasons.push(
@@ -3414,16 +3536,18 @@ exports.compareComposerHoldingsAll = async (req, res) => {
           if (asOfTarget === 'next-rebalance' && entry.prediction.asOfSource !== 'nextRebalanceAt' && !asOfDate) {
             predictionReasons.push('Missing nextRebalanceAt schedule; falling back to Composer effective date.');
           }
-          const matchesComposer = (entry.comparison?.mismatches || []).length === 0;
-          entry.prediction.matchesComposer = matchesComposer;
+
+          const scheduleOk =
+            asOfTarget !== 'next-rebalance' ||
+            entry.prediction.asOfSource === 'nextRebalanceAt' ||
+            entry.prediction.asOfSource === 'explicit';
+          const composerBacktestOk = asOfTarget !== 'next-rebalance' || entry.prediction.usedComposerBacktest === true;
           const canGuarantee =
             matchesComposer &&
             asOfAligned === true &&
-            entry.prediction.strategyTextMatchesComposer === true &&
             !usedIncompleteUniverse &&
-            (asOfTarget !== 'next-rebalance' ||
-              entry.prediction.asOfSource === 'nextRebalanceAt' ||
-              entry.prediction.asOfSource === 'explicit');
+            scheduleOk &&
+            composerBacktestOk;
           entry.prediction.canGuaranteeMatchNextRebalance = canGuarantee;
           entry.prediction.reasons = predictionReasons;
 
@@ -3432,8 +3556,15 @@ exports.compareComposerHoldingsAll = async (req, res) => {
           } else if (canGuarantee) {
             entry.prediction.confidence = 'high';
           } else {
+            const scheduleMismatch =
+              asOfTarget === 'next-rebalance' &&
+              entry.prediction.asOfSource !== 'nextRebalanceAt' &&
+              entry.prediction.asOfSource !== 'explicit';
             const hasCritical =
-              asOfAligned === false || entry.prediction.strategyTextMatchesComposer === false;
+              asOfAligned !== true ||
+              usedIncompleteUniverse ||
+              scheduleMismatch ||
+              (asOfTarget === 'next-rebalance' && !entry.prediction.usedComposerBacktest);
             entry.prediction.confidence = hasCritical ? 'low' : 'medium';
           }
 
@@ -3455,6 +3586,19 @@ exports.compareComposerHoldingsAll = async (req, res) => {
     }
 
     const mismatched = results.filter((r) => (r.comparison?.mismatches || []).length > 0).length;
+    const guaranteed = results.filter((r) => Boolean(r?.prediction?.canGuaranteeMatchNextRebalance)).length;
+    const confidenceCounts = results.reduce(
+      (acc, row) => {
+        const level = String(row?.prediction?.confidence || '').toLowerCase();
+        if (level === 'high' || level === 'medium' || level === 'low') {
+          acc[level] += 1;
+        } else {
+          acc.unknown += 1;
+        }
+        return acc;
+      },
+      { high: 0, medium: 0, low: 0, unknown: 0 }
+    );
 
     return res.status(200).json({
       status: 'success',
@@ -3462,6 +3606,8 @@ exports.compareComposerHoldingsAll = async (req, res) => {
         total: results.length,
         mismatched,
         tolerance,
+        guaranteed,
+        confidence: confidenceCounts,
       },
       results,
     });
@@ -4053,6 +4199,16 @@ exports.getPortfolios = async (req, res) => {
           return 'scheduled';
         })(),
         stocks,
+        polymarket: provider === 'polymarket'
+          ? {
+              executionMode: portfolio?.polymarket?.executionMode
+                ? String(portfolio.polymarket.executionMode).trim().toLowerCase()
+                : null,
+            }
+          : null,
+        isRealMoney:
+          provider === 'polymarket' &&
+          String(portfolio?.polymarket?.executionMode || '').trim().toLowerCase() === 'live',
       };
     });
 

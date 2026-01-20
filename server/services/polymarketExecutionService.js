@@ -199,9 +199,10 @@ const loadClobModule = async () => {
 let cachedClient = null;
 let cachedClientKey = null;
 
-const getPolymarketClobClient = async () => {
+const getPolymarketClobClient = async (options = {}) => {
   const mode = getPolymarketExecutionMode();
-  if (mode !== 'live') {
+  const requireLiveMode = options?.requireLiveMode ?? true;
+  if (requireLiveMode && mode !== 'live') {
     throw new Error('Polymarket execution is in paper mode.');
   }
 
@@ -261,6 +262,17 @@ const getPolymarketClobClient = async () => {
   cachedClient = client;
   cachedClientKey = cacheKey;
   return client;
+};
+
+const getPolymarketBalanceAllowance = async () => {
+  const clobClient = await getPolymarketClobClient({ requireLiveMode: false });
+  const { AssetType } = await loadClobModule();
+  const response = await clobClient.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+  const payload = response?.data || response || null;
+  return {
+    balance: payload?.balance ?? null,
+    allowance: payload?.allowance ?? null,
+  };
 };
 
 const normalizeMarketOrderType = (value) => {
@@ -346,5 +358,6 @@ module.exports = {
   getPolymarketExecutionMode,
   getPolymarketExecutionDebugInfo,
   getPolymarketClobClient,
+  getPolymarketBalanceAllowance,
   executePolymarketMarketOrder,
 };

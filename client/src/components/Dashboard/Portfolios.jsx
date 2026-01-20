@@ -1,5 +1,5 @@
 import React, { useContext, useState } from "react";
-import { Link, Collapse, IconButton, Modal, Button, Typography, useTheme, LinearProgress, Box, TextField, MenuItem, CircularProgress, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Divider } from "@mui/material";
+import { Link, Collapse, IconButton, Modal, Button, Typography, useTheme, LinearProgress, Box, TextField, MenuItem, CircularProgress, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Divider, Chip } from "@mui/material";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
 import TableCell from "@mui/material/TableCell";
@@ -712,6 +712,16 @@ const deleteStrategy = async (strategyId) => {
                   >
                     {portfolio.name}
                   </Box>
+                )}
+                {portfolio.provider === "polymarket" && Boolean(portfolio.isRealMoney) && (
+                  <Chip
+                    label="real money"
+                    size="small"
+                    color="error"
+                    variant="outlined"
+                    sx={{ ml: 1 }}
+                    onClick={(event) => event.stopPropagation()}
+                  />
                 )}
 
                 <Tooltip title="Edit strategy title & symphony link" arrow>
