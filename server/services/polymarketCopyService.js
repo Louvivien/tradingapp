@@ -1324,11 +1324,18 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     return { orderId, status, txHashes };
   };
 
-  const isRetryableExecutionError = (error) => {
-    const status = Number(error?.status || error?.response?.status);
-    if (!Number.isFinite(status) || status <= 0) {
-      return true;
-    }
+	  const isRetryableExecutionError = (error) => {
+	    const msg = String(
+	      error?.message || error?.response?.data?.error || error?.response?.data?.message || ''
+	    ).toLowerCase();
+	    // "No match" typically means there's no liquidity to fill the market order; it's not transient.
+	    if (msg.includes('no match')) {
+	      return false;
+	    }
+	    const status = Number(error?.status || error?.response?.status);
+	    if (!Number.isFinite(status) || status <= 0) {
+	      return true;
+	    }
     if (status === 408 || status === 429) {
       return true;
     }

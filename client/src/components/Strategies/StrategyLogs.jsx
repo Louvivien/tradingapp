@@ -129,18 +129,21 @@ const StrategyLogs = ({ strategyId, strategyName, onClose = () => {} }) => {
         ? thoughtProcess.composerPositions
         : [];
       const localEvaluatorInfo = thoughtProcess?.tooling?.localEvaluator;
-      const localBlueprintList = Array.isArray(localEvaluatorInfo?.blueprint)
-        ? localEvaluatorInfo.blueprint.filter(Boolean)
-        : [];
-      const localTickers = Array.isArray(localEvaluatorInfo?.tickers)
-        ? localEvaluatorInfo.tickers.filter(Boolean)
-        : [];
-      const buyList = Array.isArray(details?.buys) ? details.buys : [];
-      const sellList = Array.isArray(details?.sells) ? details.sells : [];
-      const holdList = Array.isArray(details?.holds) ? details.holds : [];
+	      const localBlueprintList = Array.isArray(localEvaluatorInfo?.blueprint)
+	        ? localEvaluatorInfo.blueprint.filter(Boolean)
+	        : [];
+	      const localTickers = Array.isArray(localEvaluatorInfo?.tickers)
+	        ? localEvaluatorInfo.tickers.filter(Boolean)
+	        : [];
+	      const rebalanceList = Array.isArray(details?.rebalance) ? details.rebalance : [];
+	      const buyList = Array.isArray(details?.buys) ? details.buys : [];
+	      const sellList = Array.isArray(details?.sells) ? details.sells : [];
+	      const holdList = Array.isArray(details?.holds) ? details.holds : [];
+	      const isPolymarket = details?.provider === "polymarket";
+	      const showMakerTradeLabels = isPolymarket && details?.sizeToBudget === true;
 
-      return (
-        <Paper key={log._id} sx={{ p: 2, mb: 2 }}>
+	      return (
+	        <Paper key={log._id} sx={{ p: 2, mb: 2 }}>
           <Typography variant="subtitle2">
             {formatDateTime(log.createdAt)} · {log.level?.toUpperCase() || "INFO"}
           </Typography>
@@ -227,29 +230,66 @@ const StrategyLogs = ({ strategyId, strategyName, onClose = () => {} }) => {
               ))}
             </Box>
           )}
-          {buyList.length > 0 && (
-            <Box sx={{ mt: 1 }}>
-              <Typography variant="subtitle2">Buy orders</Typography>
-              {buyList.map((buy, index) => (
-                <Typography key={`${log._id}-buy-${index}`} variant="body2">
-                  • {buy.symbol}: {buy.qty} shares{buy.price != null ? ` @ ${formatCurrency(buy.price)}` : ''}
-                </Typography>
-              ))}
-            </Box>
-          )}
-          {sellList.length > 0 && (
-            <Box sx={{ mt: 1 }}>
-              <Typography variant="subtitle2">Sell orders</Typography>
-              {sellList.map((sell, index) => (
-                <Typography key={`${log._id}-sell-${index}`} variant="body2">
-                  • {sell.symbol}: {sell.qty} shares{sell.price != null ? ` @ ${formatCurrency(sell.price)}` : ''}
-                </Typography>
-              ))}
-            </Box>
-          )}
-          {holdList.length > 0 && (
-            <Box sx={{ mt: 1 }}>
-              <Typography variant="subtitle2">Positions unchanged</Typography>
+	          {buyList.length > 0 && (
+	            <Box sx={{ mt: 1 }}>
+	              <Typography variant="subtitle2">{showMakerTradeLabels ? "Maker buys" : "Buy orders"}</Typography>
+	              {buyList.map((buy, index) => {
+	                const qty = buy?.qty ?? buy?.size ?? buy?.amount ?? buy?.quantity;
+	                return (
+	                  <Typography key={`${log._id}-buy-${index}`} variant="body2">
+	                    • {buy.symbol}: {qty} shares{buy.price != null ? ` @ ${formatCurrency(buy.price)}` : ''}
+	                  </Typography>
+	                );
+	              })}
+	            </Box>
+	          )}
+	          {sellList.length > 0 && (
+	            <Box sx={{ mt: 1 }}>
+	              <Typography variant="subtitle2">{showMakerTradeLabels ? "Maker sells" : "Sell orders"}</Typography>
+	              {sellList.map((sell, index) => {
+	                const qty = sell?.qty ?? sell?.size ?? sell?.amount ?? sell?.quantity;
+	                return (
+	                  <Typography key={`${log._id}-sell-${index}`} variant="body2">
+	                    • {sell.symbol}: {qty} shares{sell.price != null ? ` @ ${formatCurrency(sell.price)}` : ''}
+	                  </Typography>
+	                );
+	              })}
+	            </Box>
+	          )}
+	          {isPolymarket && rebalanceList.length > 0 && (
+	            <Box sx={{ mt: 1 }}>
+	              <Typography variant="subtitle2">Executed orders</Typography>
+	              {rebalanceList.map((row, index) => {
+	                const side = String(row?.side || "").toUpperCase();
+	                const symbol = row?.symbol || "PM";
+	                const orderId = row?.execution?.orderId || null;
+	                const price = row?.price != null ? formatCurrency(row.price) : null;
+	                const notional = row?.notional != null ? formatCurrency(row.notional) : null;
+	
+	                const amountText =
+	                  side === "BUY"
+	                    ? notional || formatCurrency(row?.amount)
+	                    : `${row?.amount} shares`;
+	
+	                const suffixParts = [];
+	                if (price) suffixParts.push(`@ ${price}`);
+	                if (orderId) suffixParts.push(`order ${orderId}`);
+	                if (row?.reason === "execution_failed" || row?.reason === "execution_retryable_error") {
+	                  suffixParts.push(`FAILED: ${row?.error || row?.reason}`);
+	                }
+	
+	                return (
+	                  <Typography key={`${log._id}-rebalance-${index}`} variant="body2">
+	                    • {side} {symbol}: {amountText}
+	                    {suffixParts.length ? ` · ${suffixParts.join(" · ")}` : ""}
+	                  </Typography>
+	                );
+	              })}
+	            </Box>
+	          )}
+	          {holdList.length > 0 && (
+	            <Box sx={{ mt: 1 }}>
+	              <Typography variant="subtitle2">Positions unchanged</Typography>
               {holdList.map((hold, index) => (
                 <Typography key={`${log._id}-hold-${index}`} variant="body2">
                   • {hold.symbol}: {hold.explanation || 'No action taken.'}
