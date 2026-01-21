@@ -15,3 +15,4 @@ USELESS:https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt
 USELESS:https://raw.githubusercontent.com/Anonym0usWork1221/Free-Proxies/main/proxy_files/https_proxies.txt
 USELESS:https://raw.githubusercontent.com/yemixzy/proxy-list/main/proxies/http.txt
 USELESS:https://raw.githubusercontent.com/mertguvencli/http-proxy-list/main/proxy-list/data.txt
+https://raw.githubusercontent.com/SoliSpirit/proxy-list/main/Countries/https/Ireland.txt
