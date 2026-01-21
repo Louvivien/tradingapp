@@ -340,6 +340,8 @@ const getPolymarketBalanceAllowance = async () => {
     source: 'onchain',
     chainId,
     rpcUrl,
+    funderAddress,
+    authAddress,
     address,
     collateral: contracts.collateral,
     spender: contracts.exchange,
@@ -348,6 +350,54 @@ const getPolymarketBalanceAllowance = async () => {
     raw: {
       balanceBaseUnits: balanceBaseUnits?.toString?.() ?? null,
       allowanceBaseUnits: allowanceBaseUnits?.toString?.() ?? null,
+    },
+  };
+};
+
+const parseFiniteNumberOrNull = (value) => {
+  const num = Number(value);
+  return Number.isFinite(num) ? num : null;
+};
+
+const getPolymarketClobBalanceAllowance = async () => {
+  const mode = getPolymarketExecutionMode();
+  if (mode !== 'live') {
+    throw new Error('Polymarket execution is in paper mode.');
+  }
+
+  const env = getPolymarketLiveEnv();
+  const clobClient = await getPolymarketClobClient();
+  const { AssetType } = await loadClobModule();
+
+  const response = await clobClient.getBalanceAllowance({ asset_type: AssetType.COLLATERAL });
+  if (!response || typeof response !== 'object') {
+    throw new Error('CLOB balance-allowance returned an empty response.');
+  }
+
+  if (response?.error) {
+    const status = Number(response?.status);
+    const wrapped = new Error(String(response?.error || 'CLOB balance-allowance failed'));
+    if (Number.isFinite(status) && status > 0) {
+      wrapped.response = { status, data: response };
+    } else {
+      wrapped.response = { data: response };
+    }
+    throw wrapped;
+  }
+
+  return {
+    source: 'clob-l2',
+    host: env.host,
+    chainId: env.chainId,
+    signatureType: env.signatureType,
+    funderAddress: env.funderAddress || null,
+    authAddress: isValidHexAddress(env.authAddress) ? env.authAddress : null,
+    geoTokenSet: Boolean(env.geoBlockToken),
+    balance: parseFiniteNumberOrNull(response?.balance),
+    allowance: parseFiniteNumberOrNull(response?.allowance),
+    raw: {
+      balance: response?.balance ?? null,
+      allowance: response?.allowance ?? null,
     },
   };
 };
@@ -436,5 +486,6 @@ module.exports = {
   getPolymarketExecutionDebugInfo,
   getPolymarketClobClient,
   getPolymarketBalanceAllowance,
+  getPolymarketClobBalanceAllowance,
   executePolymarketMarketOrder,
 };
