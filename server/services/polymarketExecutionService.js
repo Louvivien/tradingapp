@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const Axios = require('axios');
 const CryptoJS = require('crypto-js');
 const { Wallet, providers, Contract, utils } = require('ethers');
 
@@ -65,6 +66,31 @@ const parseBoolean = (value, fallback = false) => {
 };
 
 const getPolymarketUseServerTime = () => parseBoolean(process.env.POLYMARKET_USE_SERVER_TIME, true);
+
+let clobUserAgentInterceptorKey = null;
+const ensureClobUserAgentInterceptor = (host) => {
+  const userAgent = normalizeEnvValue(
+    process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
+  );
+  if (!userAgent || !host) {
+    return;
+  }
+  const key = `${host}|${userAgent}`;
+  if (clobUserAgentInterceptorKey === key) {
+    return;
+  }
+  Axios.interceptors.request.use((config) => {
+    if (!config || !config.url) {
+      return config;
+    }
+    if (config.url.startsWith(host)) {
+      config.headers = config.headers || {};
+      config.headers['User-Agent'] = userAgent;
+    }
+    return config;
+  });
+  clobUserAgentInterceptorKey = key;
+};
 
 const normalizePrivateKey = (value) => {
   const raw = normalizeEnvValue(value);
@@ -246,6 +272,7 @@ const getPolymarketClobClient = async (options = {}) => {
   }
 
   const env = getPolymarketLiveEnv();
+  ensureClobUserAgentInterceptor(env.host);
   if (!env.creds.apiKey || !env.creds.secret || !env.creds.passphrase) {
     throw new Error('Missing POLYMARKET_* CLOB credentials for live trading.');
   }

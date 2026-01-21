@@ -16,6 +16,9 @@ const CLOB_HOST = String(process.env.POLYMARKET_CLOB_HOST || process.env.CLOB_AP
 
 const GEO_BLOCK_TOKEN =
   (process.env.POLYMARKET_GEO_BLOCK_TOKEN || process.env.GEO_BLOCK_TOKEN || '').trim() || null;
+const POLYMARKET_CLOB_USER_AGENT = String(
+  process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
+).trim();
 
 const POLYMARKET_HTTP_TIMEOUT_MS = (() => {
   const raw = Number(process.env.POLYMARKET_HTTP_TIMEOUT_MS || process.env.POLYMARKET_TIMEOUT_MS);
@@ -97,7 +100,10 @@ const buildPolyHmacSignature = ({ secret, timestamp, method, requestPath, body }
 };
 
 const fetchClobServerTime = async () => {
-  const response = await axiosGet(`${CLOB_HOST}/time`, { params: buildGeoParams() });
+  const response = await axiosGet(`${CLOB_HOST}/time`, {
+    params: buildGeoParams(),
+    headers: POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : undefined,
+  });
   const ts = Math.floor(Number(response?.data));
   if (!Number.isFinite(ts) || ts <= 0) {
     throw new Error('Unable to parse /time response.');
@@ -116,6 +122,7 @@ const createL2Headers = async ({ method, requestPath, body }) => {
   });
 
   return {
+    ...(POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : {}),
     POLY_ADDRESS: AUTH_ADDRESS,
     POLY_SIGNATURE: signature,
     POLY_TIMESTAMP: `${ts}`,
@@ -199,4 +206,3 @@ main().catch((error) => {
   console.error('[Polymarket Test] Unexpected error:', error?.message || error);
   process.exit(1);
 });
-

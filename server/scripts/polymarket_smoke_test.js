@@ -11,6 +11,9 @@ const DATA_API_HOST = String(process.env.POLYMARKET_DATA_API_HOST || 'https://da
   /\/+$/,
   ''
 );
+const POLYMARKET_CLOB_USER_AGENT = String(
+  process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
+).trim();
 
 const defaultUser = '0xd218e474776403a330142299f7796e8ba32eb5c9'; // public, active address for quick verification
 const user = String(process.env.POLYMARKET_TEST_ADDRESS || process.argv[2] || defaultUser).trim();
@@ -51,7 +54,9 @@ const main = async () => {
   console.log('- user:', user);
   console.log('- env creds present:', Boolean(apiKey && secret && passphrase && authAddress));
 
-  const timeRes = await request(`${CLOB_HOST}/time`);
+  const timeRes = await request(`${CLOB_HOST}/time`, {
+    headers: POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : undefined,
+  });
   console.log('- CLOB /time:', timeRes.status, String(timeRes.data).trim());
   const ts = Number(timeRes.data);
 
@@ -60,6 +65,7 @@ const main = async () => {
     const sig = sign({ ts, method: 'GET', requestPath: endpoint });
     const tradesRes = await request(`${CLOB_HOST}${endpoint}`, {
       headers: {
+        ...(POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : {}),
         POLY_ADDRESS: authAddress,
         POLY_SIGNATURE: sig,
         POLY_TIMESTAMP: String(ts),

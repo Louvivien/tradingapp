@@ -24,6 +24,9 @@ const GEO_BLOCK_TOKEN =
 const POLYMARKET_DATA_API_TAKER_ONLY_DEFAULT = String(process.env.POLYMARKET_DATA_API_TAKER_ONLY ?? 'false')
   .trim()
   .toLowerCase();
+const POLYMARKET_CLOB_USER_AGENT = String(
+  process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
+).trim();
 const POLYMARKET_DATA_API_USER_AGENT = String(process.env.POLYMARKET_DATA_API_USER_AGENT || 'tradingapp/1.0').trim();
 const POLYMARKET_HTTP_TIMEOUT_MS = (() => {
   const raw = Number(process.env.POLYMARKET_HTTP_TIMEOUT_MS || process.env.POLYMARKET_TIMEOUT_MS);
@@ -187,6 +190,13 @@ const buildGeoParams = (params = {}) => {
   return { ...params, geo_block_token: GEO_BLOCK_TOKEN };
 };
 
+const withClobUserAgent = (headers = {}) => {
+  if (!POLYMARKET_CLOB_USER_AGENT) {
+    return headers;
+  }
+  return { ...headers, 'User-Agent': POLYMARKET_CLOB_USER_AGENT };
+};
+
 const sanitizePolymarketSubdoc = (portfolio) => {
   if (!portfolio || typeof portfolio !== 'object') {
     return;
@@ -301,7 +311,10 @@ const buildPolyHmacSignature = ({ secret, timestamp, method, requestPath, body }
 };
 
 const fetchClobServerTime = async () => {
-  const response = await axiosGet(`${CLOB_HOST}/time`, { params: buildGeoParams() });
+  const response = await axiosGet(`${CLOB_HOST}/time`, {
+    params: buildGeoParams(),
+    headers: withClobUserAgent(),
+  });
   const ts = Math.floor(toNumber(response?.data, NaN));
   if (!Number.isFinite(ts) || ts <= 0) {
     throw new Error('Unable to fetch Polymarket server time.');
@@ -320,6 +333,7 @@ const createL2Headers = async ({ authAddress, apiKey, secret, passphrase, method
   });
 
   return {
+    ...withClobUserAgent(),
     POLY_ADDRESS: String(authAddress || '').trim(),
     POLY_SIGNATURE: signature,
     POLY_TIMESTAMP: `${ts}`,
@@ -529,7 +543,10 @@ const fetchMarket = async (conditionId) => {
   if (!cleaned) {
     return null;
   }
-  const response = await axiosGet(`${CLOB_HOST}/markets/${cleaned}`, { params: buildGeoParams() });
+  const response = await axiosGet(`${CLOB_HOST}/markets/${cleaned}`, {
+    params: buildGeoParams(),
+    headers: withClobUserAgent(),
+  });
   return response?.data || null;
 };
 
@@ -2494,6 +2511,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
             try {
               const orderbookResponse = await axiosGet(`${CLOB_HOST}/book`, {
                 params: buildGeoParams({ token_id: order.assetId }),
+                headers: withClobUserAgent(),
               });
               const book = orderbookResponse?.data || null;
               const bidsRaw = Array.isArray(book?.bids) ? book.bids : [];

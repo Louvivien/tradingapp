@@ -10,6 +10,9 @@ dotenv.config({ path: path.resolve(__dirname, '../config/.env') });
 
 const CLOB_HOST = String(process.env.POLYMARKET_CLOB_HOST || 'https://clob.polymarket.com').replace(/\/+$/, '');
 const GEO_BLOCK_TOKEN = (process.env.POLYMARKET_GEO_BLOCK_TOKEN || process.env.GEO_BLOCK_TOKEN || '').trim() || null;
+const POLYMARKET_CLOB_USER_AGENT = String(
+  process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
+).trim();
 const CHAIN_ID = (() => {
   const raw = Number(process.env.POLYMARKET_CHAIN_ID || process.env.CLOB_CHAIN_ID);
   if (Number.isFinite(raw)) return raw;
@@ -188,7 +191,10 @@ const main = async () => {
 
   const { createL1Headers } = await import('@polymarket/clob-client');
 
-  const timeRes = await request('GET', `${CLOB_HOST}/time`, { params: withGeoParams({}) });
+  const timeRes = await request('GET', `${CLOB_HOST}/time`, {
+    params: withGeoParams({}),
+    headers: POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : undefined,
+  });
   const ts = Number(timeRes.data);
   if (!Number.isFinite(ts)) {
     throw new Error(`Failed to fetch server time (status=${timeRes.status})`);
@@ -196,7 +202,10 @@ const main = async () => {
 
   const createHeaders = await createL1Headers(wallet, CHAIN_ID, nonce, ts);
   const createRes = await request('POST', `${CLOB_HOST}/auth/api-key`, {
-    headers: createHeaders,
+    headers: {
+      ...(POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : {}),
+      ...createHeaders,
+    },
     params: withGeoParams({}),
   });
 
@@ -211,7 +220,10 @@ const main = async () => {
   if (!creds.key || !creds.secret || !creds.passphrase) {
     const deriveHeaders = await createL1Headers(wallet, CHAIN_ID, nonce + 1, ts);
     const deriveRes = await request('GET', `${CLOB_HOST}/auth/derive-api-key`, {
-      headers: deriveHeaders,
+      headers: {
+        ...(POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : {}),
+        ...deriveHeaders,
+      },
       params: withGeoParams({}),
     });
     creds = asCreds(deriveRes.data);
@@ -245,7 +257,10 @@ const main = async () => {
   }
 
   if (opts.verify) {
-    const time2 = await request('GET', `${CLOB_HOST}/time`, { params: withGeoParams({}) });
+    const time2 = await request('GET', `${CLOB_HOST}/time`, {
+      params: withGeoParams({}),
+      headers: POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : undefined,
+    });
     const ts2 = Number(time2.data);
     if (!Number.isFinite(ts2)) {
       throw new Error(`Failed to fetch server time for verify (status=${time2.status})`);
@@ -255,6 +270,7 @@ const main = async () => {
     const sig = signL2({ ts: ts2, method: 'GET', requestPath: endpoint, secret: creds.secret });
     const verifyRes = await request('GET', `${CLOB_HOST}${endpoint}`, {
       headers: {
+        ...(POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : {}),
         POLY_ADDRESS: address,
         POLY_SIGNATURE: sig,
         POLY_TIMESTAMP: String(ts2),

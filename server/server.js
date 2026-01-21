@@ -248,6 +248,9 @@ app.get("/api/health/polymarket", async (req, res) => {
 
   const tradesSourceRaw = normalizeEnvValue(process.env.POLYMARKET_TRADES_SOURCE || "auto");
   const tradesSourceSetting = normalizeTradesSourceSetting(tradesSourceRaw);
+  const clobUserAgent = normalizeEnvValue(
+    process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || "tradingapp/1.0"
+  );
 
   const buildGeoParams = (params = {}) => {
     if (!geoToken) return params;
@@ -368,7 +371,10 @@ app.get("/api/health/polymarket", async (req, res) => {
 
   try {
     const t0 = Date.now();
-    const timeRes = await httpGet(`${clobHost}/time`, { params: buildGeoParams() });
+    const timeRes = await httpGet(`${clobHost}/time`, {
+      params: buildGeoParams(),
+      headers: clobUserAgent ? { "User-Agent": clobUserAgent } : undefined,
+    });
     report.clob.time.latencyMs = Date.now() - t0;
     report.clob.time.status = timeRes.status;
     const ts = Math.floor(Number(timeRes.data));
@@ -388,6 +394,7 @@ app.get("/api/health/polymarket", async (req, res) => {
   const createL2Headers = (requestPath) => {
     const ts = report.clob.time.serverTime || Math.floor(Date.now() / 1000);
     return {
+      ...(clobUserAgent ? { "User-Agent": clobUserAgent } : {}),
       POLY_ADDRESS: authAddress,
       POLY_SIGNATURE: sign({ ts, method: "GET", requestPath }),
       POLY_TIMESTAMP: String(ts),
