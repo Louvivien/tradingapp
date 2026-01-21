@@ -674,10 +674,8 @@ const formatAxiosError = (error) => {
     }
   })();
   if (Number.isFinite(status) && status > 0) {
-    if (status === 401 && apiMessage && apiMessage.toLowerCase().includes('unauthorized')) {
-      const hint = GEO_BLOCK_TOKEN
-        ? ''
-        : ' (check POLYMARKET_AUTH_ADDRESS + keys; France may require POLYMARKET_GEO_BLOCK_TOKEN)';
+    if ((status === 401 || status === 403) && apiMessage) {
+      const hint = GEO_BLOCK_TOKEN ? '' : ' (if you are geoblocked, set POLYMARKET_GEO_BLOCK_TOKEN)';
       return `Request failed with status code ${status} (${apiMessage})${hint}`;
     }
     return apiMessage ? `Request failed with status code ${status} (${apiMessage})` : `Request failed with status code ${status}`;
@@ -776,6 +774,35 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   const hasAuthAddress = Boolean(authAddressCandidate && isValidHexAddress(authAddressCandidate));
   const authAddress = hasAuthAddress ? authAddressCandidate : null;
   const hasClobCredentials = Boolean(apiKey && secret && passphrase && authAddress);
+  const funderEnv = String(process.env.POLYMARKET_FUNDER_ADDRESS || process.env.POLYMARKET_PROFILE_ADDRESS || '').trim();
+  const funderAddressCandidate = isValidHexAddress(funderEnv) ? funderEnv : authAddress;
+  const isSelfCopyLiveExecution =
+    executionEnabled &&
+    Boolean(address && isValidHexAddress(address)) &&
+    Boolean(funderAddressCandidate && isValidHexAddress(funderAddressCandidate)) &&
+    address.toLowerCase() === funderAddressCandidate.toLowerCase();
+
+  if (isSelfCopyLiveExecution) {
+    executionEnabled = false;
+    executionDisabledReason =
+      executionDisabledReason ||
+      'Self-copy guard: maker address matches the execution wallet. Set a different maker address to copy (do not use your own funded wallet).';
+    void recordStrategyLog({
+      strategyId: portfolio.strategy_id,
+      userId: portfolio.userId,
+      strategyName: portfolio.name,
+      level: 'error',
+      message: 'Polymarket live execution disabled (self-copy guard)',
+      details: {
+        provider: 'polymarket',
+        mode: requestedMode || 'auto',
+        envExecutionMode,
+        portfolioExecutionMode,
+        makerAddress: address,
+        funderAddress: funderAddressCandidate,
+      },
+    }).catch(() => {});
+  }
   const sizeToBudget = parseBoolean(poly.sizeToBudget, parseBoolean(process.env.POLYMARKET_SIZE_TO_BUDGET, false));
   const seedFromPositions = parseBoolean(
     poly.seedFromPositions,
@@ -1597,21 +1624,33 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   const extractOrderMeta = (result) => {
     const response = result?.response;
     if (!response || typeof response !== 'object') {
-      return { orderId: null, status: null, txHashes: null };
+      return { orderId: null, status: null, txHashes: null, success: null, error: null };
     }
     const orderId = response.orderID || response.orderId || response.order_id || response.id || null;
     const status = response.status || null;
+    const success = response.success !== undefined ? Boolean(response.success) : null;
+    const error = (() => {
+      const raw = response.errorMsg || response.error || response.message || null;
+      if (!raw) return null;
+      if (typeof raw === 'string') return raw.trim() || null;
+      try {
+        const json = JSON.stringify(raw);
+        return json.length > 500 ? `${json.slice(0, 500)}…` : json;
+      } catch {
+        return String(raw);
+      }
+    })();
     const txHashes = Array.isArray(response.transactionsHashes)
       ? response.transactionsHashes
       : Array.isArray(response.transactions)
         ? response.transactions
         : null;
-    return { orderId, status, txHashes };
+    return { orderId, status, txHashes, success, error };
   };
 
-	  const isRetryableExecutionError = (error) => {
-	    const msg = String(formatAxiosError(error) || '').toLowerCase();
-	    // "No match" typically means there's no liquidity to fill the market order; it's not transient.
+		  const isRetryableExecutionError = (error) => {
+		    const msg = String(formatAxiosError(error) || '').toLowerCase();
+		    // "No match" typically means there's no liquidity to fill the market order; it's not transient.
 	    if (msg.includes('no match')) {
 	      return false;
 	    }
@@ -1791,15 +1830,35 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
             side: 'BUY',
             amount: cost,
           });
-        } catch (error) {
-          if (isExecutionConfigError(error)) {
-            executionEnabled = false;
-            executionDisabledReason = formatAxiosError(error);
-            if (!liveExecutionConfigLogged) {
-              liveExecutionConfigLogged = true;
-              await recordStrategyLog({
-                strategyId: portfolio.strategy_id,
-                userId: portfolio.userId,
+	      } catch (error) {
+	        if (isExecutionConfigError(error)) {
+	          executionEnabled = false;
+	          executionDisabledReason = formatAxiosError(error);
+	          tradeSummary.rebalance.push({
+	            symbol: symbolFor(order),
+	            assetId: order.assetId,
+	            side: order.side,
+	            amount,
+	            price: order.price,
+	            notional: roundToDecimals(order.notional, 6),
+	            reason: 'execution_failed',
+	            error: executionDisabledReason,
+	            execution: {
+	              mode: executionMode,
+	              dryRun: false,
+	              orderId: null,
+	              status: Number.isFinite(Number(error?.status || error?.response?.status))
+	                ? Number(error?.status || error?.response?.status)
+	                : null,
+	              txHashes: null,
+	            },
+	          });
+	          rebalancePlan.failedOrders += 1;
+	          if (!liveExecutionConfigLogged) {
+	            liveExecutionConfigLogged = true;
+	            await recordStrategyLog({
+	              strategyId: portfolio.strategy_id,
+	              userId: portfolio.userId,
                 strategyName: portfolio.name,
                 level: 'error',
                 message: 'Polymarket live execution failed (configuration/auth error)',
@@ -2480,24 +2539,24 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     const symbolFor = ({ market, outcome, assetId }) =>
       market ? `PM:${String(market).slice(0, 10)}:${outcome || 'OUTCOME'}` : `PM:${String(assetId).slice(0, 10)}`;
 
-    for (const order of orders) {
-      const amount = order.side === 'BUY'
-        ? roundToDecimals(order.notional, 6)
-        : roundToDecimals(Math.abs(order.deltaQty), 6);
+	    for (const order of orders) {
+	      const amount = order.side === 'BUY'
+	        ? roundToDecimals(order.notional, 6)
+	        : roundToDecimals(Math.abs(order.deltaQty), 6);
       if (!amount || amount <= 0) {
         rebalancePlan.failedOrders += 1;
         continue;
       }
 
-      let execution = null;
-      try {
-        rebalancePlan.attemptedOrders += 1;
-        execution = await executePolymarketMarketOrder({
-          tokenID: order.assetId,
-          side: order.side,
-          amount,
-        });
-      } catch (error) {
+	      let execution = null;
+	      try {
+	        rebalancePlan.attemptedOrders += 1;
+	        execution = await executePolymarketMarketOrder({
+	          tokenID: order.assetId,
+	          side: order.side,
+	          amount,
+	        });
+	      } catch (error) {
         if (isExecutionConfigError(error)) {
           executionEnabled = false;
           executionDisabledReason = formatAxiosError(error);
@@ -2616,27 +2675,67 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
           });
           rebalancePlan.failedOrders += 1;
           continue;
-        }
-      }
+	        }
+	      }
 
-      const meta = extractOrderMeta(execution);
-      tradeSummary.rebalance.push({
-        symbol: symbolFor(order),
-        assetId: order.assetId,
-        side: order.side,
-        amount,
-        price: order.price,
-        notional: roundToDecimals(order.notional, 6),
-        execution: {
-          mode: execution.mode,
-          dryRun: execution.dryRun,
-          orderId: meta.orderId,
-          status: meta.status,
-          txHashes: meta.txHashes,
-        },
-      });
-      rebalancePlan.successfulOrders += 1;
-    }
+	      const meta = extractOrderMeta(execution);
+	      const statusCode = (() => {
+	        const parsed = Number(meta.status);
+	        return Number.isFinite(parsed) && parsed >= 100 ? parsed : null;
+	      })();
+	      const hasReceipt = Boolean(meta.orderId) || (Array.isArray(meta.txHashes) && meta.txHashes.length > 0);
+	      const looksRejected = meta.success === false || (statusCode !== null && statusCode >= 400) || !hasReceipt;
+
+	      if (looksRejected) {
+	        const errorMessage = meta.error || (statusCode !== null ? `Order rejected (status ${statusCode})` : 'Order rejected');
+	        tradeSummary.rebalance.push({
+	          symbol: symbolFor(order),
+	          assetId: order.assetId,
+	          side: order.side,
+	          amount,
+	          price: order.price,
+	          notional: roundToDecimals(order.notional, 6),
+	          reason: 'execution_failed',
+	          error: errorMessage,
+	          execution: {
+	            mode: execution?.mode ?? executionMode,
+	            dryRun: execution?.dryRun ?? false,
+	            orderId: meta.orderId,
+	            status: meta.status,
+	            txHashes: meta.txHashes,
+	            error: meta.error,
+	            success: meta.success,
+	          },
+	        });
+	        rebalancePlan.failedOrders += 1;
+
+	        if (statusCode === 401 || statusCode === 403) {
+	          executionEnabled = false;
+	          executionDisabledReason = errorMessage;
+	          liveExecutionAbort = errorMessage;
+	          break;
+	        }
+	        continue;
+	      }
+	      tradeSummary.rebalance.push({
+	        symbol: symbolFor(order),
+	        assetId: order.assetId,
+	        side: order.side,
+	        amount,
+	        price: order.price,
+	        notional: roundToDecimals(order.notional, 6),
+	        execution: {
+	          mode: execution.mode,
+	          dryRun: execution.dryRun,
+	          orderId: meta.orderId,
+	          status: meta.status,
+	          txHashes: meta.txHashes,
+	          error: meta.error,
+	          success: meta.success,
+	        },
+	      });
+	      rebalancePlan.successfulOrders += 1;
+	    }
 
     if (!rebalancePlan.reason) {
       rebalancePlan.reason = 'orders_planned';
@@ -2653,37 +2752,64 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       backfillPending: mode === 'backfill' ? false : Boolean(portfolio.polymarket?.backfillPending),
       backfilledAt: mode === 'backfill' ? now.toISOString() : (portfolio.polymarket?.backfilledAt || null),
     };
-  } else if (mode === 'backfill') {
-    portfolio.polymarket = {
-      ...snapshotPolymarket(portfolio.polymarket),
-      backfillPending: false,
-      backfilledAt: now.toISOString(),
-    };
-  }
+	  } else if (mode === 'backfill') {
+	    portfolio.polymarket = {
+	      ...snapshotPolymarket(portfolio.polymarket),
+	      backfillPending: false,
+	      backfilledAt: now.toISOString(),
+	    };
+	  }
 
-  portfolio.stocks = updatedStocks;
-  portfolio.retainedCash = toNumber(cash, 0);
-  portfolio.cashBuffer = toNumber(cash, 0);
-  portfolio.lastRebalancedAt = now;
-  portfolio.nextRebalanceAt = computeNextRebalanceAt(normalizeRecurrence(portfolio.recurrence), now);
-  portfolio.rebalanceCount = toNumber(portfolio.rebalanceCount, 0) + 1;
-  portfolio.lastPerformanceComputedAt = now;
-  sanitizePolymarketSubdoc(portfolio);
-  await portfolio.save();
+	  const shouldApplyPortfolioUpdate = (() => {
+	    if (executionMode !== 'live') {
+	      return true;
+	    }
+	    if (mode === 'backfill') {
+	      return true;
+	    }
+	    if (!makerStateEnabled || !didSize) {
+	      return true;
+	    }
+	    if (!rebalancePlan) {
+	      return false;
+	    }
+	    if (!executionEnabled) {
+	      return false;
+	    }
+	    if (rebalancePlan.attemptedOrders <= 0) {
+	      return false;
+	    }
+	    if (rebalancePlan.failedOrders > 0 || liveExecutionAbort) {
+	      return false;
+	    }
+	    return true;
+	  })();
+
+	  if (shouldApplyPortfolioUpdate) {
+	    portfolio.stocks = updatedStocks;
+	    portfolio.retainedCash = toNumber(cash, 0);
+	    portfolio.cashBuffer = toNumber(cash, 0);
+	  }
+	  portfolio.lastRebalancedAt = now;
+	  portfolio.nextRebalanceAt = computeNextRebalanceAt(normalizeRecurrence(portfolio.recurrence), now);
+	  portfolio.rebalanceCount = toNumber(portfolio.rebalanceCount, 0) + 1;
+	  portfolio.lastPerformanceComputedAt = now;
+	  sanitizePolymarketSubdoc(portfolio);
+	  await portfolio.save();
 
   await recordEquitySnapshotIfPossible({
     stocks: updatedStocks,
     retainedCash: portfolio.retainedCash,
   });
 
-  const maxLogTrades = mode === 'backfill' ? 200 : 500;
-  const summaryMessage = mode === 'backfill'
-    ? 'Polymarket copy-trader backfilled'
-    : seededFromPositionsSnapshot
-      ? 'Polymarket copy-trader seeded from positions snapshot'
-      : liveExecutionAbort
-        ? 'Polymarket copy-trader sync incomplete'
-        : 'Polymarket copy-trader synced';
+	  const maxLogTrades = mode === 'backfill' ? 200 : 500;
+	  const summaryMessage = mode === 'backfill'
+	    ? 'Polymarket copy-trader backfilled'
+	    : liveExecutionAbort
+	      ? 'Polymarket copy-trader live execution failed'
+	      : seededFromPositionsSnapshot
+	        ? 'Polymarket copy-trader seeded from positions snapshot'
+	        : 'Polymarket copy-trader synced';
 
   const executionDebug = (() => {
     if (typeof getPolymarketExecutionDebugInfo !== 'function') {
@@ -2719,22 +2845,23 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 		    strategyName: portfolio.name,
 		    level: liveExecutionAbort ? 'warn' : 'info',
 	    message: summaryMessage,
-	    details: {
-	      provider: 'polymarket',
-	      mode,
-	      tradeSource: tradeSourceUsed,
-	      tradesSourceSetting,
-        envExecutionMode,
-        portfolioExecutionMode,
-	      executionMode,
-	      executionEnabled,
-	      executionDisabledReason,
-		      executionAbort: liveExecutionAbort,
-		      hasClobCredentials,
-		      clobAuthCooldown: getClobAuthCooldownStatus(),
-			      sizeToBudget: makerStateEnabled,
-			      sizedToBudget: didSize,
-            seedFromPositions,
+		    details: {
+		      provider: 'polymarket',
+		      mode,
+		      tradeSource: tradeSourceUsed,
+		      tradesSourceSetting,
+	        envExecutionMode,
+	        portfolioExecutionMode,
+		      executionMode,
+		      executionEnabled,
+		      executionDisabledReason,
+			      executionAbort: liveExecutionAbort,
+	          portfolioUpdated: shouldApplyPortfolioUpdate,
+			      hasClobCredentials,
+			      clobAuthCooldown: getClobAuthCooldownStatus(),
+				      sizeToBudget: makerStateEnabled,
+				      sizedToBudget: didSize,
+	            seedFromPositions,
             seededFromPositionsSnapshot,
             ignoredTrades: ignoredTradesCount,
 			      sizing: sizingMeta,

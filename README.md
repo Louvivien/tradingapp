@@ -119,12 +119,18 @@ Server env vars (in `tradingapp/server/config/.env`):
 - CLOB L2 creds (only needed if forcing `clob-l2`): `POLYMARKET_API_KEY`, `POLYMARKET_SECRET`, `POLYMARKET_PASSPHRASE`, `POLYMARKET_AUTH_ADDRESS`
 - Execution mode: `POLYMARKET_EXECUTION_MODE=paper|live` (default: `paper`)
   - Live trading requires: `POLYMARKET_PRIVATE_KEY` (signer), plus the CLOB L2 creds above.
+  - You can also provide the signer key via file (first non-empty line): `POLYMARKET_PRIVATE_KEY_FILE=/path/to/key.txt` (useful for Render secret files).
   - Optional live settings: `POLYMARKET_CHAIN_ID=137|80002`, `POLYMARKET_SIGNATURE_TYPE=0|1`, `POLYMARKET_FUNDER_ADDRESS=0x...`, `POLYMARKET_MARKET_ORDER_TYPE=fak|fok`
   - Safety: live execution runs only for incremental syncs by default; to allow a one-time live rebalance after a backfill (to enter the copied positions), set `POLYMARKET_BACKFILL_LIVE_REBALANCE=true` (requires “Size trades to my budget”).
 - Data API options (optional): `POLYMARKET_DATA_API_HOST`, `POLYMARKET_DATA_API_TAKER_ONLY`, `POLYMARKET_DATA_API_USER_AGENT`
 - CLOB HTTP user agent (optional, helps with Cloudflare 403s): `POLYMARKET_CLOB_USER_AGENT` (default: `tradingapp/1.0`)
 - CLOB HTTP proxy (optional, supports comma-separated lists; first entry used): `POLYMARKET_CLOB_PROXY` (fallbacks: `POLYMARKET_HTTP_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`)
 - CLOB auth retry cooldown in `auto` mode (optional, default 1h): `POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS`
+
+Magic/email wallets (separate signer + funded profile):
+- `POLYMARKET_AUTH_ADDRESS` must be the **signer** address (the one derived from `POLYMARKET_PRIVATE_KEY`).
+- `POLYMARKET_FUNDER_ADDRESS` must be the **funded profile** address (where USDC/allowance lives).
+- `POLYMARKET_SIGNATURE_TYPE=1` is commonly required for Magic accounts.
 
 Smoke test:
 ```sh
@@ -135,6 +141,10 @@ node scripts/polymarket_smoke_test.js 0xYourWalletAddress
 Debug endpoint (useful after deploying the backend):
 - `GET /api/health/polymarket?maker=0xYourWalletAddress` (returns CLOB `/time`, `/auth/api-keys`, and `/data/trades` status + env credential fingerprints/lengths)
   - If `POLYMARKET_DEBUG_TOKEN` is set server-side, include header `x-debug-token: <token>`
+
+Interpreting strategy logs:
+- If the “Executed orders” list shows `FAILED (401/403)` and `orderId` is empty, the CLOB rejected the order (often geo-block / invalid auth). Check the error string and whether `POLYMARKET_GEO_BLOCK_TOKEN` is set.
+- `portfolioUpdated: false` means the app did not assume fills (it will retry next sync instead of pretending the trade happened).
 
 Fix `401 Unauthorized/Invalid api key` (regenerate CLOB L2 creds):
 ```sh

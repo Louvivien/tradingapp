@@ -1350,14 +1350,18 @@ const Strategies = () => {
 	                fullWidth
 	                margin="normal"
 	              />
-	              <TextField
-	                variant="outlined"
-	                label="Polymarket address (0x...)"
-	                value={polymarketAddress}
-	                onChange={(e) => setPolymarketAddress(e.target.value)}
-	                fullWidth
-	                margin="normal"
-	              />
+		              <TextField
+		                variant="outlined"
+		                label="Polymarket maker address to copy (0x...)"
+		                value={polymarketAddress}
+		                onChange={(e) => setPolymarketAddress(e.target.value)}
+		                fullWidth
+		                margin="normal"
+		              />
+		              <Typography variant="caption" color="textSecondary" align="left">
+		                This is the account to copy. Live orders execute using the server wallet configured in{" "}
+		                <code>tradingapp/server/config/.env</code> (not necessarily the maker address above).
+		              </Typography>
 	              <TextField
 	                variant="outlined"
 	                label={polymarketRealMoney ? "Max cash limit (USDC)" : "Cash limit (virtual USDC)"}

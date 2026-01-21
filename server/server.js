@@ -5,6 +5,63 @@ const crypto = require("crypto");
 const Axios = require("axios");
 const CryptoJS = require("crypto-js");
 
+// Redact potentially sensitive CLOB client error logs (the upstream library logs request config including auth headers).
+(() => {
+  const originalError = console.error.bind(console);
+
+  const redactHeaders = (headers) => {
+    if (!headers || typeof headers !== "object") return headers;
+    const cloned = { ...headers };
+    const redactKeys = [
+      "POLY_API_KEY",
+      "POLY_PASSPHRASE",
+      "POLY_SIGNATURE",
+      "POLY_TIMESTAMP",
+      "Authorization",
+      "authorization",
+      "X-API-KEY",
+      "x-api-key",
+      "Cookie",
+      "cookie",
+    ];
+    redactKeys.forEach((key) => {
+      if (cloned[key]) cloned[key] = "[REDACTED]";
+    });
+    return cloned;
+  };
+
+  const redactClobClientPayload = (value) => {
+    if (typeof value !== "string") return value;
+    const trimmed = value.trim();
+    if (!trimmed.startsWith("{") || !trimmed.endsWith("}")) return value;
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed?.config?.headers) {
+        parsed.config.headers = redactHeaders(parsed.config.headers);
+      }
+      return JSON.stringify(parsed);
+    } catch {
+      return value;
+    }
+  };
+
+  // eslint-disable-next-line no-console
+  console.error = (...args) => {
+    try {
+      if (
+        typeof args[0] === "string" &&
+        args[0].includes("[CLOB Client] request error") &&
+        typeof args[1] === "string"
+      ) {
+        return originalError(args[0], redactClobClientPayload(args[1]), ...args.slice(2));
+      }
+    } catch {
+      // ignore
+    }
+    return originalError(...args);
+  };
+})();
+
 // Load environment variables from .env file when available; otherwise rely on existing env vars (useful for Render)
 const envPath = path.resolve(__dirname, './config/.env');
 console.log(`[Config] Loading environment variables from: ${envPath}`);

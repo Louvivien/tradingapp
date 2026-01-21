@@ -535,6 +535,64 @@ const deleteStrategy = async (strategyId) => {
     }
   };
 
+  const handlePolymarketSyncNow = async (portfolio, event) => {
+    if (event?.stopPropagation) {
+      event.stopPropagation();
+    }
+    if (!portfolio?.strategy_id || !userData?.user?.id || !userData?.token) {
+      return;
+    }
+
+    const strategyId = portfolio.strategy_id;
+    const isRealMoney = Boolean(portfolio?.isRealMoney);
+    const isRealMoneyRequested = Boolean(portfolio?.isRealMoneyRequested);
+    const confirmText = isRealMoney
+      ? `Run Polymarket sync now for \"${portfolio.name}\"?\n\nThis may place REAL orders on your Polymarket account.`
+      : isRealMoneyRequested
+        ? `Run Polymarket sync now for \"${portfolio.name}\"?\n\nThis strategy is set to real money, but live execution is disabled by the server environment (it will run in paper mode).`
+        : `Run Polymarket sync now for \"${portfolio.name}\"?`;
+
+    const confirm = window.confirm(confirmText);
+    if (!confirm) {
+      return;
+    }
+
+    setResendStatus((prev) => ({
+      ...prev,
+      [strategyId]: { loading: true, message: null, error: false },
+    }));
+
+    try {
+      const url = `${config.base_url}/api/strategies/rebalance-now/${userData.user.id}/${strategyId}`;
+      const headers = {
+        "x-auth-token": userData.token,
+      };
+      const response = await Axios.post(url, { mode: "incremental" }, { headers });
+      const message =
+        response?.data?.log?.message ||
+        response?.data?.message ||
+        "Polymarket sync complete.";
+
+      setResendStatus((prev) => ({
+        ...prev,
+        [strategyId]: { loading: false, message, error: false },
+      }));
+
+      if (typeof refreshPortfolios === "function") {
+        await refreshPortfolios();
+      }
+    } catch (error) {
+      setResendStatus((prev) => ({
+        ...prev,
+        [strategyId]: {
+          loading: false,
+          message: error.response?.data?.message || error.message || "Polymarket sync failed.",
+          error: true,
+        },
+      }));
+    }
+  };
+
   const openResendModal = (portfolio, event) => {
     if (event?.stopPropagation) {
       event.stopPropagation();
@@ -778,6 +836,17 @@ const deleteStrategy = async (strategyId) => {
                     disabled={!!resendStatus[portfolio.strategy_id]?.loading}
                   >
                     {resendStatus[portfolio.strategy_id]?.loading ? 'Resending…' : 'Resend Orders'}
+                  </Button>
+                )}
+                {portfolio.provider === "polymarket" && (
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    sx={{ ml: 1 }}
+                    onClick={(event) => handlePolymarketSyncNow(portfolio, event)}
+                    disabled={!!resendStatus[portfolio.strategy_id]?.loading}
+                  >
+                    {resendStatus[portfolio.strategy_id]?.loading ? "Syncing…" : "Sync now"}
                   </Button>
                 )}
                 {portfolio.provider === "polymarket" && (

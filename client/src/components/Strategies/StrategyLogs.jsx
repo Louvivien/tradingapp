@@ -256,31 +256,40 @@ const StrategyLogs = ({ strategyId, strategyName, onClose = () => {} }) => {
 	              })}
 	            </Box>
 	          )}
-	          {isPolymarket && rebalanceList.length > 0 && (
-	            <Box sx={{ mt: 1 }}>
-	              <Typography variant="subtitle2">Executed orders</Typography>
-	              {rebalanceList.map((row, index) => {
-	                const side = String(row?.side || "").toUpperCase();
-	                const symbol = row?.symbol || "PM";
-	                const orderId = row?.execution?.orderId || null;
-	                const price = row?.price != null ? formatCurrency(row.price) : null;
-	                const notional = row?.notional != null ? formatCurrency(row.notional) : null;
-	
-	                const amountText =
-	                  side === "BUY"
-	                    ? notional || formatCurrency(row?.amount)
-	                    : `${row?.amount} shares`;
-	
-	                const suffixParts = [];
-	                if (price) suffixParts.push(`@ ${price}`);
-	                if (orderId) suffixParts.push(`order ${orderId}`);
-	                if (row?.reason === "execution_failed" || row?.reason === "execution_retryable_error") {
-	                  suffixParts.push(`FAILED: ${row?.error || row?.reason}`);
-	                }
-	
-	                return (
-	                  <Typography key={`${log._id}-rebalance-${index}`} variant="body2">
-	                    • {side} {symbol}: {amountText}
+		          {isPolymarket && rebalanceList.length > 0 && (
+		            <Box sx={{ mt: 1 }}>
+		              <Typography variant="subtitle2">Executed orders</Typography>
+		              {rebalanceList.map((row, index) => {
+		                const side = String(row?.side || "").toUpperCase();
+		                const symbol = row?.symbol || "PM";
+		                const orderId = row?.execution?.orderId || null;
+		                const statusCode = Number(row?.execution?.status);
+		                const hasStatusCode = Number.isFinite(statusCode) && statusCode >= 100;
+		                const execError = row?.execution?.error || row?.error || null;
+		                const price = row?.price != null ? formatCurrency(row.price) : null;
+		                const notional = row?.notional != null ? formatCurrency(row.notional) : null;
+		
+		                const amountText =
+		                  side === "BUY"
+		                    ? notional || formatCurrency(row?.amount)
+		                    : `${row?.amount} shares`;
+		
+		                const suffixParts = [];
+		                if (price) suffixParts.push(`@ ${price}`);
+		                if (orderId) suffixParts.push(`order ${orderId}`);
+		                const looksFailed =
+		                  row?.reason === "execution_failed" ||
+		                  row?.reason === "execution_retryable_error" ||
+		                  (hasStatusCode && statusCode >= 400 && !orderId);
+		                if (looksFailed) {
+		                  suffixParts.push(
+		                    `FAILED${hasStatusCode ? ` (${statusCode})` : ""}: ${execError || row?.error || row?.reason || "Order rejected"}`
+		                  );
+		                }
+		
+		                return (
+		                  <Typography key={`${log._id}-rebalance-${index}`} variant="body2">
+		                    • {side} {symbol}: {amountText}
 	                    {suffixParts.length ? ` · ${suffixParts.join(" · ")}` : ""}
 	                  </Typography>
 	                );

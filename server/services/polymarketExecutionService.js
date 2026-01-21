@@ -1,5 +1,9 @@
 const crypto = require('crypto');
+<<<<<<< HEAD
 const Axios = require('axios');
+=======
+const fs = require('fs');
+>>>>>>> 940defd (failedpoly)
 const CryptoJS = require('crypto-js');
 const { Wallet, providers, Contract, utils } = require('ethers');
 
@@ -156,6 +160,36 @@ const normalizePrivateKey = (value) => {
   return raw;
 };
 
+const readFirstNonEmptyLine = (contents) =>
+  String(contents || '')
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)[0] || '';
+
+const readPolymarketPrivateKeyFromFile = () => {
+  const filePath = normalizeEnvValue(
+    process.env.POLYMARKET_PRIVATE_KEY_FILE ||
+      process.env.POLYMARKET_PRIVATE_KEY_PATH ||
+      process.env.POLYMARKET_SIGNER_PRIVATE_KEY_FILE ||
+      process.env.POLYMARKET_SIGNER_PRIVATE_KEY_PATH
+  );
+  if (!filePath) return '';
+
+  let contents;
+  try {
+    contents = fs.readFileSync(filePath, 'utf8');
+  } catch (error) {
+    throw new Error(`POLYMARKET_PRIVATE_KEY_FILE could not be read: ${filePath}`);
+  }
+
+  const firstLine = readFirstNonEmptyLine(contents);
+  if (!firstLine) {
+    throw new Error(`POLYMARKET_PRIVATE_KEY_FILE is empty: ${filePath}`);
+  }
+
+  return normalizePrivateKey(decryptIfEncrypted(firstLine));
+};
+
 const getPolymarketLiveEnv = () => {
   const host = normalizeEnvValue(process.env.POLYMARKET_CLOB_HOST || process.env.CLOB_API_URL || 'https://clob.polymarket.com').replace(
     /\/+$/,
@@ -175,9 +209,10 @@ const getPolymarketLiveEnv = () => {
   const secret = decryptIfEncrypted(process.env.POLYMARKET_SECRET || process.env.CLOB_SECRET);
   const passphrase = decryptIfEncrypted(process.env.POLYMARKET_PASSPHRASE || process.env.CLOB_PASS_PHRASE);
 
-  const privateKey = normalizePrivateKey(
+  const privateKeyEnv = normalizePrivateKey(
     decryptIfEncrypted(process.env.POLYMARKET_PRIVATE_KEY || process.env.POLYMARKET_SIGNER_PRIVATE_KEY)
   );
+  const privateKey = privateKeyEnv || readPolymarketPrivateKeyFromFile();
 
   const authAddress = normalizeEnvValue(process.env.POLYMARKET_AUTH_ADDRESS || process.env.POLYMARKET_ADDRESS);
 
@@ -334,14 +369,14 @@ const getPolymarketClobClient = async (options = {}) => {
     throw new Error('Missing POLYMARKET_* CLOB credentials for live trading.');
   }
   if (!env.privateKey) {
-    throw new Error('Missing POLYMARKET_PRIVATE_KEY for live trading.');
+    throw new Error('Missing POLYMARKET_PRIVATE_KEY (or POLYMARKET_PRIVATE_KEY_FILE) for live trading.');
   }
 
   let wallet;
   try {
     wallet = new Wallet(env.privateKey);
   } catch {
-    throw new Error('POLYMARKET_PRIVATE_KEY is invalid.');
+    throw new Error('POLYMARKET_PRIVATE_KEY (or POLYMARKET_PRIVATE_KEY_FILE) is invalid.');
   }
 
   if (env.authAddress && isValidHexAddress(env.authAddress)) {
@@ -471,6 +506,15 @@ const parseFiniteNumberOrNull = (value) => {
   return Number.isFinite(num) ? num : null;
 };
 
+const parseUsdcFromBaseUnitsOrNull = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  try {
+    return Number(utils.formatUnits(value, 6));
+  } catch {
+    return null;
+  }
+};
+
 const getPolymarketClobBalanceAllowance = async () => {
   const mode = getPolymarketExecutionMode();
   if (mode !== 'live') {
@@ -497,6 +541,13 @@ const getPolymarketClobBalanceAllowance = async () => {
     throw wrapped;
   }
 
+  const contracts = getContractConfig(env.chainId);
+  const allowancesBySpender =
+    response?.allowances && typeof response.allowances === 'object' ? response.allowances : null;
+  const exchangeAllowanceBaseUnits = allowancesBySpender
+    ? allowancesBySpender[contracts.exchange] ?? null
+    : response?.allowance ?? null;
+
   return {
     source: 'clob-l2',
     host: env.host,
@@ -505,11 +556,13 @@ const getPolymarketClobBalanceAllowance = async () => {
     funderAddress: env.funderAddress || null,
     authAddress: isValidHexAddress(env.authAddress) ? env.authAddress : null,
     geoTokenSet: Boolean(env.geoBlockToken),
-    balance: parseFiniteNumberOrNull(response?.balance),
-    allowance: parseFiniteNumberOrNull(response?.allowance),
+    spender: contracts.exchange,
+    balance: parseUsdcFromBaseUnitsOrNull(response?.balance),
+    allowance: parseUsdcFromBaseUnitsOrNull(exchangeAllowanceBaseUnits),
     raw: {
       balance: response?.balance ?? null,
       allowance: response?.allowance ?? null,
+      allowances: allowancesBySpender ?? null,
     },
   };
 };
@@ -525,6 +578,49 @@ const normalizeMarketOrderType = (value) => {
 
 const getDefaultMarketOrderType = () =>
   normalizeMarketOrderType(process.env.POLYMARKET_MARKET_ORDER_TYPE || process.env.POLYMARKET_ORDER_TYPE);
+
+const safeJsonStringify = (value) => {
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    try {
+      const seen = new WeakSet();
+      return JSON.stringify(value, (key, val) => {
+        if (typeof val === 'object' && val !== null) {
+          if (seen.has(val)) return '[Circular]';
+          seen.add(val);
+        }
+        return val;
+      });
+    } catch {
+      return null;
+    }
+  }
+};
+
+const extractClobErrorMessage = (payload) => {
+  if (payload === null || payload === undefined) return null;
+  if (typeof payload === 'string') {
+    const trimmed = payload.trim();
+    return trimmed ? trimmed : null;
+  }
+  if (payload instanceof Error) {
+    const msg = String(payload.message || '').trim();
+    return msg ? msg : null;
+  }
+  if (typeof payload === 'object') {
+    const direct =
+      (payload?.errorMsg ? String(payload.errorMsg).trim() : '') ||
+      (payload?.error ? String(payload.error).trim() : '') ||
+      (payload?.message ? String(payload.message).trim() : '') ||
+      '';
+    if (direct) return direct;
+    const json = safeJsonStringify(payload);
+    if (json) return json.length > 500 ? `${json.slice(0, 500)}…` : json;
+  }
+  const fallback = String(payload).trim();
+  return fallback ? fallback : null;
+};
 
 const executePolymarketMarketOrder = async ({ tokenID, side, amount, price }) => {
   const mode = getPolymarketExecutionMode();
@@ -578,6 +674,37 @@ const executePolymarketMarketOrder = async ({ tokenID, side, amount, price }) =>
   };
 
   const response = await clobClient.createAndPostMarketOrder(userMarketOrder, undefined, orderTypeEnum);
+  if (response && typeof response === 'object') {
+    const orderId = response.orderID || response.orderId || response.order_id || response.id || null;
+    const txHashes = Array.isArray(response.transactionsHashes)
+      ? response.transactionsHashes
+      : Array.isArray(response.transactions)
+        ? response.transactions
+        : null;
+    const statusNum = (() => {
+      const candidate = Number(response?.status);
+      return Number.isFinite(candidate) && candidate >= 100 ? candidate : null;
+    })();
+    const apiError = extractClobErrorMessage(response?.error ?? response?.errorMsg ?? response?.message ?? null);
+    const successFlag = response?.success;
+    const looksSuccessful =
+      successFlag === true || Boolean(orderId) || (Array.isArray(txHashes) && txHashes.length > 0);
+
+    if (successFlag === false || apiError || (statusNum !== null && statusNum >= 400) || !looksSuccessful) {
+      const detailParts = [];
+      if (apiError) detailParts.push(apiError);
+      if (successFlag === false && !apiError) detailParts.push('success=false');
+      const suffix = detailParts.length ? ` (${detailParts.join('; ')})` : '';
+      const wrapped = new Error(
+        statusNum !== null ? `Polymarket order failed (status ${statusNum})${suffix}` : `Polymarket order failed${suffix}`
+      );
+      if (statusNum !== null) {
+        wrapped.status = statusNum;
+      }
+      wrapped.response = { status: statusNum, data: response };
+      throw wrapped;
+    }
+  }
   return {
     ok: true,
     mode,

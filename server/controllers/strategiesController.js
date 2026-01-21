@@ -2292,23 +2292,26 @@ exports.createPolymarketCopyTrader = async (req, res) => {
 
     await portfolio.save();
 
-    await recordStrategyLog({
-      strategyId: strategy_id,
-      userId: userKey,
-      strategyName: rawName,
-      message: 'Polymarket strategy created',
-      details: {
-        provider: 'polymarket',
-        recurrence: normalizedRecurrence,
-        nextRebalanceAt: portfolio.nextRebalanceAt,
-        executionMode: requestedExecutionMode,
-        cashLimit,
-        address,
-        backfill: backfillRequested,
-        sizeToBudget,
-        seedFromPositions,
-      },
-    });
+	    await recordStrategyLog({
+	      strategyId: strategy_id,
+	      userId: userKey,
+	      strategyName: rawName,
+	      message: 'Polymarket strategy created',
+	      details: {
+	        provider: 'polymarket',
+	        recurrence: normalizedRecurrence,
+	        nextRebalanceAt: portfolio.nextRebalanceAt,
+	        envExecutionMode: getEnvPolymarketExecutionMode(),
+	        executionMode: requestedExecutionMode,
+	        effectiveExecutionMode: getEnvPolymarketExecutionMode() === 'live' ? requestedExecutionMode : 'paper',
+	        cashLimit,
+	        address,
+	        authAddress: authAddressEnv || null,
+	        backfill: backfillRequested,
+	        sizeToBudget,
+	        seedFromPositions,
+	      },
+	    });
 
     const initialMode = backfillRequested ? 'backfill' : 'incremental';
 
