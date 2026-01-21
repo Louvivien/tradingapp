@@ -727,8 +727,8 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   const liveRebalancePreflightEnabled = parseBoolean(process.env.POLYMARKET_LIVE_REBALANCE_PREFLIGHT, false);
   const liveRebalanceDebugEnabled = parseBoolean(process.env.POLYMARKET_LIVE_REBALANCE_DEBUG, false);
 
-  const sizingStateMissing = (() => {
-    if (!sizeToBudget || !POLYMARKET_SIZE_TO_BUDGET_BOOTSTRAP_ENABLED) {
+  const makerStateMissing = (() => {
+    if (!sizeToBudget) {
       return false;
     }
     const state = poly?.sizingState || null;
@@ -736,6 +736,8 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     const makerCash = toNumber(state?.makerCash, null);
     return !Number.isFinite(makerCash) || holdings.length === 0;
   })();
+
+  const sizingStateMissing = POLYMARKET_SIZE_TO_BUDGET_BOOTSTRAP_ENABLED && makerStateMissing;
 
   // Only auto-bootstrap sizing state after a user has opted into importing positions via backfill.
   // If the user created the strategy with backfill disabled, stay in incremental mode and fall back
@@ -747,6 +749,9 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     : (poly.backfillPending || bootstrapBackfill)
       ? 'backfill'
       : 'incremental';
+
+  const shouldSeedFromPositionsSnapshot =
+    mode === 'incremental' && sizeToBudget === true && seedFromPositions === true && makerStateMissing === true;
 
   const allowLiveRebalanceDuringBackfill = parseBoolean(
     options?.allowLiveRebalanceDuringBackfill,
@@ -1258,7 +1263,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     };
   }
 
-  if (!pendingTrades.length) {
+  if (!pendingTrades.length && !shouldSeedFromPositionsSnapshot) {
     if (mode === 'backfill') {
       portfolio.polymarket = {
         ...snapshotPolymarket(portfolio.polymarket),
@@ -1388,6 +1393,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   let cash = Number.isFinite(startingCash) ? startingCash : 0;
   let sizingMeta = null;
   let tradeScale = null;
+  let seededFromPositionsSnapshot = false;
 
   const fetchMakerValueSnapshot = async () => {
     const positionsSnapshot = await fetchDataApiPositionsSnapshot({ userAddress: address });
@@ -1408,6 +1414,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     }, 0);
 
     return {
+      positions: Array.isArray(positionsSnapshot?.positions) ? positionsSnapshot.positions : [],
       proxyWallet,
       chainId: cashSnapshot?.chainId ?? null,
       makerCash: makerCashValue,
@@ -1418,7 +1425,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     };
   };
 
-  if (makerStateEnabled && !makerStateAvailable && seedFromPositions) {
+  if (makerStateEnabled && !makerStateAvailable && seedFromPositions && mode === 'incremental') {
     const sizingBudget = (() => {
       const cashLimit = pickNumber(portfolio.cashLimit);
       if (cashLimit !== null) {
@@ -1439,11 +1446,35 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       const snapshot = await fetchMakerValueSnapshot();
       const makerValue = toNumber(snapshot?.makerValue, null);
       const scale = makerValue && makerValue > 0 ? sizingBudget / makerValue : 0;
-      if (Number.isFinite(scale) && scale > 0) {
+
+      const positions = Array.isArray(snapshot?.positions) ? snapshot.positions : [];
+      const shouldSeedHoldings = positions.length > 0 || processedTrades.length === 0;
+
+      if (shouldSeedHoldings) {
+        makerCash = Math.max(0, toNumber(snapshot?.makerCash, 0));
+        makerHoldingsByAssetId.clear();
+        positions.forEach((pos) => {
+          const assetId = pos?.asset_id ? String(pos.asset_id) : null;
+          if (!assetId) {
+            return;
+          }
+          makerHoldingsByAssetId.set(assetId, {
+            market: pos?.market ? String(pos.market) : null,
+            asset_id: assetId,
+            outcome: pos?.outcome ? String(pos.outcome) : null,
+            quantity: toNumber(pos?.quantity, 0),
+            avgCost: toNumber(pos?.avgCost, null),
+            currentPrice: toNumber(pos?.currentPrice, null),
+          });
+        });
+        makerStateAvailable = true;
+        seededFromPositionsSnapshot = true;
+      } else if (Number.isFinite(scale) && scale > 0) {
         tradeScale = scale;
       }
+
       sizingMeta = {
-        method: 'trade-scale',
+        method: seededFromPositionsSnapshot ? 'positions-snapshot' : 'trade-scale',
         source: snapshot?.source || null,
         proxyWallet: snapshot?.proxyWallet || null,
         chainId: snapshot?.chainId ?? null,
@@ -1456,7 +1487,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       };
     } catch (error) {
       sizingMeta = {
-        method: 'trade-scale',
+        method: 'positions-snapshot',
         source: 'data-api+onchain',
         sizingBudget,
         error: formatAxiosError(error),
@@ -1522,9 +1553,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   };
 
 	  const isRetryableExecutionError = (error) => {
-	    const msg = String(
-	      error?.message || error?.response?.data?.error || error?.response?.data?.message || ''
-	    ).toLowerCase();
+	    const msg = String(formatAxiosError(error) || '').toLowerCase();
 	    // "No match" typically means there's no liquidity to fill the market order; it's not transient.
 	    if (msg.includes('no match')) {
 	      return false;
@@ -1562,10 +1591,16 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 
   let lastProcessedTrade = null;
   let processedCount = 0;
+  let ignoredTradesCount = 0;
   let liveExecutionAbort = null;
   let liveExecutionConfigLogged = false;
 
-  for (const trade of processedTrades) {
+  if (seededFromPositionsSnapshot) {
+    ignoredTradesCount = processedTrades.length;
+    if (processedTrades.length) {
+      lastProcessedTrade = processedTrades[processedTrades.length - 1];
+    }
+  } else for (const trade of processedTrades) {
     const assetId = trade?.asset_id ? String(trade.asset_id) : null;
     const conditionId = trade?.market ? String(trade.market) : null;
     const outcome = trade?.outcome ? String(trade.outcome) : null;
@@ -2585,9 +2620,11 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   const maxLogTrades = mode === 'backfill' ? 200 : 500;
   const summaryMessage = mode === 'backfill'
     ? 'Polymarket copy-trader backfilled'
-    : liveExecutionAbort
-      ? 'Polymarket copy-trader sync incomplete'
-      : 'Polymarket copy-trader synced';
+    : seededFromPositionsSnapshot
+      ? 'Polymarket copy-trader seeded from positions snapshot'
+      : liveExecutionAbort
+        ? 'Polymarket copy-trader sync incomplete'
+        : 'Polymarket copy-trader synced';
 
   const executionDebug = (() => {
     if (typeof getPolymarketExecutionDebugInfo !== 'function') {
@@ -2638,6 +2675,9 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 		      clobAuthCooldown: getClobAuthCooldownStatus(),
 			      sizeToBudget: makerStateEnabled,
 			      sizedToBudget: didSize,
+            seedFromPositions,
+            seededFromPositionsSnapshot,
+            ignoredTrades: ignoredTradesCount,
 			      sizing: sizingMeta,
             liveRebalanceConfig: {
               minNotional: POLYMARKET_LIVE_REBALANCE_MIN_NOTIONAL,
