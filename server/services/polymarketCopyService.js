@@ -24,6 +24,19 @@ const GEO_BLOCK_TOKEN =
 const POLYMARKET_DATA_API_TAKER_ONLY_DEFAULT = String(process.env.POLYMARKET_DATA_API_TAKER_ONLY ?? 'false')
   .trim()
   .toLowerCase();
+const POLYMARKET_CLOB_USER_AGENT = String(
+  process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
+).trim();
+const POLYMARKET_CLOB_PROXY = String(
+  process.env.POLYMARKET_CLOB_PROXY ||
+    process.env.POLYMARKET_HTTP_PROXY ||
+    process.env.HTTP_PROXY ||
+    process.env.HTTPS_PROXY ||
+    ''
+)
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)[0] || null;
 const POLYMARKET_DATA_API_USER_AGENT = String(process.env.POLYMARKET_DATA_API_USER_AGENT || 'tradingapp/1.0').trim();
 const POLYMARKET_HTTP_TIMEOUT_MS = (() => {
   const raw = Number(process.env.POLYMARKET_HTTP_TIMEOUT_MS || process.env.POLYMARKET_TIMEOUT_MS);
@@ -187,6 +200,36 @@ const buildGeoParams = (params = {}) => {
   return { ...params, geo_block_token: GEO_BLOCK_TOKEN };
 };
 
+const withClobUserAgent = (headers = {}) => {
+  if (!POLYMARKET_CLOB_USER_AGENT) {
+    return headers;
+  }
+  return { ...headers, 'User-Agent': POLYMARKET_CLOB_USER_AGENT };
+};
+
+const getClobProxyConfig = () => {
+  if (!POLYMARKET_CLOB_PROXY) {
+    return null;
+  }
+  try {
+    const parsed = new URL(POLYMARKET_CLOB_PROXY);
+    const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
+    if (!parsed.hostname || !Number.isFinite(port)) {
+      return null;
+    }
+    const auth =
+      parsed.username || parsed.password
+        ? {
+          username: decodeURIComponent(parsed.username || ''),
+          password: decodeURIComponent(parsed.password || ''),
+        }
+        : undefined;
+    return { host: parsed.hostname, port, ...(auth ? { auth } : {}) };
+  } catch {
+    return null;
+  }
+};
+
 const sanitizePolymarketSubdoc = (portfolio) => {
   if (!portfolio || typeof portfolio !== 'object') {
     return;
@@ -301,7 +344,12 @@ const buildPolyHmacSignature = ({ secret, timestamp, method, requestPath, body }
 };
 
 const fetchClobServerTime = async () => {
-  const response = await axiosGet(`${CLOB_HOST}/time`, { params: buildGeoParams() });
+  const proxy = getClobProxyConfig();
+  const response = await axiosGet(`${CLOB_HOST}/time`, {
+    params: buildGeoParams(),
+    headers: withClobUserAgent(),
+    proxy: proxy || false,
+  });
   const ts = Math.floor(toNumber(response?.data, NaN));
   if (!Number.isFinite(ts) || ts <= 0) {
     throw new Error('Unable to fetch Polymarket server time.');
@@ -320,6 +368,7 @@ const createL2Headers = async ({ authAddress, apiKey, secret, passphrase, method
   });
 
   return {
+    ...withClobUserAgent(),
     POLY_ADDRESS: String(authAddress || '').trim(),
     POLY_SIGNATURE: signature,
     POLY_TIMESTAMP: `${ts}`,
@@ -344,7 +393,11 @@ const fetchTradesPage = async ({ authAddress, apiKey, secret, passphrase, makerA
     maker_address: makerAddress,
   });
 
-  const response = await axiosGet(`${CLOB_HOST}${endpoint}`, { headers, params });
+  const response = await axiosGet(`${CLOB_HOST}${endpoint}`, {
+    headers,
+    params,
+    proxy: getClobProxyConfig() || false,
+  });
   return { page: response?.data || null };
 };
 
@@ -529,7 +582,11 @@ const fetchMarket = async (conditionId) => {
   if (!cleaned) {
     return null;
   }
-  const response = await axiosGet(`${CLOB_HOST}/markets/${cleaned}`, { params: buildGeoParams() });
+  const response = await axiosGet(`${CLOB_HOST}/markets/${cleaned}`, {
+    params: buildGeoParams(),
+    headers: withClobUserAgent(),
+    proxy: getClobProxyConfig() || false,
+  });
   return response?.data || null;
 };
 
@@ -2494,6 +2551,8 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
             try {
               const orderbookResponse = await axiosGet(`${CLOB_HOST}/book`, {
                 params: buildGeoParams({ token_id: order.assetId }),
+                headers: withClobUserAgent(),
+                proxy: getClobProxyConfig() || false,
               });
               const book = orderbookResponse?.data || null;
               const bidsRaw = Array.isArray(book?.bids) ? book.bids : [];

@@ -10,6 +10,19 @@ dotenv.config({ path: path.resolve(__dirname, '../config/.env') });
 
 const CLOB_HOST = String(process.env.POLYMARKET_CLOB_HOST || 'https://clob.polymarket.com').replace(/\/+$/, '');
 const GEO_BLOCK_TOKEN = (process.env.POLYMARKET_GEO_BLOCK_TOKEN || process.env.GEO_BLOCK_TOKEN || '').trim() || null;
+const POLYMARKET_CLOB_USER_AGENT = String(
+  process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
+).trim();
+const POLYMARKET_CLOB_PROXY = String(
+  process.env.POLYMARKET_CLOB_PROXY ||
+    process.env.POLYMARKET_HTTP_PROXY ||
+    process.env.HTTP_PROXY ||
+    process.env.HTTPS_PROXY ||
+    ''
+)
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)[0] || null;
 const CHAIN_ID = (() => {
   const raw = Number(process.env.POLYMARKET_CHAIN_ID || process.env.CLOB_CHAIN_ID);
   if (Number.isFinite(raw)) return raw;
@@ -25,6 +38,29 @@ const request = async (method, url, config = {}) =>
     validateStatus: () => true,
     ...config,
   });
+
+const getClobProxyConfig = () => {
+  if (!POLYMARKET_CLOB_PROXY) {
+    return null;
+  }
+  try {
+    const parsed = new URL(POLYMARKET_CLOB_PROXY);
+    const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
+    if (!parsed.hostname || !Number.isFinite(port)) {
+      return null;
+    }
+    const auth =
+      parsed.username || parsed.password
+        ? {
+          username: decodeURIComponent(parsed.username || ''),
+          password: decodeURIComponent(parsed.password || ''),
+        }
+        : undefined;
+    return { host: parsed.hostname, port, ...(auth ? { auth } : {}) };
+  } catch {
+    return null;
+  }
+};
 
 const withGeoParams = (params = {}) => (GEO_BLOCK_TOKEN ? { ...params, geo_block_token: GEO_BLOCK_TOKEN } : params);
 
@@ -188,7 +224,11 @@ const main = async () => {
 
   const { createL1Headers } = await import('@polymarket/clob-client');
 
-  const timeRes = await request('GET', `${CLOB_HOST}/time`, { params: withGeoParams({}) });
+  const timeRes = await request('GET', `${CLOB_HOST}/time`, {
+    params: withGeoParams({}),
+    headers: POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : undefined,
+    proxy: getClobProxyConfig() || false,
+  });
   const ts = Number(timeRes.data);
   if (!Number.isFinite(ts)) {
     throw new Error(`Failed to fetch server time (status=${timeRes.status})`);
@@ -196,7 +236,11 @@ const main = async () => {
 
   const createHeaders = await createL1Headers(wallet, CHAIN_ID, nonce, ts);
   const createRes = await request('POST', `${CLOB_HOST}/auth/api-key`, {
-    headers: createHeaders,
+    headers: {
+      ...(POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : {}),
+      ...createHeaders,
+    },
+    proxy: getClobProxyConfig() || false,
     params: withGeoParams({}),
   });
 
@@ -211,7 +255,11 @@ const main = async () => {
   if (!creds.key || !creds.secret || !creds.passphrase) {
     const deriveHeaders = await createL1Headers(wallet, CHAIN_ID, nonce + 1, ts);
     const deriveRes = await request('GET', `${CLOB_HOST}/auth/derive-api-key`, {
-      headers: deriveHeaders,
+      headers: {
+        ...(POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : {}),
+        ...deriveHeaders,
+      },
+      proxy: getClobProxyConfig() || false,
       params: withGeoParams({}),
     });
     creds = asCreds(deriveRes.data);
@@ -245,7 +293,11 @@ const main = async () => {
   }
 
   if (opts.verify) {
-    const time2 = await request('GET', `${CLOB_HOST}/time`, { params: withGeoParams({}) });
+    const time2 = await request('GET', `${CLOB_HOST}/time`, {
+      params: withGeoParams({}),
+      headers: POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : undefined,
+      proxy: getClobProxyConfig() || false,
+    });
     const ts2 = Number(time2.data);
     if (!Number.isFinite(ts2)) {
       throw new Error(`Failed to fetch server time for verify (status=${time2.status})`);
@@ -255,12 +307,14 @@ const main = async () => {
     const sig = signL2({ ts: ts2, method: 'GET', requestPath: endpoint, secret: creds.secret });
     const verifyRes = await request('GET', `${CLOB_HOST}${endpoint}`, {
       headers: {
+        ...(POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : {}),
         POLY_ADDRESS: address,
         POLY_SIGNATURE: sig,
         POLY_TIMESTAMP: String(ts2),
         POLY_API_KEY: creds.key,
         POLY_PASSPHRASE: creds.passphrase,
       },
+      proxy: getClobProxyConfig() || false,
       params: withGeoParams({
         next_cursor: 'MA==',
         maker_address: address,

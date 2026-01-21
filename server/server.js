@@ -248,6 +248,38 @@ app.get("/api/health/polymarket", async (req, res) => {
 
   const tradesSourceRaw = normalizeEnvValue(process.env.POLYMARKET_TRADES_SOURCE || "auto");
   const tradesSourceSetting = normalizeTradesSourceSetting(tradesSourceRaw);
+  const clobUserAgent = normalizeEnvValue(
+    process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || "tradingapp/1.0"
+  );
+  const clobProxyRaw = normalizeEnvValue(
+    process.env.POLYMARKET_CLOB_PROXY ||
+      process.env.POLYMARKET_HTTP_PROXY ||
+      process.env.HTTP_PROXY ||
+      process.env.HTTPS_PROXY ||
+      ""
+  );
+  const clobProxy = clobProxyRaw
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean)[0] || "";
+  const clobProxyConfig = (() => {
+    if (!clobProxy) return null;
+    try {
+      const parsed = new URL(clobProxy);
+      const port = parsed.port ? Number(parsed.port) : parsed.protocol === "https:" ? 443 : 80;
+      if (!parsed.hostname || !Number.isFinite(port)) return null;
+      const auth =
+        parsed.username || parsed.password
+          ? {
+              username: decodeURIComponent(parsed.username || ""),
+              password: decodeURIComponent(parsed.password || ""),
+            }
+          : undefined;
+      return { host: parsed.hostname, port, ...(auth ? { auth } : {}) };
+    } catch {
+      return null;
+    }
+  })();
 
   const buildGeoParams = (params = {}) => {
     if (!geoToken) return params;
@@ -255,9 +287,10 @@ app.get("/api/health/polymarket", async (req, res) => {
   };
 
   const httpGet = async (url, config = {}) => {
+    const shouldProxy = clobProxyConfig && String(url || "").startsWith(clobHost);
     return await Axios.get(url, {
       timeout: httpTimeoutMs,
-      proxy: false,
+      proxy: shouldProxy ? clobProxyConfig : false,
       validateStatus: () => true,
       ...config,
     });
@@ -368,7 +401,10 @@ app.get("/api/health/polymarket", async (req, res) => {
 
   try {
     const t0 = Date.now();
-    const timeRes = await httpGet(`${clobHost}/time`, { params: buildGeoParams() });
+    const timeRes = await httpGet(`${clobHost}/time`, {
+      params: buildGeoParams(),
+      headers: clobUserAgent ? { "User-Agent": clobUserAgent } : undefined,
+    });
     report.clob.time.latencyMs = Date.now() - t0;
     report.clob.time.status = timeRes.status;
     const ts = Math.floor(Number(timeRes.data));
@@ -388,6 +424,7 @@ app.get("/api/health/polymarket", async (req, res) => {
   const createL2Headers = (requestPath) => {
     const ts = report.clob.time.serverTime || Math.floor(Date.now() / 1000);
     return {
+      ...(clobUserAgent ? { "User-Agent": clobUserAgent } : {}),
       POLY_ADDRESS: authAddress,
       POLY_SIGNATURE: sign({ ts, method: "GET", requestPath }),
       POLY_TIMESTAMP: String(ts),
