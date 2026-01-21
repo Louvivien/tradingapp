@@ -68,6 +68,41 @@ const parseBoolean = (value, fallback = false) => {
 const getPolymarketUseServerTime = () => parseBoolean(process.env.POLYMARKET_USE_SERVER_TIME, true);
 
 let clobUserAgentInterceptorKey = null;
+let clobProxyInterceptorKey = null;
+
+const getClobProxyConfig = () => {
+  const raw = normalizeEnvValue(
+    process.env.POLYMARKET_CLOB_PROXY ||
+      process.env.POLYMARKET_HTTP_PROXY ||
+      process.env.HTTP_PROXY ||
+      process.env.HTTPS_PROXY ||
+      ''
+  );
+  const proxyUrl = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean)[0];
+  if (!proxyUrl) {
+    return null;
+  }
+  try {
+    const parsed = new URL(proxyUrl);
+    const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
+    if (!parsed.hostname || !Number.isFinite(port)) {
+      return null;
+    }
+    const auth =
+      parsed.username || parsed.password
+        ? {
+            username: decodeURIComponent(parsed.username || ''),
+            password: decodeURIComponent(parsed.password || ''),
+          }
+        : undefined;
+    return { host: parsed.hostname, port, ...(auth ? { auth } : {}) };
+  } catch {
+    return null;
+  }
+};
 const ensureClobUserAgentInterceptor = (host) => {
   const userAgent = normalizeEnvValue(
     process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
@@ -90,6 +125,27 @@ const ensureClobUserAgentInterceptor = (host) => {
     return config;
   });
   clobUserAgentInterceptorKey = key;
+};
+
+const ensureClobProxyInterceptor = (host) => {
+  const proxyConfig = getClobProxyConfig();
+  if (!proxyConfig || !host) {
+    return;
+  }
+  const key = `${host}|${proxyConfig.host}:${proxyConfig.port}`;
+  if (clobProxyInterceptorKey === key) {
+    return;
+  }
+  Axios.interceptors.request.use((config) => {
+    if (!config || !config.url) {
+      return config;
+    }
+    if (config.url.startsWith(host)) {
+      config.proxy = proxyConfig;
+    }
+    return config;
+  });
+  clobProxyInterceptorKey = key;
 };
 
 const normalizePrivateKey = (value) => {
@@ -273,6 +329,7 @@ const getPolymarketClobClient = async (options = {}) => {
 
   const env = getPolymarketLiveEnv();
   ensureClobUserAgentInterceptor(env.host);
+  ensureClobProxyInterceptor(env.host);
   if (!env.creds.apiKey || !env.creds.secret || !env.creds.passphrase) {
     throw new Error('Missing POLYMARKET_* CLOB credentials for live trading.');
   }

@@ -19,6 +19,16 @@ const GEO_BLOCK_TOKEN =
 const POLYMARKET_CLOB_USER_AGENT = String(
   process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
 ).trim();
+const POLYMARKET_CLOB_PROXY = String(
+  process.env.POLYMARKET_CLOB_PROXY ||
+    process.env.POLYMARKET_HTTP_PROXY ||
+    process.env.HTTP_PROXY ||
+    process.env.HTTPS_PROXY ||
+    ''
+)
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)[0] || null;
 
 const POLYMARKET_HTTP_TIMEOUT_MS = (() => {
   const raw = Number(process.env.POLYMARKET_HTTP_TIMEOUT_MS || process.env.POLYMARKET_TIMEOUT_MS);
@@ -42,6 +52,29 @@ const isValidHexAddress = (value) => /^0x[a-fA-F0-9]{40}$/.test(String(value || 
 const buildGeoParams = (params = {}) => {
   if (!GEO_BLOCK_TOKEN) return params;
   return { ...params, geo_block_token: GEO_BLOCK_TOKEN };
+};
+
+const getClobProxyConfig = () => {
+  if (!POLYMARKET_CLOB_PROXY) {
+    return null;
+  }
+  try {
+    const parsed = new URL(POLYMARKET_CLOB_PROXY);
+    const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
+    if (!parsed.hostname || !Number.isFinite(port)) {
+      return null;
+    }
+    const auth =
+      parsed.username || parsed.password
+        ? {
+          username: decodeURIComponent(parsed.username || ''),
+          password: decodeURIComponent(parsed.password || ''),
+        }
+        : undefined;
+    return { host: parsed.hostname, port, ...(auth ? { auth } : {}) };
+  } catch {
+    return null;
+  }
 };
 
 const axiosGet = async (url, config = {}) => {
@@ -103,6 +136,7 @@ const fetchClobServerTime = async () => {
   const response = await axiosGet(`${CLOB_HOST}/time`, {
     params: buildGeoParams(),
     headers: POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : undefined,
+    proxy: getClobProxyConfig() || false,
   });
   const ts = Math.floor(Number(response?.data));
   if (!Number.isFinite(ts) || ts <= 0) {
@@ -166,6 +200,7 @@ const main = async () => {
       const response = await axiosGet(`${CLOB_HOST}${endpoint}`, {
         headers,
         params: buildGeoParams(params),
+        proxy: getClobProxyConfig() || false,
       });
       return { ok: true, status: response.status, data: response.data };
     } catch (error) {

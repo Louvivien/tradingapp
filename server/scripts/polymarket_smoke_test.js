@@ -14,6 +14,16 @@ const DATA_API_HOST = String(process.env.POLYMARKET_DATA_API_HOST || 'https://da
 const POLYMARKET_CLOB_USER_AGENT = String(
   process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
 ).trim();
+const POLYMARKET_CLOB_PROXY = String(
+  process.env.POLYMARKET_CLOB_PROXY ||
+    process.env.POLYMARKET_HTTP_PROXY ||
+    process.env.HTTP_PROXY ||
+    process.env.HTTPS_PROXY ||
+    ''
+)
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)[0] || null;
 
 const defaultUser = '0xd218e474776403a330142299f7796e8ba32eb5c9'; // public, active address for quick verification
 const user = String(process.env.POLYMARKET_TEST_ADDRESS || process.argv[2] || defaultUser).trim();
@@ -30,6 +40,29 @@ const request = async (url, config = {}) =>
     validateStatus: () => true,
     ...config,
   });
+
+const getClobProxyConfig = () => {
+  if (!POLYMARKET_CLOB_PROXY) {
+    return null;
+  }
+  try {
+    const parsed = new URL(POLYMARKET_CLOB_PROXY);
+    const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
+    if (!parsed.hostname || !Number.isFinite(port)) {
+      return null;
+    }
+    const auth =
+      parsed.username || parsed.password
+        ? {
+          username: decodeURIComponent(parsed.username || ''),
+          password: decodeURIComponent(parsed.password || ''),
+        }
+        : undefined;
+    return { host: parsed.hostname, port, ...(auth ? { auth } : {}) };
+  } catch {
+    return null;
+  }
+};
 
 const sanitizeBase64Secret = (value) =>
   String(value || '')
@@ -56,6 +89,7 @@ const main = async () => {
 
   const timeRes = await request(`${CLOB_HOST}/time`, {
     headers: POLYMARKET_CLOB_USER_AGENT ? { 'User-Agent': POLYMARKET_CLOB_USER_AGENT } : undefined,
+    proxy: getClobProxyConfig() || false,
   });
   console.log('- CLOB /time:', timeRes.status, String(timeRes.data).trim());
   const ts = Number(timeRes.data);
@@ -72,6 +106,7 @@ const main = async () => {
         POLY_API_KEY: apiKey,
         POLY_PASSPHRASE: passphrase,
       },
+      proxy: getClobProxyConfig() || false,
       params: {
         next_cursor: 'MA==',
         maker_address: user,
