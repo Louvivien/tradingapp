@@ -19,6 +19,7 @@ from Levenshtein import distance as levenshtein_distance
 from bs4 import BeautifulSoup
 import requests
 import feedparser
+from pathlib import Path
 
 
 
@@ -26,6 +27,10 @@ import feedparser
 load_dotenv("../config/.env")
 
 STOCKNEWS_API_KEY = os.getenv("STOCKNEWS_API_KEY")
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+sys.path.append(str(SCRIPT_DIR / "proxy"))
+from proxies import load_proxy_pool  # noqa: E402
 
 
 logging.basicConfig(
@@ -68,14 +73,19 @@ def fetch_tickertick_news(ticker='AAPL', period=1, proxies=None):
         last_id = None
         tickertick_news = []
 
+        proxy_pool = proxies or [None]
         i = 0
-        while i < len(proxies):
+        while i < len(proxy_pool):
             try:
                 if last_id:
                     url = base_url + params + f'&last={last_id}'
-                proxy = proxies[i]
-                logging.info(f"Using proxy {proxy} for TickerTick API...")
-                response = requests.get(url, proxies={"http": proxy, "https": proxy})
+                proxy = proxy_pool[i]
+                if proxy:
+                    logging.info(f"Using proxy {proxy} for TickerTick API...")
+                    response = requests.get(url, proxies={"http": proxy, "https": proxy})
+                else:
+                    logging.info("Using direct connection for TickerTick API...")
+                    response = requests.get(url)
                 tickertick_news_raw = response.json()['stories']
                 tickertick_news_raw = [n for n in tickertick_news_raw if n['title'].strip()]
                 
@@ -130,17 +140,26 @@ def fetch_google_news(ticker='AAPL', period=1, proxies=None):
         # Process the results
         google_news = []
 
-        for i in range(len(proxies)):
-            proxy = proxies[i]
-            logging.info(f"Using proxy {proxy} for Google News...")
-            # Set the proxy environment variables
-            os.environ['http_proxy'] = proxy
-            os.environ['https_proxy'] = proxy
+        proxy_pool = proxies or [None]
+        for i in range(len(proxy_pool)):
+            proxy = proxy_pool[i]
+            if proxy:
+                logging.info(f"Using proxy {proxy} for Google News...")
+                # Set the proxy environment variables
+                os.environ['http_proxy'] = proxy
+                os.environ['https_proxy'] = proxy
+                proxy_config = {"http": proxy, "https": proxy}
+            else:
+                logging.info("Using direct connection for Google News...")
+                proxy_config = None
 
             try:
                 # Create a GoogleNews object with the current date as the start and end date
                 url = f"https://news.google.com/rss/headlines/section/topic/BUSINESS?q={ticker}%20stock%20when%3A{period}d&hl=en-US&gl=US&ceid=US%3Aen&num=50"
-                response = requests.get(url, proxies={"http": proxy, "https": proxy}, timeout=10)
+                if proxy_config:
+                    response = requests.get(url, proxies=proxy_config, timeout=10)
+                else:
+                    response = requests.get(url, timeout=10)
                 feed = feedparser.parse(response.text)
 
                 for entry in feed.entries:
@@ -269,9 +288,9 @@ if __name__ == '__main__':
         data = json.load(file)
         tickers = data['stocks']
 
-    # Load the proxies from the proxies file
-    with open('../scripts/proxy/workingproxies.txt', 'r') as f:
-        proxies = f.read().splitlines()
+    proxies = load_proxy_pool()
+    if not proxies:
+        logging.warning("No proxies available. Falling back to direct connections.")
 
     all_news_data = []
 

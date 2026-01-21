@@ -25,14 +25,59 @@ working_proxies_lock = threading.Lock()
 # Global variable to hold the last 50 tested proxies
 last_tested_proxies = []
 
+DEFAULT_PROXY_SOURCE_URLS = [
+    "https://raw.githubusercontent.com/SoliSpirit/proxy-list/main/Countries/https/Ireland.txt",
+]
+
+def normalize_proxy(proxy):
+    proxy = proxy.strip()
+    if not proxy:
+        return None
+    if "://" not in proxy:
+        return f"http://{proxy}"
+    return proxy
+
+def load_proxy_source_urls():
+    urls = []
+    if os.path.exists(proxy_list_file):
+        with open(proxy_list_file, "r") as file:
+            for line in file.readlines():
+                url = line.strip()
+                if not url or url.startswith("USELESS:"):
+                    continue
+                urls.append(url)
+    return list(dict.fromkeys(urls + DEFAULT_PROXY_SOURCE_URLS))
+
 def get_proxies(url):
     try:
-        response = requests.get(url)
+        response = requests.get(url, timeout=10)
         print(f"Retrieved proxies from {url}")
-        return [line.strip() for line in response.text.split("\n") if line.strip() != ""]
+        proxies = []
+        for line in response.text.split("\n"):
+            normalized = normalize_proxy(line)
+            if normalized:
+                proxies.append(normalized)
+        return proxies
     except Exception as e:
         print(f"Error retrieving proxies from {url}: {e}")
         return []
+
+def load_proxy_pool(min_size=1):
+    proxy_pool = []
+    for url in load_proxy_source_urls():
+        proxy_pool.extend(get_proxies(url))
+    if os.path.exists(working_proxies_file):
+        with open(working_proxies_file, "r") as file:
+            for proxy in file.readlines():
+                normalized = normalize_proxy(proxy)
+                if normalized:
+                    proxy_pool.append(normalized)
+    proxy_pool = list(dict.fromkeys(proxy_pool))
+    if proxy_pool and len(proxy_pool) >= min_size:
+        with open(working_proxies_file, "w") as file:
+            for proxy in proxy_pool:
+                file.write(proxy + "\n")
+    return proxy_pool
 
 def test_google_news(proxy):
     global last_tested_proxies
