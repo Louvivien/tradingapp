@@ -4,6 +4,7 @@ const CryptoJS = require('crypto-js');
 const mongoose = require('mongoose');
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('./strategyLogger');
+const { getNextProxy, markProxyFailure, shouldUseProxyPool } = require('./polymarketProxyPool');
 const StrategyEquitySnapshot = require('../models/strategyEquitySnapshotModel');
 const {
   getPolymarketExecutionMode,
@@ -38,6 +39,7 @@ const POLYMARKET_CLOB_PROXY = String(
   .map((value) => value.trim())
   .filter(Boolean)[0] || null;
 const POLYMARKET_DATA_API_USER_AGENT = String(process.env.POLYMARKET_DATA_API_USER_AGENT || 'tradingapp/1.0').trim();
+const POLYMARKET_PROXY_POOL_ATTEMPTS = Number(process.env.POLYMARKET_PROXY_POOL_ATTEMPTS || 5);
 const POLYMARKET_HTTP_TIMEOUT_MS = (() => {
   const raw = Number(process.env.POLYMARKET_HTTP_TIMEOUT_MS || process.env.POLYMARKET_TIMEOUT_MS);
   if (!Number.isFinite(raw) || raw <= 0) {
@@ -209,7 +211,7 @@ const withClobUserAgent = (headers = {}) => {
 
 const getClobProxyConfig = () => {
   if (!POLYMARKET_CLOB_PROXY) {
-    return null;
+    return shouldUseProxyPool() ? 'auto' : null;
   }
   try {
     const parsed = new URL(POLYMARKET_CLOB_PROXY);
@@ -272,7 +274,71 @@ const snapshotPolymarket = (poly) => {
   return base;
 };
 
+const isProxyPoolRequest = (proxy) => proxy === 'auto';
+
+const shouldRotateProxyOnError = (error) => {
+  const status = error?.response?.status;
+  if (!status) {
+    return true;
+  }
+  return status >= 429;
+};
+
+const axiosGetWithProxyPool = async (url, config = {}, attempts = POLYMARKET_PROXY_POOL_ATTEMPTS) => {
+  const timeout = config.timeout ? config.timeout : POLYMARKET_HTTP_TIMEOUT_MS;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller
+    ? setTimeout(() => {
+      try {
+        controller.abort();
+      } catch (error) {
+        // ignore
+      }
+    }, timeout)
+    : null;
+
+  const baseConfig = { ...config };
+  delete baseConfig.proxy;
+
+  try {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
+      const proxyEntry = await getNextProxy();
+      if (!proxyEntry || !proxyEntry.proxyConfig) {
+        break;
+      }
+      try {
+        return await Axios.get(url, {
+          ...baseConfig,
+          timeout,
+          proxy: proxyEntry.proxyConfig,
+          ...(controller ? { signal: controller.signal } : {}),
+        });
+      } catch (error) {
+        if (shouldRotateProxyOnError(error)) {
+          markProxyFailure(proxyEntry.proxyUrl);
+          continue;
+        }
+        throw error;
+      }
+    }
+
+    return await Axios.get(url, {
+      ...baseConfig,
+      timeout,
+      proxy: false,
+      ...(controller ? { signal: controller.signal } : {}),
+    });
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+};
+
 const axiosGet = async (url, config = {}) => {
+  if (isProxyPoolRequest(config.proxy)) {
+    return axiosGetWithProxyPool(url, config);
+  }
   const timeout = config.timeout ? config.timeout : POLYMARKET_HTTP_TIMEOUT_MS;
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = controller
@@ -286,10 +352,11 @@ const axiosGet = async (url, config = {}) => {
     : null;
 
   try {
+    const explicitProxy = config.proxy === undefined ? false : config.proxy;
     return await Axios.get(url, {
       ...config,
       timeout,
-      proxy: false,
+      proxy: explicitProxy,
       ...(controller ? { signal: controller.signal } : {}),
     });
   } finally {
