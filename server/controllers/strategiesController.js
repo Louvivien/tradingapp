@@ -2169,6 +2169,24 @@ exports.createPolymarketCopyTrader = async (req, res) => {
       return normalized === 'true' || normalized === '1' || normalized === 'yes';
     })();
 
+    const seedFromPositions = (() => {
+      const raw = req.body.seedFromPositions ?? req.body.seedPositions ?? req.body.seedSizeToBudgetFromPositions;
+      if (raw === true) {
+        return true;
+      }
+      if (raw === false || raw === null || raw === undefined) {
+        return sizeToBudget && !backfillRequested;
+      }
+      const normalized = String(raw || '').trim().toLowerCase();
+      if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+        return true;
+      }
+      if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+        return false;
+      }
+      return sizeToBudget && !backfillRequested;
+    })();
+
     const requestedExecutionMode = (() => {
       const raw = String(req.body.executionMode ?? '').trim().toLowerCase();
       if (raw === 'live' || raw === 'real') {
@@ -2259,6 +2277,7 @@ exports.createPolymarketCopyTrader = async (req, res) => {
         address,
         executionMode: requestedExecutionMode,
         sizeToBudget,
+        seedFromPositions,
         authAddress: authAddressEnv || null,
         backfillPending: backfillRequested,
         backfilledAt: null,
@@ -2286,6 +2305,8 @@ exports.createPolymarketCopyTrader = async (req, res) => {
         cashLimit,
         address,
         backfill: backfillRequested,
+        sizeToBudget,
+        seedFromPositions,
       },
     });
 

@@ -354,6 +354,34 @@ const getPolymarketBalanceAllowance = async () => {
   };
 };
 
+const getPolymarketOnchainUsdcBalance = async (address) => {
+  const cleanedAddress = normalizeEnvValue(address);
+  if (!isValidHexAddress(cleanedAddress)) {
+    throw new Error('Address is missing or invalid.');
+  }
+
+  const chainId = getPolymarketChainId();
+  const rpcUrl = getPolymarketRpcUrl(chainId);
+  const contracts = getContractConfig(chainId);
+
+  const provider = new providers.JsonRpcProvider(rpcUrl, chainId);
+  const erc20 = new Contract(contracts.collateral, ['function balanceOf(address) view returns (uint256)'], provider);
+  const balanceBaseUnits = await erc20.balanceOf(cleanedAddress);
+  const balance = Number(utils.formatUnits(balanceBaseUnits, 6));
+
+  return {
+    source: 'onchain',
+    chainId,
+    rpcUrl,
+    address: cleanedAddress,
+    collateral: contracts.collateral,
+    balance,
+    raw: {
+      balanceBaseUnits: balanceBaseUnits?.toString?.() ?? null,
+    },
+  };
+};
+
 const parseFiniteNumberOrNull = (value) => {
   const num = Number(value);
   return Number.isFinite(num) ? num : null;
@@ -486,6 +514,7 @@ module.exports = {
   getPolymarketExecutionDebugInfo,
   getPolymarketClobClient,
   getPolymarketBalanceAllowance,
+  getPolymarketOnchainUsdcBalance,
   getPolymarketClobBalanceAllowance,
   executePolymarketMarketOrder,
 };

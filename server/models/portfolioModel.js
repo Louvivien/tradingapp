@@ -161,6 +161,10 @@ const portfolioSchema = new Schema({
       type: Boolean,
       default: false,
     },
+    seedFromPositions: {
+      type: Boolean,
+      default: false,
+    },
     authAddress: {
       type: String,
       default: null,

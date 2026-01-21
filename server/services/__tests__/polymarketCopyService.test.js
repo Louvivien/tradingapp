@@ -241,6 +241,90 @@ jest.mock('../strategyLogger', () => ({
     expect(portfolio.stocks[0].quantity).toBeCloseTo(10, 6);
   });
 
+  it('scales incremental trades to budget when seedFromPositions is enabled', async () => {
+    const makerAddress = '0x3333333333333333333333333333333333333333';
+
+    process.env.POLYMARKET_TRADES_SOURCE = 'data-api';
+
+    const executionModulePath = require.resolve('../polymarketExecutionService');
+    jest.doMock(executionModulePath, () => ({
+      getPolymarketExecutionMode: jest.fn(() => 'paper'),
+      executePolymarketMarketOrder: jest.fn(async () => {
+        throw new Error('should not execute in paper mode');
+      }),
+      getPolymarketExecutionDebugInfo: jest.fn(() => null),
+      getPolymarketBalanceAllowance: jest.fn(async () => ({ source: 'onchain', balance: 0, allowance: 0 })),
+      getPolymarketClobBalanceAllowance: jest.fn(async () => ({ source: 'clob-l2', balance: 0, allowance: 0 })),
+      getPolymarketOnchainUsdcBalance: jest.fn(async (address) => ({
+        source: 'onchain',
+        chainId: 137,
+        rpcUrl: 'https://polygon-rpc.com',
+        address,
+        collateral: '0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174',
+        balance: 100000,
+      })),
+    }));
+
+    const dataApi = nock('https://data-api.polymarket.com');
+    dataApi
+      .get('/positions')
+      .query((query) => query.user === makerAddress)
+      .reply(200, []);
+    dataApi
+      .get('/trades')
+      .query(true)
+      .reply(200, [
+        {
+          transactionHash: '0x1111',
+          asset: 'asset-1',
+          conditionId: 'cond-1',
+          outcome: 'Yes',
+          side: 'BUY',
+          timestamp: 1700000001,
+          price: 0.5,
+          size: 20000,
+        },
+      ]);
+
+    const clob = nock('https://clob.polymarket.com');
+    clob.get('/markets/cond-1').query(true).reply(200, {
+      tokens: [{ token_id: 'asset-1', price: 0.5, outcome: 'Yes' }],
+    });
+
+    const { syncPolymarketPortfolio } = require('../polymarketCopyService');
+
+    const portfolio = {
+      provider: 'polymarket',
+      userId: 'user-1',
+      strategy_id: 'strategy-1',
+      name: 'Polymarket Trade Scale',
+      recurrence: 'every_minute',
+      stocks: [],
+      retainedCash: 100,
+      cashBuffer: 100,
+      budget: 100,
+      cashLimit: 100,
+      initialInvestment: 100,
+      rebalanceCount: 0,
+      save: jest.fn(async () => {}),
+      polymarket: {
+        address: makerAddress,
+        sizeToBudget: true,
+        seedFromPositions: true,
+        backfillPending: false,
+        lastTradeMatchTime: '1970-01-01T00:00:00.000Z',
+        lastTradeId: null,
+      },
+    };
+
+    const result = await syncPolymarketPortfolio(portfolio, { mode: 'incremental' });
+    expect(result.mode).toBe('incremental');
+    expect(portfolio.stocks).toHaveLength(1);
+    expect(portfolio.stocks[0].quantity).toBeCloseTo(20, 6);
+    expect(portfolio.retainedCash).toBeCloseTo(90, 6);
+    expect(dataApi.isDone()).toBe(true);
+  });
+
   it('paginates Polymarket data-api backfills beyond 1000 trades', async () => {
     const makerAddress = '0x3333333333333333333333333333333333333333';
 
