@@ -1,9 +1,6 @@
 const crypto = require('crypto');
-<<<<<<< HEAD
-const Axios = require('axios');
-=======
 const fs = require('fs');
->>>>>>> 940defd (failedpoly)
+const Axios = require('axios');
 const CryptoJS = require('crypto-js');
 const { Wallet, providers, Contract, utils } = require('ethers');
 
