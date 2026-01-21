@@ -130,6 +130,14 @@ const normalizeTradesSourceSetting = (value) => {
   return 'auto';
 };
 
+const normalizeLiveHoldingsSourceSetting = (value) => {
+  const raw = String(value || '').trim().toLowerCase();
+  if (!raw) return 'data-api';
+  if (raw === 'portfolio' || raw === 'db') return 'portfolio';
+  if (raw === 'data' || raw === 'data-api' || raw === 'data_api') return 'data-api';
+  return 'data-api';
+};
+
 const getTradesSourceSetting = () => normalizeTradesSourceSetting(process.env.POLYMARKET_TRADES_SOURCE || 'auto');
 
 const normalizeExecutionModeOverride = (value) => {
@@ -810,6 +818,12 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   );
   const liveRebalancePreflightEnabled = parseBoolean(process.env.POLYMARKET_LIVE_REBALANCE_PREFLIGHT, false);
   const liveRebalanceDebugEnabled = parseBoolean(process.env.POLYMARKET_LIVE_REBALANCE_DEBUG, false);
+  const liveHoldingsSourceSetting = normalizeLiveHoldingsSourceSetting(process.env.POLYMARKET_LIVE_HOLDINGS_SOURCE);
+  const liveHoldingsReconcilePortfolio = parseBooleanEnvDefault(
+    process.env.POLYMARKET_LIVE_RECONCILE_PORTFOLIO,
+    true
+  );
+  const previousLiveExecutionOk = parseBooleanEnvDefault(poly?.lastLiveExecutionOk, false);
 
   const makerStateMissing = (() => {
     if (!sizeToBudget) {
@@ -1399,15 +1413,136 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     });
   }
 
-  const holdingsByAssetId = new Map();
+  const pickNumber = (value) => {
+    if (value === null || value === undefined || value === '') {
+      return null;
+    }
+    const num = Number(value);
+    return Number.isFinite(num) ? num : null;
+  };
+
+  const portfolioHoldingsByAssetId = new Map();
   if (!resetPortfolio) {
     (portfolio.stocks || []).forEach((stock) => {
       const assetId = stock?.asset_id ? String(stock.asset_id) : stock?.symbol ? String(stock.symbol) : null;
       if (!assetId) {
         return;
       }
-      holdingsByAssetId.set(assetId, stock);
+      portfolioHoldingsByAssetId.set(assetId, stock);
     });
+  }
+
+  let holdingsByAssetId = portfolioHoldingsByAssetId;
+  let liveHoldingsUsed = false;
+  const liveHoldings = {
+    enabled: executionMode === 'live' && mode === 'incremental' && liveHoldingsReconcilePortfolio === true,
+    sourceSetting: liveHoldingsSourceSetting,
+    previousLiveExecutionOk,
+    shouldFetch: null,
+    used: false,
+    reconciledPortfolio: false,
+    userAddress: null,
+    proxyWallet: null,
+    rawCount: null,
+    positionsCount: null,
+    holdingsValue: null,
+    onchainUsdcBalance: null,
+    onchainUsdcBalanceError: null,
+    portfolioPositionsCount: portfolioHoldingsByAssetId.size,
+    portfolioHoldingsValue: roundToTwo(
+      computeHoldingsMarketValue(Array.isArray(portfolio.stocks) ? portfolio.stocks : [])
+    ),
+    error: null,
+  };
+
+  const shouldFetchLiveHoldings =
+    liveHoldings.enabled &&
+    liveHoldingsSourceSetting === 'data-api' &&
+    previousLiveExecutionOk !== true;
+  liveHoldings.shouldFetch = shouldFetchLiveHoldings;
+
+  if (shouldFetchLiveHoldings) {
+    const userAddress = funderAddressCandidate || authAddress;
+    if (!userAddress || !isValidHexAddress(userAddress)) {
+      liveHoldings.error =
+        'Live holdings reconciliation enabled but no valid POLYMARKET_FUNDER_ADDRESS/POLYMARKET_AUTH_ADDRESS is available.';
+    } else {
+      liveHoldings.userAddress = userAddress;
+      try {
+        const snapshot = await fetchDataApiPositionsSnapshot({ userAddress });
+        const positions = Array.isArray(snapshot?.positions) ? snapshot.positions : [];
+        liveHoldings.proxyWallet = snapshot?.proxyWallet || null;
+        liveHoldings.rawCount = toNumber(snapshot?.rawCount, null);
+
+        const liveStocks = positions
+          .map((pos) => {
+            const market = pos?.market ? String(pos.market) : null;
+            const asset_id = pos?.asset_id ? String(pos.asset_id) : null;
+            if (!asset_id) return null;
+            const outcome = pos?.outcome ? String(pos.outcome) : null;
+            const quantity = roundToDecimals(Math.max(0, toNumber(pos?.quantity, 0)), 6) ?? 0;
+            if (!quantity) return null;
+            const currentPrice = toNumber(pos?.currentPrice, null);
+            const avgCost = toNumber(pos?.avgCost, null);
+            const symbol = market ? `PM:${String(market).slice(0, 10)}:${outcome || 'OUTCOME'}` : `PM:${asset_id}`;
+            return {
+              symbol,
+              market,
+              asset_id,
+              outcome,
+              quantity,
+              avgCost: avgCost !== null ? avgCost : currentPrice,
+              currentPrice,
+            };
+          })
+          .filter(Boolean);
+
+        const liveHoldingsByAssetId = new Map();
+        liveStocks.forEach((row) => {
+          const assetId = row?.asset_id ? String(row.asset_id) : null;
+          if (!assetId) return;
+          liveHoldingsByAssetId.set(assetId, row);
+        });
+
+        holdingsByAssetId = liveHoldingsByAssetId;
+        liveHoldingsUsed = true;
+        liveHoldings.used = true;
+        liveHoldings.positionsCount = liveStocks.length;
+        liveHoldings.holdingsValue = roundToTwo(computeHoldingsMarketValue(liveStocks));
+
+        if (liveHoldingsReconcilePortfolio) {
+          portfolio.stocks = liveStocks;
+          liveHoldings.reconciledPortfolio = true;
+
+          try {
+            const usdc = await getPolymarketOnchainUsdcBalance(userAddress);
+            liveHoldings.onchainUsdcBalance = roundToDecimals(Math.max(0, toNumber(usdc?.balance, 0)), 6);
+            const cap =
+              pickNumber(portfolio.cashLimit) ?? pickNumber(portfolio.budget) ?? pickNumber(portfolio.initialInvestment);
+            const nextCash =
+              liveHoldings.onchainUsdcBalance !== null && cap !== null
+                ? Math.min(liveHoldings.onchainUsdcBalance, Math.max(0, cap))
+                : liveHoldings.onchainUsdcBalance;
+            if (nextCash !== null) {
+              portfolio.retainedCash = nextCash;
+              portfolio.cashBuffer = nextCash;
+            }
+          } catch (error) {
+            liveHoldings.onchainUsdcBalanceError = formatAxiosError(error);
+          }
+
+          portfolio.polymarket = {
+            ...snapshotPolymarket(portfolio.polymarket),
+            lastLiveHoldingsSyncAt: now.toISOString(),
+            lastLiveHoldingsSource: 'data-api',
+            lastLiveHoldingsUserAddress: userAddress,
+            lastLiveHoldingsProxyWallet: liveHoldings.proxyWallet,
+          };
+        }
+      } catch (error) {
+        liveHoldings.error = formatAxiosError(error);
+      }
+    }
   }
 
   const makerStateEnabled = sizeToBudget === true;
@@ -1442,14 +1577,6 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       makerStateAvailable = true;
     }
   }
-
-  const pickNumber = (value) => {
-    if (value === null || value === undefined || value === '') {
-      return null;
-    }
-    const num = Number(value);
-    return Number.isFinite(num) ? num : null;
-  };
 
   const startingCash = (() => {
     const retainedCash = pickNumber(portfolio.retainedCash);
@@ -2760,11 +2887,11 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	    };
 	  }
 
-	  const shouldApplyPortfolioUpdate = (() => {
-	    if (executionMode !== 'live') {
-	      return true;
-	    }
-	    if (mode === 'backfill') {
+  const shouldApplyPortfolioUpdate = (() => {
+    if (executionMode !== 'live') {
+      return true;
+    }
+    if (mode === 'backfill') {
 	      return true;
 	    }
 	    if (!makerStateEnabled || !didSize) {
@@ -2779,30 +2906,69 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	    if (rebalancePlan.attemptedOrders <= 0) {
 	      return false;
 	    }
-	    if (rebalancePlan.failedOrders > 0 || liveExecutionAbort) {
-	      return false;
-	    }
-	    return true;
-	  })();
+    if (rebalancePlan.failedOrders > 0 || liveExecutionAbort) {
+      return false;
+    }
+    return true;
+  })();
 
-	  if (shouldApplyPortfolioUpdate) {
-	    portfolio.stocks = updatedStocks;
-	    portfolio.retainedCash = toNumber(cash, 0);
-	    portfolio.cashBuffer = toNumber(cash, 0);
-	  }
+  if (executionMode === 'live' && mode === 'incremental') {
+    const nextLiveExecutionOk = (() => {
+      if (liveExecutionAbort) {
+        return false;
+      }
+      if (rebalancePlan && rebalancePlan.failedOrders > 0) {
+        return false;
+      }
+      if (rebalancePlan && rebalancePlan.attemptedOrders > 0) {
+        return true;
+      }
+      if (liveHoldingsUsed) {
+        return true;
+      }
+      return previousLiveExecutionOk === true;
+    })();
+
+    portfolio.polymarket = {
+      ...snapshotPolymarket(portfolio.polymarket),
+      lastLiveExecutionAt: now.toISOString(),
+      lastLiveExecutionOk: nextLiveExecutionOk,
+      lastLiveExecutionAbort: liveExecutionAbort,
+      lastLiveExecutionDisabledReason: executionDisabledReason,
+    };
+  }
+
+  if (shouldApplyPortfolioUpdate) {
+    portfolio.stocks = updatedStocks;
+    portfolio.retainedCash = toNumber(cash, 0);
+    portfolio.cashBuffer = toNumber(cash, 0);
+  }
 	  portfolio.lastRebalancedAt = now;
 	  portfolio.nextRebalanceAt = computeNextRebalanceAt(normalizeRecurrence(portfolio.recurrence), now);
 	  portfolio.rebalanceCount = toNumber(portfolio.rebalanceCount, 0) + 1;
 	  portfolio.lastPerformanceComputedAt = now;
-	  sanitizePolymarketSubdoc(portfolio);
-	  await portfolio.save();
+  sanitizePolymarketSubdoc(portfolio);
+  await portfolio.save();
+
+  const savedStocks = Array.isArray(portfolio.stocks) ? portfolio.stocks : [];
 
   await recordEquitySnapshotIfPossible({
-    stocks: updatedStocks,
+    stocks: savedStocks,
     retainedCash: portfolio.retainedCash,
   });
 
 	  const maxLogTrades = mode === 'backfill' ? 200 : 500;
+    const maxLogPositions = 200;
+    const serializePosition = (pos) => ({
+      market: pos.market,
+      asset_id: pos.asset_id,
+      outcome: pos.outcome,
+      quantity: pos.quantity,
+      avgCost: pos.avgCost,
+      currentPrice: pos.currentPrice,
+    });
+    const positionsTrimmed = Math.max(0, savedStocks.length - Math.min(savedStocks.length, maxLogPositions));
+    const targetPositionsTrimmed = Math.max(0, updatedStocks.length - Math.min(updatedStocks.length, maxLogPositions));
 	  const summaryMessage = mode === 'backfill'
 	    ? 'Polymarket copy-trader backfilled'
 	    : liveExecutionAbort
@@ -2823,6 +2989,11 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         chainId: info?.chainId ?? null,
         signatureType: info?.signatureType ?? null,
         geoTokenSet: info?.geoTokenSet ?? null,
+        proxyConfigured: info?.proxy?.configured ?? null,
+        proxyCount: info?.proxy?.count ?? null,
+        proxyHost: info?.proxy?.host ?? null,
+        proxyPort: info?.proxy?.port ?? null,
+        proxyAuthPresent: info?.proxy?.authPresent ?? null,
         useServerTime: info?.useServerTime ?? null,
         authAddressPresent: info?.authAddressPresent ?? null,
         authAddressValid: info?.authAddressValid ?? null,
@@ -2873,6 +3044,8 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
             liveRebalancePlan: rebalancePlan,
             liveRebalancePreflight: executionPreflight,
             executionDebug,
+            liveHoldings,
+            holdingsSource: liveHoldingsUsed ? 'data-api' : 'portfolio',
 			      address,
             authAddress,
 			      pagesFetched,
@@ -2887,14 +3060,13 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       rebalanceCount: tradeSummary.rebalance.length,
       skippedCount: tradeSummary.skipped.length,
       cash: portfolio.retainedCash,
-      positions: updatedStocks.map((pos) => ({
-        market: pos.market,
-        asset_id: pos.asset_id,
-        outcome: pos.outcome,
-        quantity: pos.quantity,
-        avgCost: pos.avgCost,
-        currentPrice: pos.currentPrice,
-      })),
+      targetCash: roundToDecimals(cash, 6),
+      positionsCount: savedStocks.length,
+      targetPositionsCount: updatedStocks.length,
+      positions: savedStocks.slice(0, maxLogPositions).map(serializePosition),
+      targetPositions: updatedStocks.slice(0, maxLogPositions).map(serializePosition),
+      positionsTrimmed: positionsTrimmed || null,
+      targetPositionsTrimmed: targetPositionsTrimmed || null,
     },
   });
 

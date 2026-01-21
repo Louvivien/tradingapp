@@ -104,6 +104,29 @@ const getClobProxyConfig = () => {
     return null;
   }
 };
+
+const getClobProxyDebugInfo = () => {
+  const raw = normalizeEnvValue(
+    process.env.POLYMARKET_CLOB_PROXY ||
+      process.env.POLYMARKET_HTTP_PROXY ||
+      process.env.HTTP_PROXY ||
+      process.env.HTTPS_PROXY ||
+      ''
+  );
+  const list = raw
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const config = getClobProxyConfig();
+  const authPresent = Boolean(config?.auth && (config.auth.username || config.auth.password));
+  return {
+    configured: Boolean(config),
+    count: list.length,
+    host: config?.host ?? null,
+    port: config?.port ?? null,
+    authPresent,
+  };
+};
 const ensureClobUserAgentInterceptor = (host) => {
   const userAgent = normalizeEnvValue(
     process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
@@ -286,6 +309,7 @@ const getPolymarketExecutionDebugInfo = () => {
     signatureType: env.signatureType,
     useServerTime: env.useServerTime,
     geoTokenSet: Boolean(env.geoBlockToken),
+    proxy: getClobProxyDebugInfo(),
     l2CredsPresent,
     decryptError,
     authAddressPresent,
