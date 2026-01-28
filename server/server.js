@@ -119,6 +119,73 @@ const app = express();
 const port = process.env.PORT || 3000;
 
 const normalizeEnvValue = (value) => String(value || '').trim();
+let clobProxyPoolKey = null;
+let clobProxyPool = [];
+let clobProxyCursor = 0;
+
+const getClobProxyEnvList = () => {
+  const raw = normalizeEnvValue(
+    process.env.POLYMARKET_CLOB_PROXY ||
+      process.env.POLYMARKET_HTTP_PROXY ||
+      process.env.HTTP_PROXY ||
+      process.env.HTTPS_PROXY ||
+      ""
+  );
+  return raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+};
+
+const normalizeProxyUrl = (value) => {
+  const raw = normalizeEnvValue(value);
+  if (!raw) return "";
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) return raw;
+  return `http://${raw}`;
+};
+
+const parseProxyUrl = (value) => {
+  const normalized = normalizeProxyUrl(value);
+  if (!normalized) return null;
+  try {
+    const parsed = new URL(normalized);
+    const port = parsed.port ? Number(parsed.port) : parsed.protocol === "https:" ? 443 : 80;
+    if (!parsed.hostname || !Number.isFinite(port)) {
+      return null;
+    }
+    const auth =
+      parsed.username || parsed.password
+        ? {
+            username: decodeURIComponent(parsed.username || ""),
+            password: decodeURIComponent(parsed.password || ""),
+          }
+        : undefined;
+    return { host: parsed.hostname, port, ...(auth ? { auth } : {}) };
+  } catch {
+    return null;
+  }
+};
+
+const getClobProxyPool = () => {
+  const list = getClobProxyEnvList();
+  const key = list.join(",");
+  if (key !== clobProxyPoolKey) {
+    clobProxyPoolKey = key;
+    clobProxyPool = list.map(parseProxyUrl).filter(Boolean);
+    clobProxyCursor = 0;
+  }
+  return clobProxyPool;
+};
+
+const getNextClobProxyConfig = () => {
+  const pool = getClobProxyPool();
+  if (!pool.length) {
+    return null;
+  }
+  const idx = clobProxyCursor % pool.length;
+  clobProxyCursor = (clobProxyCursor + 1) % pool.length;
+  return pool[idx];
+};
 const isPlaceholder = (value) => normalizeEnvValue(value).includes('your_');
 
 const runtimeEnv = {
@@ -308,35 +375,7 @@ app.get("/api/health/polymarket", async (req, res) => {
   const clobUserAgent = normalizeEnvValue(
     process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || "tradingapp/1.0"
   );
-  const clobProxyRaw = normalizeEnvValue(
-    process.env.POLYMARKET_CLOB_PROXY ||
-      process.env.POLYMARKET_HTTP_PROXY ||
-      process.env.HTTP_PROXY ||
-      process.env.HTTPS_PROXY ||
-      ""
-  );
-  const clobProxy = clobProxyRaw
-    .split(",")
-    .map((value) => value.trim())
-    .filter(Boolean)[0] || "";
-  const clobProxyConfig = (() => {
-    if (!clobProxy) return null;
-    try {
-      const parsed = new URL(clobProxy);
-      const port = parsed.port ? Number(parsed.port) : parsed.protocol === "https:" ? 443 : 80;
-      if (!parsed.hostname || !Number.isFinite(port)) return null;
-      const auth =
-        parsed.username || parsed.password
-          ? {
-              username: decodeURIComponent(parsed.username || ""),
-              password: decodeURIComponent(parsed.password || ""),
-            }
-          : undefined;
-      return { host: parsed.hostname, port, ...(auth ? { auth } : {}) };
-    } catch {
-      return null;
-    }
-  })();
+  const clobProxyConfig = getNextClobProxyConfig();
 
   const buildGeoParams = (params = {}) => {
     if (!geoToken) return params;

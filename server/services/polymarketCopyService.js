@@ -27,7 +27,7 @@ const POLYMARKET_DATA_API_TAKER_ONLY_DEFAULT = String(process.env.POLYMARKET_DAT
 const POLYMARKET_CLOB_USER_AGENT = String(
   process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
 ).trim();
-const POLYMARKET_CLOB_PROXY = String(
+const POLYMARKET_CLOB_PROXY_LIST = String(
   process.env.POLYMARKET_CLOB_PROXY ||
     process.env.POLYMARKET_HTTP_PROXY ||
     process.env.HTTP_PROXY ||
@@ -36,7 +36,7 @@ const POLYMARKET_CLOB_PROXY = String(
 )
   .split(',')
   .map((value) => value.trim())
-  .filter(Boolean)[0] || null;
+  .filter(Boolean);
 const POLYMARKET_DATA_API_USER_AGENT = String(process.env.POLYMARKET_DATA_API_USER_AGENT || 'tradingapp/1.0').trim();
 const POLYMARKET_HTTP_TIMEOUT_MS = (() => {
   const raw = Number(process.env.POLYMARKET_HTTP_TIMEOUT_MS || process.env.POLYMARKET_TIMEOUT_MS);
@@ -59,6 +59,9 @@ const POLYMARKET_PROGRESS_LOG_EVERY_PAGES = (() => {
   }
   return Math.max(1, Math.min(Math.floor(raw), 200));
 })();
+let clobProxyPoolKey = null;
+let clobProxyPool = [];
+let clobProxyCursor = 0;
 const ENCRYPTION_KEY = String(process.env.ENCRYPTION_KEY || process.env.CryptoJS_secret_key || '').trim() || null;
 const POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS = (() => {
   const raw = Number(process.env.POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS);
@@ -215,12 +218,18 @@ const withClobUserAgent = (headers = {}) => {
   return { ...headers, 'User-Agent': POLYMARKET_CLOB_USER_AGENT };
 };
 
-const getClobProxyConfig = () => {
-  if (!POLYMARKET_CLOB_PROXY) {
-    return null;
-  }
+const normalizeProxyUrl = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) return raw;
+  return `http://${raw}`;
+};
+
+const parseProxyUrl = (value) => {
+  const normalized = normalizeProxyUrl(value);
+  if (!normalized) return null;
   try {
-    const parsed = new URL(POLYMARKET_CLOB_PROXY);
+    const parsed = new URL(normalized);
     const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
     if (!parsed.hostname || !Number.isFinite(port)) {
       return null;
@@ -228,14 +237,34 @@ const getClobProxyConfig = () => {
     const auth =
       parsed.username || parsed.password
         ? {
-          username: decodeURIComponent(parsed.username || ''),
-          password: decodeURIComponent(parsed.password || ''),
-        }
+            username: decodeURIComponent(parsed.username || ''),
+            password: decodeURIComponent(parsed.password || ''),
+          }
         : undefined;
     return { host: parsed.hostname, port, ...(auth ? { auth } : {}) };
   } catch {
     return null;
   }
+};
+
+const getClobProxyPool = () => {
+  const key = POLYMARKET_CLOB_PROXY_LIST.join(',');
+  if (key !== clobProxyPoolKey) {
+    clobProxyPoolKey = key;
+    clobProxyPool = POLYMARKET_CLOB_PROXY_LIST.map(parseProxyUrl).filter(Boolean);
+    clobProxyCursor = 0;
+  }
+  return clobProxyPool;
+};
+
+const getClobProxyConfig = () => {
+  const pool = getClobProxyPool();
+  if (!pool.length) {
+    return null;
+  }
+  const idx = clobProxyCursor % pool.length;
+  clobProxyCursor = (clobProxyCursor + 1) % pool.length;
+  return pool[idx];
 };
 
 const sanitizePolymarketSubdoc = (portfolio) => {

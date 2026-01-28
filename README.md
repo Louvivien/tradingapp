@@ -124,7 +124,7 @@ Server env vars (in `tradingapp/server/config/.env`):
   - Safety: live execution runs only for incremental syncs by default; to allow a one-time live rebalance after a backfill (to enter the copied positions), set `POLYMARKET_BACKFILL_LIVE_REBALANCE=true` (requires “Size trades to my budget”).
 - Data API options (optional): `POLYMARKET_DATA_API_HOST`, `POLYMARKET_DATA_API_TAKER_ONLY`, `POLYMARKET_DATA_API_USER_AGENT`
 - CLOB HTTP user agent (optional, helps with Cloudflare 403s): `POLYMARKET_CLOB_USER_AGENT` (default: `tradingapp/1.0`)
-- CLOB HTTP proxy (optional, supports comma-separated lists; first entry used): `POLYMARKET_CLOB_PROXY` (fallbacks: `POLYMARKET_HTTP_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`)
+- CLOB HTTP proxy (optional, supports comma-separated lists; round-robin per request): `POLYMARKET_CLOB_PROXY` (fallbacks: `POLYMARKET_HTTP_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`)
 - CLOB auth retry cooldown in `auto` mode (optional, default 1h): `POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS`
 
 Magic/email wallets (separate signer + funded profile):

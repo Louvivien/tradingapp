@@ -13,7 +13,7 @@ const GEO_BLOCK_TOKEN = (process.env.POLYMARKET_GEO_BLOCK_TOKEN || process.env.G
 const POLYMARKET_CLOB_USER_AGENT = String(
   process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
 ).trim();
-const POLYMARKET_CLOB_PROXY = String(
+const POLYMARKET_CLOB_PROXY_LIST = String(
   process.env.POLYMARKET_CLOB_PROXY ||
     process.env.POLYMARKET_HTTP_PROXY ||
     process.env.HTTP_PROXY ||
@@ -22,7 +22,10 @@ const POLYMARKET_CLOB_PROXY = String(
 )
   .split(',')
   .map((value) => value.trim())
-  .filter(Boolean)[0] || null;
+  .filter(Boolean);
+let clobProxyPoolKey = null;
+let clobProxyPool = [];
+let clobProxyCursor = 0;
 const CHAIN_ID = (() => {
   const raw = Number(process.env.POLYMARKET_CHAIN_ID || process.env.CLOB_CHAIN_ID);
   if (Number.isFinite(raw)) return raw;
@@ -39,27 +42,46 @@ const request = async (method, url, config = {}) =>
     ...config,
   });
 
+const normalizeProxyUrl = (value) => {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) return raw;
+  return `http://${raw}`;
+};
+
 const getClobProxyConfig = () => {
-  if (!POLYMARKET_CLOB_PROXY) {
-    return null;
-  }
-  try {
-    const parsed = new URL(POLYMARKET_CLOB_PROXY);
-    const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
-    if (!parsed.hostname || !Number.isFinite(port)) {
-      return null;
-    }
-    const auth =
-      parsed.username || parsed.password
-        ? {
-          username: decodeURIComponent(parsed.username || ''),
-          password: decodeURIComponent(parsed.password || ''),
+  const key = POLYMARKET_CLOB_PROXY_LIST.join(',');
+  if (key !== clobProxyPoolKey) {
+    clobProxyPoolKey = key;
+    clobProxyPool = POLYMARKET_CLOB_PROXY_LIST.map((entry) => {
+      const normalized = normalizeProxyUrl(entry);
+      if (!normalized) return null;
+      try {
+        const parsed = new URL(normalized);
+        const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
+        if (!parsed.hostname || !Number.isFinite(port)) {
+          return null;
         }
-        : undefined;
-    return { host: parsed.hostname, port, ...(auth ? { auth } : {}) };
-  } catch {
+        const auth =
+          parsed.username || parsed.password
+            ? {
+                username: decodeURIComponent(parsed.username || ''),
+                password: decodeURIComponent(parsed.password || ''),
+              }
+            : undefined;
+        return { host: parsed.hostname, port, ...(auth ? { auth } : {}) };
+      } catch {
+        return null;
+      }
+    }).filter(Boolean);
+    clobProxyCursor = 0;
+  }
+  if (!clobProxyPool.length) {
     return null;
   }
+  const idx = clobProxyCursor % clobProxyPool.length;
+  clobProxyCursor = (clobProxyCursor + 1) % clobProxyPool.length;
+  return clobProxyPool[idx];
 };
 
 const withGeoParams = (params = {}) => (GEO_BLOCK_TOKEN ? { ...params, geo_block_token: GEO_BLOCK_TOKEN } : params);

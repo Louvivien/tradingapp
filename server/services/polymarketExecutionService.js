@@ -68,10 +68,25 @@ const parseBoolean = (value, fallback = false) => {
 
 const getPolymarketUseServerTime = () => parseBoolean(process.env.POLYMARKET_USE_SERVER_TIME, true);
 
-let clobUserAgentInterceptorKey = null;
-let clobProxyInterceptorKey = null;
+let clobUserAgentInterceptorKeyCjs = null;
+let clobUserAgentInterceptorKeyEsm = null;
+let clobProxyInterceptorKeyCjs = null;
+let clobProxyInterceptorKeyEsm = null;
+let clobProxyPoolKey = null;
+let clobProxyPool = [];
+let clobProxyCursor = 0;
 
-const getClobProxyConfig = () => {
+let axiosEsmPromise = null;
+const getAxiosEsm = async () => {
+  if (!axiosEsmPromise) {
+    axiosEsmPromise = import('axios')
+      .then((mod) => mod?.default || null)
+      .catch(() => null);
+  }
+  return await axiosEsmPromise;
+};
+
+const getClobProxyEnvList = () => {
   const raw = normalizeEnvValue(
     process.env.POLYMARKET_CLOB_PROXY ||
       process.env.POLYMARKET_HTTP_PROXY ||
@@ -79,15 +94,24 @@ const getClobProxyConfig = () => {
       process.env.HTTPS_PROXY ||
       ''
   );
-  const proxyUrl = raw
+  return raw
     .split(',')
     .map((value) => value.trim())
-    .filter(Boolean)[0];
-  if (!proxyUrl) {
-    return null;
-  }
+    .filter(Boolean);
+};
+
+const normalizeProxyUrl = (value) => {
+  const raw = normalizeEnvValue(value);
+  if (!raw) return '';
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(raw)) return raw;
+  return `http://${raw}`;
+};
+
+const parseProxyUrl = (value) => {
+  const normalized = normalizeProxyUrl(value);
+  if (!normalized) return null;
   try {
-    const parsed = new URL(proxyUrl);
+    const parsed = new URL(normalized);
     const port = parsed.port ? Number(parsed.port) : parsed.protocol === 'https:' ? 443 : 80;
     if (!parsed.hostname || !Number.isFinite(port)) {
       return null;
@@ -105,19 +129,43 @@ const getClobProxyConfig = () => {
   }
 };
 
+const getClobProxyPool = () => {
+  const list = getClobProxyEnvList();
+  const key = list.join(',');
+  if (key !== clobProxyPoolKey) {
+    clobProxyPoolKey = key;
+    clobProxyPool = list.map(parseProxyUrl).filter(Boolean);
+    clobProxyCursor = 0;
+  }
+  return clobProxyPool;
+};
+
+const getClobProxyPoolKey = () => {
+  getClobProxyPool();
+  return clobProxyPoolKey || '';
+};
+
+const getNextClobProxyConfig = () => {
+  const pool = getClobProxyPool();
+  if (!pool.length) {
+    return null;
+  }
+  const idx = clobProxyCursor % pool.length;
+  clobProxyCursor = (clobProxyCursor + 1) % pool.length;
+  return pool[idx];
+};
+
+const peekClobProxyConfig = () => {
+  const pool = getClobProxyPool();
+  if (!pool.length) {
+    return null;
+  }
+  return pool[clobProxyCursor % pool.length];
+};
+
 const getClobProxyDebugInfo = () => {
-  const raw = normalizeEnvValue(
-    process.env.POLYMARKET_CLOB_PROXY ||
-      process.env.POLYMARKET_HTTP_PROXY ||
-      process.env.HTTP_PROXY ||
-      process.env.HTTPS_PROXY ||
-      ''
-  );
-  const list = raw
-    .split(',')
-    .map((value) => value.trim())
-    .filter(Boolean);
-  const config = getClobProxyConfig();
+  const list = getClobProxyEnvList();
+  const config = peekClobProxyConfig();
   const authPresent = Boolean(config?.auth && (config.auth.username || config.auth.password));
   return {
     configured: Boolean(config),
@@ -127,49 +175,92 @@ const getClobProxyDebugInfo = () => {
     authPresent,
   };
 };
-const ensureClobUserAgentInterceptor = (host) => {
+
+const ensureAxiosUserAgentInterceptor = (axiosInstance, host, userAgent, currentKey) => {
+  if (!axiosInstance || !axiosInstance.interceptors?.request || !host || !userAgent) {
+    return currentKey;
+  }
+  const key = `${host}|${userAgent}`;
+  if (currentKey === key) {
+    return currentKey;
+  }
+
+  axiosInstance.interceptors.request.use((config) => {
+    if (!config || !config.url) {
+      return config;
+    }
+    if (String(config.url).startsWith(host)) {
+      config.headers = config.headers || {};
+      config.headers['User-Agent'] = userAgent;
+    }
+    return config;
+  });
+
+  return key;
+};
+
+const ensureAxiosProxyInterceptor = (axiosInstance, host, proxyProvider, currentKey) => {
+  if (!axiosInstance || !axiosInstance.interceptors?.request || !host || !proxyProvider?.getProxy) {
+    return currentKey;
+  }
+  const key = `${host}|${proxyProvider.key}`;
+  if (currentKey === key) {
+    return currentKey;
+  }
+
+  axiosInstance.interceptors.request.use((config) => {
+    if (!config || !config.url) {
+      return config;
+    }
+    if (String(config.url).startsWith(host)) {
+      config.proxy = proxyProvider.getProxy() || false;
+    }
+    return config;
+  });
+
+  return key;
+};
+
+const ensureClobUserAgentInterceptor = async (host) => {
   const userAgent = normalizeEnvValue(
     process.env.POLYMARKET_CLOB_USER_AGENT || process.env.POLYMARKET_HTTP_USER_AGENT || 'tradingapp/1.0'
   );
   if (!userAgent || !host) {
     return;
   }
-  const key = `${host}|${userAgent}`;
-  if (clobUserAgentInterceptorKey === key) {
-    return;
+  clobUserAgentInterceptorKeyCjs = ensureAxiosUserAgentInterceptor(
+    Axios,
+    host,
+    userAgent,
+    clobUserAgentInterceptorKeyCjs
+  );
+  const axiosEsm = await getAxiosEsm();
+  if (axiosEsm) {
+    clobUserAgentInterceptorKeyEsm = ensureAxiosUserAgentInterceptor(
+      axiosEsm,
+      host,
+      userAgent,
+      clobUserAgentInterceptorKeyEsm
+    );
   }
-  Axios.interceptors.request.use((config) => {
-    if (!config || !config.url) {
-      return config;
-    }
-    if (config.url.startsWith(host)) {
-      config.headers = config.headers || {};
-      config.headers['User-Agent'] = userAgent;
-    }
-    return config;
-  });
-  clobUserAgentInterceptorKey = key;
 };
 
-const ensureClobProxyInterceptor = (host) => {
-  const proxyConfig = getClobProxyConfig();
-  if (!proxyConfig || !host) {
+const ensureClobProxyInterceptor = async (host) => {
+  const pool = getClobProxyPool();
+  if (!pool.length || !host) {
     return;
   }
-  const key = `${host}|${proxyConfig.host}:${proxyConfig.port}`;
-  if (clobProxyInterceptorKey === key) {
-    return;
+  const proxyProvider = { key: getClobProxyPoolKey(), getProxy: getNextClobProxyConfig };
+  clobProxyInterceptorKeyCjs = ensureAxiosProxyInterceptor(Axios, host, proxyProvider, clobProxyInterceptorKeyCjs);
+  const axiosEsm = await getAxiosEsm();
+  if (axiosEsm) {
+    clobProxyInterceptorKeyEsm = ensureAxiosProxyInterceptor(
+      axiosEsm,
+      host,
+      proxyProvider,
+      clobProxyInterceptorKeyEsm
+    );
   }
-  Axios.interceptors.request.use((config) => {
-    if (!config || !config.url) {
-      return config;
-    }
-    if (config.url.startsWith(host)) {
-      config.proxy = proxyConfig;
-    }
-    return config;
-  });
-  clobProxyInterceptorKey = key;
 };
 
 const normalizePrivateKey = (value) => {
