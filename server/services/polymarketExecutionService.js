@@ -3,6 +3,7 @@ const fs = require('fs');
 const Axios = require('axios');
 const CryptoJS = require('crypto-js');
 const { Wallet, providers, Contract, utils } = require('ethers');
+const { getNextPolymarketProxyConfig, getPolymarketProxyDebugInfo } = require('./polymarketProxyPoolService');
 
 const normalizeEnvValue = (value) => String(value || '').trim();
 
@@ -246,11 +247,10 @@ const ensureClobUserAgentInterceptor = async (host) => {
 };
 
 const ensureClobProxyInterceptor = async (host) => {
-  const pool = getClobProxyPool();
-  if (!pool.length || !host) {
+  if (!host) {
     return;
   }
-  const proxyProvider = { key: getClobProxyPoolKey(), getProxy: getNextClobProxyConfig };
+  const proxyProvider = { key: 'polymarket-proxy-pool', getProxy: getNextPolymarketProxyConfig };
   clobProxyInterceptorKeyCjs = ensureAxiosProxyInterceptor(Axios, host, proxyProvider, clobProxyInterceptorKeyCjs);
   const axiosEsm = await getAxiosEsm();
   if (axiosEsm) {
@@ -400,7 +400,7 @@ const getPolymarketExecutionDebugInfo = () => {
     signatureType: env.signatureType,
     useServerTime: env.useServerTime,
     geoTokenSet: Boolean(env.geoBlockToken),
-    proxy: getClobProxyDebugInfo(),
+    proxy: getPolymarketProxyDebugInfo(),
     l2CredsPresent,
     decryptError,
     authAddressPresent,

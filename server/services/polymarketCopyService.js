@@ -13,6 +13,7 @@ const {
   getPolymarketOnchainUsdcBalance,
   getPolymarketClobBalanceAllowance,
 } = require('./polymarketExecutionService');
+const { getNextPolymarketProxyConfig } = require('./polymarketProxyPoolService');
 
 const CLOB_HOST = String(process.env.POLYMARKET_CLOB_HOST || 'https://clob.polymarket.com').replace(/\/+$/, '');
 const DATA_API_HOST = String(process.env.POLYMARKET_DATA_API_HOST || 'https://data-api.polymarket.com').replace(
@@ -107,6 +108,14 @@ const POLYMARKET_LIVE_REBALANCE_MIN_NOTIONAL = (() => {
     return 1;
   }
   return Math.max(0.01, Math.min(parsed, 1000000));
+})();
+
+const POLYMARKET_PROXY_REQUEST_ATTEMPTS = (() => {
+  const parsed = Number(process.env.POLYMARKET_PROXY_REQUEST_ATTEMPTS);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 3;
+  }
+  return Math.max(1, Math.min(Math.floor(parsed), 10));
 })();
 
 const toNumber = (value, fallback = null) => {
@@ -258,13 +267,7 @@ const getClobProxyPool = () => {
 };
 
 const getClobProxyConfig = () => {
-  const pool = getClobProxyPool();
-  if (!pool.length) {
-    return null;
-  }
-  const idx = clobProxyCursor % pool.length;
-  clobProxyCursor = (clobProxyCursor + 1) % pool.length;
-  return pool[idx];
+  return getNextPolymarketProxyConfig();
 };
 
 const sanitizePolymarketSubdoc = (portfolio) => {
@@ -311,6 +314,7 @@ const snapshotPolymarket = (poly) => {
 
 const axiosGet = async (url, config = {}) => {
   const timeout = config.timeout ? config.timeout : POLYMARKET_HTTP_TIMEOUT_MS;
+  const proxy = Object.prototype.hasOwnProperty.call(config, 'proxy') ? config.proxy || false : false;
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = controller
     ? setTimeout(() => {
@@ -326,7 +330,7 @@ const axiosGet = async (url, config = {}) => {
     return await Axios.get(url, {
       ...config,
       timeout,
-      proxy: false,
+      proxy,
       ...(controller ? { signal: controller.signal } : {}),
     });
   } finally {
@@ -334,6 +338,60 @@ const axiosGet = async (url, config = {}) => {
       clearTimeout(timer);
     }
   }
+};
+
+const isRetryablePolymarketProxyError = (error) => {
+  const status = Number(error?.status || error?.response?.status);
+  if (Number.isFinite(status) && status > 0) {
+    if (status === 401) return false;
+    if (status === 403 || status === 408 || status === 429) return true;
+    return status >= 500;
+  }
+  const code = String(error?.code || '').toUpperCase();
+  if (!code) return true;
+  if (
+    code === 'ECONNRESET' ||
+    code === 'ECONNREFUSED' ||
+    code === 'ETIMEDOUT' ||
+    code === 'EHOSTUNREACH' ||
+    code === 'ENETUNREACH' ||
+    code === 'EAI_AGAIN'
+  ) {
+    return true;
+  }
+  if (code.includes('TLS') || code.includes('CERT')) {
+    return true;
+  }
+  return true;
+};
+
+const polymarketAxiosGet = async (url, config = {}) => {
+  const attempts = POLYMARKET_PROXY_REQUEST_ATTEMPTS;
+  let lastError = null;
+  let attemptedDirect = false;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const proxy = getClobProxyConfig();
+    const usingProxy = Boolean(proxy);
+    if (!usingProxy && attemptedDirect) {
+      break;
+    }
+
+    try {
+      return await axiosGet(url, {
+        ...config,
+        proxy: usingProxy ? proxy : false,
+      });
+    } catch (error) {
+      lastError = error;
+      attemptedDirect = attemptedDirect || !usingProxy;
+      if (attempt >= attempts || !isRetryablePolymarketProxyError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new Error('Polymarket request failed.');
 };
 
 const sanitizeBase64Secret = (secret) => {
@@ -381,11 +439,9 @@ const buildPolyHmacSignature = ({ secret, timestamp, method, requestPath, body }
 };
 
 const fetchClobServerTime = async () => {
-  const proxy = getClobProxyConfig();
-  const response = await axiosGet(`${CLOB_HOST}/time`, {
+  const response = await polymarketAxiosGet(`${CLOB_HOST}/time`, {
     params: buildGeoParams(),
     headers: withClobUserAgent(),
-    proxy: proxy || false,
   });
   const ts = Math.floor(toNumber(response?.data, NaN));
   if (!Number.isFinite(ts) || ts <= 0) {
@@ -430,10 +486,9 @@ const fetchTradesPage = async ({ authAddress, apiKey, secret, passphrase, makerA
     maker_address: makerAddress,
   });
 
-  const response = await axiosGet(`${CLOB_HOST}${endpoint}`, {
+  const response = await polymarketAxiosGet(`${CLOB_HOST}${endpoint}`, {
     headers,
     params,
-    proxy: getClobProxyConfig() || false,
   });
   return { page: response?.data || null };
 };
@@ -541,7 +596,7 @@ const fetchDataApiPositionsSnapshot = async ({ userAddress }) => {
     throw new Error('Polymarket address is missing or invalid.');
   }
 
-  const response = await axiosGet(`${DATA_API_HOST}/positions`, {
+  const response = await polymarketAxiosGet(`${DATA_API_HOST}/positions`, {
     headers: POLYMARKET_DATA_API_USER_AGENT ? { 'User-Agent': POLYMARKET_DATA_API_USER_AGENT } : undefined,
     params: {
       user: normalizedUser,
@@ -582,7 +637,7 @@ const fetchDataApiTradesPage = async ({ userAddress, offset, limit, takerOnly })
 
   const takerOnlyFlag = parseBooleanEnvDefault(takerOnly, false);
 
-  const response = await axiosGet(`${DATA_API_HOST}/trades`, {
+  const response = await polymarketAxiosGet(`${DATA_API_HOST}/trades`, {
     headers: POLYMARKET_DATA_API_USER_AGENT ? { 'User-Agent': POLYMARKET_DATA_API_USER_AGENT } : undefined,
     params: {
       user: normalizedUser,
@@ -619,10 +674,9 @@ const fetchMarket = async (conditionId) => {
   if (!cleaned) {
     return null;
   }
-  const response = await axiosGet(`${CLOB_HOST}/markets/${cleaned}`, {
+  const response = await polymarketAxiosGet(`${CLOB_HOST}/markets/${cleaned}`, {
     params: buildGeoParams(),
     headers: withClobUserAgent(),
-    proxy: getClobProxyConfig() || false,
   });
   return response?.data || null;
 };
@@ -2739,20 +2793,19 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
             }
             : null;
 
-          if (
-            diagnostics &&
-            (errorMessage.toLowerCase().includes('no match') || errorMessage.toLowerCase().includes('no orderbook'))
-          ) {
-            try {
-              const orderbookResponse = await axiosGet(`${CLOB_HOST}/book`, {
-                params: buildGeoParams({ token_id: order.assetId }),
-                headers: withClobUserAgent(),
-                proxy: getClobProxyConfig() || false,
-              });
-              const book = orderbookResponse?.data || null;
-              const bidsRaw = Array.isArray(book?.bids) ? book.bids : [];
-              const asksRaw = Array.isArray(book?.asks) ? book.asks : [];
-              const toLevel = (row) => {
+	          if (
+	            diagnostics &&
+	            (errorMessage.toLowerCase().includes('no match') || errorMessage.toLowerCase().includes('no orderbook'))
+	          ) {
+	            try {
+	              const orderbookResponse = await polymarketAxiosGet(`${CLOB_HOST}/book`, {
+	                params: buildGeoParams({ token_id: order.assetId }),
+	                headers: withClobUserAgent(),
+	              });
+	              const book = orderbookResponse?.data || null;
+	              const bidsRaw = Array.isArray(book?.bids) ? book.bids : [];
+	              const asksRaw = Array.isArray(book?.asks) ? book.asks : [];
+	              const toLevel = (row) => {
                 const price = toNumber(row?.price, null);
                 const size = toNumber(row?.size, null);
                 if (price === null || size === null) return null;

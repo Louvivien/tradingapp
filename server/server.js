@@ -79,7 +79,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
-const { schedulePortfolioRebalances } = require('./scheduler');
+const { schedulePortfolioRebalances, schedulePolymarketProxyPoolRefresh } = require('./scheduler');
 const { getAlpacaConfig } = require('./config/alpacaConfig');
 const {
   getClobAuthCooldownStatus,
@@ -90,6 +90,7 @@ const {
   getPolymarketExecutionMode,
   getPolymarketExecutionDebugInfo,
 } = require('./services/polymarketExecutionService');
+const { getNextPolymarketProxyConfig } = require('./services/polymarketProxyPoolService');
 
 mongoose.set('bufferCommands', false);
 
@@ -178,13 +179,7 @@ const getClobProxyPool = () => {
 };
 
 const getNextClobProxyConfig = () => {
-  const pool = getClobProxyPool();
-  if (!pool.length) {
-    return null;
-  }
-  const idx = clobProxyCursor % pool.length;
-  clobProxyCursor = (clobProxyCursor + 1) % pool.length;
-  return pool[idx];
+  return getNextPolymarketProxyConfig();
 };
 const isPlaceholder = (value) => normalizeEnvValue(value).includes('your_');
 
@@ -773,4 +768,5 @@ void initializeAlpaca()
     console.error('[API Error] Alpaca init threw unexpectedly:', error?.message || error);
   });
 
+schedulePolymarketProxyPoolRefresh();
 schedulePortfolioRebalances();

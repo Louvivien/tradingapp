@@ -4,6 +4,7 @@ const cron = require('node-cron');
 const { spawn } = require('child_process');
 const mongoose = require('mongoose');
 const { runDueRebalances } = require('./services/rebalanceService');
+const { refreshPolymarketProxyPool } = require('./services/polymarketProxyPoolService');
 
 // Schedule news_fromstockslist.py to run every day at 1:00 AM
 function scheduleNewsFromStocksList() {
@@ -60,8 +61,41 @@ function schedulePortfolioRebalances() {
   });
 }
 
+function schedulePolymarketProxyPoolRefresh() {
+  // Warm the pool once at startup (non-blocking).
+  void refreshPolymarketProxyPool({ force: false, reason: 'startup' }).then((result) => {
+    if (!result?.ok) {
+      console.warn('[Scheduler] Polymarket proxy pool refresh failed:', result?.error || result?.reason);
+      return;
+    }
+    if (!result?.skipped) {
+      console.log('[Scheduler] Polymarket proxy pool refreshed:', {
+        proxies: result?.proxies ?? null,
+        refreshedAt: result?.refreshedAt ?? null,
+      });
+    }
+  });
+
+  cron.schedule('15 0 * * *', async () => {
+    try {
+      const result = await refreshPolymarketProxyPool({ force: true, reason: 'cron' });
+      if (!result?.ok) {
+        console.warn('[Scheduler] Polymarket proxy pool refresh failed:', result?.error || result?.reason);
+      } else {
+        console.log('[Scheduler] Polymarket proxy pool refreshed:', {
+          proxies: result?.proxies ?? null,
+          refreshedAt: result?.refreshedAt ?? null,
+        });
+      }
+    } catch (error) {
+      console.warn('[Scheduler] Polymarket proxy pool refresh threw unexpectedly:', error?.message || error);
+    }
+  });
+}
+
 module.exports = {
   scheduleNewsFromStocksList,
   scheduleSentimentVertex,
   schedulePortfolioRebalances,
+  schedulePolymarketProxyPoolRefresh,
 };
