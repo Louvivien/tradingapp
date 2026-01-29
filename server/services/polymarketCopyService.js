@@ -1986,35 +1986,15 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
             side: 'BUY',
             amount: cost,
           });
-	      } catch (error) {
-	        if (isExecutionConfigError(error)) {
-	          executionEnabled = false;
-	          executionDisabledReason = formatAxiosError(error);
-	          tradeSummary.rebalance.push({
-	            symbol: symbolFor(order),
-	            assetId: order.assetId,
-	            side: order.side,
-	            amount,
-	            price: order.price,
-	            notional: roundToDecimals(order.notional, 6),
-	            reason: 'execution_failed',
-	            error: executionDisabledReason,
-	            execution: {
-	              mode: executionMode,
-	              dryRun: false,
-	              orderId: null,
-	              status: Number.isFinite(Number(error?.status || error?.response?.status))
-	                ? Number(error?.status || error?.response?.status)
-	                : null,
-	              txHashes: null,
-	            },
-	          });
-	          rebalancePlan.failedOrders += 1;
-	          if (!liveExecutionConfigLogged) {
-	            liveExecutionConfigLogged = true;
-	            await recordStrategyLog({
-	              strategyId: portfolio.strategy_id,
-	              userId: portfolio.userId,
+        } catch (error) {
+          if (isExecutionConfigError(error)) {
+            executionEnabled = false;
+            executionDisabledReason = formatAxiosError(error);
+            if (!liveExecutionConfigLogged) {
+              liveExecutionConfigLogged = true;
+              await recordStrategyLog({
+                strategyId: portfolio.strategy_id,
+                userId: portfolio.userId,
                 strategyName: portfolio.name,
                 level: 'error',
                 message: 'Polymarket live execution failed (configuration/auth error)',
