@@ -3,7 +3,12 @@ const fs = require('fs');
 const Axios = require('axios');
 const CryptoJS = require('crypto-js');
 const { Wallet, providers, Contract, utils } = require('ethers');
-const { getNextPolymarketProxyConfig, getPolymarketProxyDebugInfo, getPolymarketHttpsAgent } = require('./polymarketProxyPoolService');
+const {
+  getNextPolymarketProxyConfig,
+  getPolymarketProxyDebugInfo,
+  getPolymarketHttpsAgent,
+  notePolymarketProxyFailure,
+} = require('./polymarketProxyPoolService');
 
 const normalizeEnvValue = (value) => String(value || '').trim();
 
@@ -73,6 +78,8 @@ let clobUserAgentInterceptorKeyCjs = null;
 let clobUserAgentInterceptorKeyEsm = null;
 let clobProxyInterceptorKeyCjs = null;
 let clobProxyInterceptorKeyEsm = null;
+let clobProxyFailureInterceptorKeyCjs = null;
+let clobProxyFailureInterceptorKeyEsm = null;
 let clobProxyPoolKey = null;
 let clobProxyPool = [];
 let clobProxyCursor = 0;
@@ -200,6 +207,41 @@ const ensureAxiosUserAgentInterceptor = (axiosInstance, host, userAgent, current
   return key;
 };
 
+const attachHiddenConfigValue = (config, key, value) => {
+  if (!config || !key) return;
+  try {
+    Object.defineProperty(config, key, {
+      value,
+      enumerable: false,
+      configurable: true,
+      writable: true,
+    });
+  } catch {
+    config[key] = value;
+  }
+};
+
+const extractCloudflareHtmlText = (payload) => {
+  if (!payload) return '';
+  if (typeof payload === 'string') return payload;
+  if (typeof payload?.error === 'string') return payload.error;
+  if (typeof payload?.message === 'string') return payload.message;
+  return '';
+};
+
+const looksLikeCloudflareBlockPage = (payload) => {
+  const body = extractCloudflareHtmlText(payload);
+  if (!body) return false;
+  const lower = body.toLowerCase();
+  if (!lower.includes('cloudflare')) return false;
+  return (
+    lower.includes('ray id') ||
+    lower.includes('cf-error-details') ||
+    lower.includes('attention required') ||
+    lower.includes('sorry, you have been blocked')
+  );
+};
+
 const ensureAxiosProxyInterceptor = (axiosInstance, host, proxyProvider, currentKey) => {
   if (!axiosInstance || !axiosInstance.interceptors?.request || !host || !proxyProvider?.getProxy) {
     return currentKey;
@@ -220,9 +262,45 @@ const ensureAxiosProxyInterceptor = (axiosInstance, host, proxyProvider, current
       if (httpsAgent) {
         config.httpsAgent = httpsAgent;
       }
+      if (proxyConfig) {
+        attachHiddenConfigValue(config, '__polymarketProxy', proxyConfig);
+      }
     }
     return config;
   });
+
+  return key;
+};
+
+const ensureAxiosProxyFailureInterceptor = (axiosInstance, host, currentKey) => {
+  if (!axiosInstance || !axiosInstance.interceptors?.response || !host) {
+    return currentKey;
+  }
+  const key = `${host}|polymarket-proxy-failure`;
+  if (currentKey === key) {
+    return currentKey;
+  }
+
+  axiosInstance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      try {
+        const url = String(error?.config?.url || '');
+        if (url.startsWith(host)) {
+          const status = Number(error?.response?.status);
+          if (status === 403 && looksLikeCloudflareBlockPage(error?.response?.data)) {
+            const proxyConfig = error?.config?.__polymarketProxy;
+            if (proxyConfig) {
+              notePolymarketProxyFailure(proxyConfig, { reason: 'cloudflare_403' });
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+      return Promise.reject(error);
+    }
+  );
 
   return key;
 };
@@ -264,6 +342,21 @@ const ensureClobProxyInterceptor = async (host) => {
       host,
       proxyProvider,
       clobProxyInterceptorKeyEsm
+    );
+  }
+};
+
+const ensureClobProxyFailureInterceptor = async (host) => {
+  if (!host) {
+    return;
+  }
+  clobProxyFailureInterceptorKeyCjs = ensureAxiosProxyFailureInterceptor(Axios, host, clobProxyFailureInterceptorKeyCjs);
+  const axiosEsm = await getAxiosEsm();
+  if (axiosEsm) {
+    clobProxyFailureInterceptorKeyEsm = ensureAxiosProxyFailureInterceptor(
+      axiosEsm,
+      host,
+      clobProxyFailureInterceptorKeyEsm
     );
   }
 };
@@ -482,6 +575,7 @@ const getPolymarketClobClient = async (options = {}) => {
   const env = getPolymarketLiveEnv();
   ensureClobUserAgentInterceptor(env.host);
   ensureClobProxyInterceptor(env.host);
+  ensureClobProxyFailureInterceptor(env.host);
   if (!env.creds.apiKey || !env.creds.secret || !env.creds.passphrase) {
     throw new Error('Missing POLYMARKET_* CLOB credentials for live trading.');
   }

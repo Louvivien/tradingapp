@@ -13,7 +13,7 @@ const {
   getPolymarketOnchainUsdcBalance,
   getPolymarketClobBalanceAllowance,
 } = require('./polymarketExecutionService');
-const { getNextPolymarketProxyConfig, getPolymarketHttpsAgent } = require('./polymarketProxyPoolService');
+const { getNextPolymarketProxyConfig, getPolymarketHttpsAgent, notePolymarketProxyFailure } = require('./polymarketProxyPoolService');
 
 const CLOB_HOST = String(process.env.POLYMARKET_CLOB_HOST || 'https://clob.polymarket.com').replace(/\/+$/, '');
 const DATA_API_HOST = String(process.env.POLYMARKET_DATA_API_HOST || 'https://data-api.polymarket.com').replace(
@@ -364,6 +364,27 @@ const isRetryablePolymarketProxyError = (error) => {
   return true;
 };
 
+const extractCloudflareHtmlText = (payload) => {
+  if (!payload) return '';
+  if (typeof payload === 'string') return payload;
+  if (typeof payload?.error === 'string') return payload.error;
+  if (typeof payload?.message === 'string') return payload.message;
+  return '';
+};
+
+const looksLikeCloudflareBlockPage = (payload) => {
+  const body = extractCloudflareHtmlText(payload);
+  if (!body) return false;
+  const lower = body.toLowerCase();
+  if (!lower.includes('cloudflare')) return false;
+  return (
+    lower.includes('ray id') ||
+    lower.includes('cf-error-details') ||
+    lower.includes('attention required') ||
+    lower.includes('sorry, you have been blocked')
+  );
+};
+
 const polymarketAxiosGet = async (url, config = {}) => {
   const attempts = POLYMARKET_PROXY_REQUEST_ATTEMPTS;
   let lastError = null;
@@ -385,6 +406,16 @@ const polymarketAxiosGet = async (url, config = {}) => {
     } catch (error) {
       lastError = error;
       attemptedDirect = attemptedDirect || !usingProxy;
+      if (usingProxy) {
+        try {
+          const status = Number(error?.response?.status);
+          if (status === 403 && looksLikeCloudflareBlockPage(error?.response?.data)) {
+            notePolymarketProxyFailure(proxy, { reason: 'cloudflare_403' });
+          }
+        } catch {
+          // ignore
+        }
+      }
       if (attempt >= attempts || !isRetryablePolymarketProxyError(error)) {
         throw error;
       }

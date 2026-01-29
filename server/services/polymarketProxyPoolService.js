@@ -31,6 +31,7 @@ const DEFAULT_PROXY_LIST_URL =
   'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/refs/heads/master/http.txt';
 const DEFAULT_TEST_URL = 'https://www.cloudflare.com/cdn-cgi/trace';
 const DEFAULT_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_FAILURE_COOLDOWN_MS = 60 * 60 * 1000;
 
 const DEFAULT_DENYLIST = new Set([
   'AU',
@@ -286,6 +287,11 @@ const state = {
       max: 7 * 24 * 60 * 60 * 1000,
       fallback: DEFAULT_REFRESH_INTERVAL_MS,
     }),
+    failureCooldownMs: clampInt(process.env.POLYMARKET_PROXY_FAILURE_COOLDOWN_MS, {
+      min: 0,
+      max: 7 * 24 * 60 * 60 * 1000,
+      fallback: DEFAULT_FAILURE_COOLDOWN_MS,
+    }),
     fetchTimeoutMs: clampInt(process.env.POLYMARKET_PROXY_LIST_FETCH_TIMEOUT_MS, {
       min: 1000,
       max: 120_000,
@@ -432,6 +438,76 @@ const pickFromPool = (poolState, pool) => {
   const idx = poolState.cursor % pool.length;
   poolState.cursor = (poolState.cursor + 1) % pool.length;
   return pool[idx];
+};
+
+const proxyFailureCooldownUntilMs = new Map();
+
+const getProxyFailureRemainingMs = (proxy) => {
+  const id = proxyId(proxy);
+  if (!id) return 0;
+  const until = Number(proxyFailureCooldownUntilMs.get(id) || 0);
+  const now = Date.now();
+  if (!until || until <= now) {
+    proxyFailureCooldownUntilMs.delete(id);
+    return 0;
+  }
+  return until - now;
+};
+
+const countActiveProxyCooldowns = () => {
+  const now = Date.now();
+  let active = 0;
+  for (const [id, until] of proxyFailureCooldownUntilMs.entries()) {
+    if (!until || until <= now) {
+      proxyFailureCooldownUntilMs.delete(id);
+      continue;
+    }
+    active += 1;
+  }
+  return active;
+};
+
+const notePolymarketProxyFailure = (proxy, { reason = 'failure', cooldownMs } = {}) => {
+  const id = proxyId(proxy);
+  if (!id) {
+    return { ok: false, reason: 'missing_proxy' };
+  }
+  const configuredCooldownMs = state.dynamic.failureCooldownMs;
+  const overrideCooldownMs = toFiniteNumber(cooldownMs, null);
+  const finalCooldownMs = Number.isFinite(overrideCooldownMs) ? Math.max(0, Math.floor(overrideCooldownMs)) : configuredCooldownMs;
+  if (!finalCooldownMs) {
+    proxyFailureCooldownUntilMs.delete(id);
+    return { ok: true, skipped: true, reason, cooldownMs: 0 };
+  }
+  const until = Date.now() + finalCooldownMs;
+  proxyFailureCooldownUntilMs.set(id, until);
+  return { ok: true, skipped: false, reason, cooldownMs: finalCooldownMs, disabledUntilMs: until, disabledUntil: new Date(until).toISOString() };
+};
+
+const pickFromPoolSkippingCooldown = (poolState, pool) => {
+  if (!pool.length) return null;
+  for (let attempt = 0; attempt < pool.length; attempt += 1) {
+    const candidate = pickFromPool(poolState, pool);
+    if (!candidate) return null;
+    if (!getProxyFailureRemainingMs(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
+};
+
+const peekFromPoolSkippingCooldown = (poolState, pool) => {
+  if (!pool.length) return null;
+  const start = poolState.cursor % pool.length;
+  for (let offset = 0; offset < pool.length; offset += 1) {
+    const idx = (start + offset) % pool.length;
+    const candidate = pool[idx];
+    if (!candidate) continue;
+    if (!getProxyFailureRemainingMs(candidate)) {
+      return candidate;
+    }
+  }
+  return null;
 };
 
 const shouldAllowCountry = (countryCode) => {
@@ -695,18 +771,19 @@ const maybeRefreshInBackground = () => {
 const getNextPolymarketProxyConfig = () => {
   maybeRefreshInBackground();
   if (state.dynamic.pool.length) {
-    return pickFromPool(state.dynamic, state.dynamic.pool);
+    const picked = pickFromPoolSkippingCooldown(state.dynamic, state.dynamic.pool);
+    if (picked) return picked;
   }
   const envPool = getEnvProxyPool();
-  return pickFromPool(state.env, envPool);
+  return pickFromPoolSkippingCooldown(state.env, envPool);
 };
 
 const peekPolymarketProxyConfig = () => {
   if (state.dynamic.pool.length) {
-    return state.dynamic.pool[state.dynamic.cursor % state.dynamic.pool.length] || null;
+    return peekFromPoolSkippingCooldown(state.dynamic, state.dynamic.pool);
   }
   const envPool = getEnvProxyPool();
-  return envPool[state.env.cursor % envPool.length] || null;
+  return peekFromPoolSkippingCooldown(state.env, envPool);
 };
 
 const getPolymarketProxyPoolKey = () => {
@@ -723,6 +800,7 @@ const getPolymarketProxyDebugInfo = () => {
   const current = peekPolymarketProxyConfig();
   const usingDynamic = state.dynamic.pool.length > 0;
   const authPresent = Boolean(current?.auth && (current.auth.username || current.auth.password));
+  const cooldownRemainingMs = current ? getProxyFailureRemainingMs(current) : 0;
   return {
     source: usingDynamic ? 'dynamic' : getEnvProxyPool().length ? 'env' : 'none',
     configured: Boolean(current),
@@ -736,6 +814,10 @@ const getPolymarketProxyDebugInfo = () => {
       urls: Array.isArray(state.dynamic.urls) ? state.dynamic.urls : [],
       testUrl: state.dynamic.testUrl,
       refreshIntervalMs: state.dynamic.refreshIntervalMs,
+      failureCooldownMs: state.dynamic.failureCooldownMs,
+      cooldownActive: cooldownRemainingMs > 0,
+      cooldownRemainingMs,
+      cooldownPoolSize: countActiveProxyCooldowns(),
       lastRefreshStartedAt: state.dynamic.lastRefreshStartedAt || 0,
       lastRefreshCompletedAt: state.dynamic.lastRefreshCompletedAt || 0,
       lastError: state.dynamic.lastError || null,
@@ -747,6 +829,7 @@ const getPolymarketProxyDebugInfo = () => {
 
 module.exports = {
   getPolymarketHttpsAgent,
+  notePolymarketProxyFailure,
   refreshPolymarketProxyPool,
   getNextPolymarketProxyConfig,
   peekPolymarketProxyConfig,
