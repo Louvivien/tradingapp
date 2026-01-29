@@ -13,7 +13,7 @@ const {
   getPolymarketOnchainUsdcBalance,
   getPolymarketClobBalanceAllowance,
 } = require('./polymarketExecutionService');
-const { getNextPolymarketProxyConfig } = require('./polymarketProxyPoolService');
+const { getNextPolymarketProxyConfig, getPolymarketHttpsAgent } = require('./polymarketProxyPoolService');
 
 const CLOB_HOST = String(process.env.POLYMARKET_CLOB_HOST || 'https://clob.polymarket.com').replace(/\/+$/, '');
 const DATA_API_HOST = String(process.env.POLYMARKET_DATA_API_HOST || 'https://data-api.polymarket.com').replace(
@@ -314,7 +314,6 @@ const snapshotPolymarket = (poly) => {
 
 const axiosGet = async (url, config = {}) => {
   const timeout = config.timeout ? config.timeout : POLYMARKET_HTTP_TIMEOUT_MS;
-  const proxy = Object.prototype.hasOwnProperty.call(config, 'proxy') ? config.proxy || false : false;
   const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
   const timer = controller
     ? setTimeout(() => {
@@ -330,7 +329,7 @@ const axiosGet = async (url, config = {}) => {
     return await Axios.get(url, {
       ...config,
       timeout,
-      proxy,
+      proxy: false,
       ...(controller ? { signal: controller.signal } : {}),
     });
   } finally {
@@ -372,7 +371,8 @@ const polymarketAxiosGet = async (url, config = {}) => {
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
     const proxy = getClobProxyConfig();
-    const usingProxy = Boolean(proxy);
+    const httpsAgent = proxy ? getPolymarketHttpsAgent(proxy) : null;
+    const usingProxy = Boolean(proxy && httpsAgent);
     if (!usingProxy && attemptedDirect) {
       break;
     }
@@ -380,7 +380,7 @@ const polymarketAxiosGet = async (url, config = {}) => {
     try {
       return await axiosGet(url, {
         ...config,
-        proxy: usingProxy ? proxy : false,
+        ...(usingProxy ? { httpsAgent } : {}),
       });
     } catch (error) {
       lastError = error;

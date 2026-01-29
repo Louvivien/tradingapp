@@ -3,7 +3,7 @@ const fs = require('fs');
 const Axios = require('axios');
 const CryptoJS = require('crypto-js');
 const { Wallet, providers, Contract, utils } = require('ethers');
-const { getNextPolymarketProxyConfig, getPolymarketProxyDebugInfo } = require('./polymarketProxyPoolService');
+const { getNextPolymarketProxyConfig, getPolymarketProxyDebugInfo, getPolymarketHttpsAgent } = require('./polymarketProxyPoolService');
 
 const normalizeEnvValue = (value) => String(value || '').trim();
 
@@ -214,7 +214,12 @@ const ensureAxiosProxyInterceptor = (axiosInstance, host, proxyProvider, current
       return config;
     }
     if (String(config.url).startsWith(host)) {
-      config.proxy = proxyProvider.getProxy() || false;
+      const proxyConfig = proxyProvider.getProxy();
+      const httpsAgent = proxyConfig ? getPolymarketHttpsAgent(proxyConfig) : null;
+      config.proxy = false;
+      if (httpsAgent) {
+        config.httpsAgent = httpsAgent;
+      }
     }
     return config;
   });

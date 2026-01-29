@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const Axios = require('axios');
+const { HttpsProxyAgent } = require('https-proxy-agent');
 
 const normalizeEnvValue = (value) => String(value || '').trim();
 
@@ -118,7 +119,7 @@ const parseProxyUrl = (value) => {
             password: decodeURIComponent(parsed.password || ''),
           }
         : undefined;
-    return { host: parsed.hostname, port, ...(auth ? { auth } : {}) };
+    return { protocol: parsed.protocol || 'http:', host: parsed.hostname, port, ...(auth ? { auth } : {}) };
   } catch {
     return null;
   }
@@ -140,11 +141,47 @@ const getEnvProxyList = () => {
 
 const proxyId = (proxy) => {
   if (!proxy) return '';
-  const base = `${proxy.host}:${proxy.port}`;
+  const proto = proxy.protocol ? String(proxy.protocol).replace(/:$/, '') : 'http';
+  const base = `${proto}://${proxy.host}:${proxy.port}`;
   if (!proxy.auth || (!proxy.auth.username && !proxy.auth.password)) {
     return base;
   }
   return `${proxy.auth.username || ''}:${proxy.auth.password || ''}@${base}`;
+};
+
+const proxyToUrl = (proxy) => {
+  if (!proxy?.host || !proxy?.port) return null;
+  const protocol = proxy.protocol ? String(proxy.protocol).trim() : 'http:';
+  const normalizedProtocol = protocol.endsWith(':') ? protocol : `${protocol}:`;
+  const url = new URL(`${normalizedProtocol}//${proxy.host}:${proxy.port}`);
+  if (proxy.auth && (proxy.auth.username || proxy.auth.password)) {
+    url.username = encodeURIComponent(proxy.auth.username || '');
+    url.password = encodeURIComponent(proxy.auth.password || '');
+  }
+  return url.toString();
+};
+
+const createHttpsProxyAgent = (proxy) => {
+  const url = proxyToUrl(proxy);
+  if (!url) return null;
+  return new HttpsProxyAgent(url);
+};
+
+const httpsAgentCache = new Map();
+
+const getPolymarketHttpsAgent = (proxy) => {
+  const id = proxyId(proxy);
+  if (!id) return null;
+  const cached = httpsAgentCache.get(id);
+  if (cached) return cached;
+  const agent = createHttpsProxyAgent(proxy);
+  if (!agent) return null;
+  httpsAgentCache.set(id, agent);
+  return agent;
+};
+
+const clearPolymarketHttpsAgentCache = () => {
+  httpsAgentCache.clear();
 };
 
 const shuffleInPlace = (items) => {
@@ -479,9 +516,14 @@ const fetchProxyCandidates = async () => {
 
 const testProxy = async (proxyConfig) => {
   const startedAt = Date.now();
+  const httpsAgent = createHttpsProxyAgent(proxyConfig);
+  if (!httpsAgent) {
+    throw new Error('Proxy config is missing host/port.');
+  }
   const response = await Axios.get(state.dynamic.testUrl, {
     timeout: state.dynamic.testTimeoutMs,
-    proxy: proxyConfig,
+    proxy: false,
+    httpsAgent,
     responseType: 'text',
     transformResponse: (data) => data,
     headers: { 'User-Agent': 'tradingapp/1.0' },
@@ -599,6 +641,7 @@ const refreshPolymarketProxyPool = async ({ force = false, reason = 'scheduled' 
     state.dynamic.pool = accepted;
     state.dynamic.cursor = 0;
     state.dynamic.lastRefreshCompletedAt = Date.now();
+    clearPolymarketHttpsAgentCache();
     persistCacheToDisk();
 
     return {
@@ -703,6 +746,7 @@ const getPolymarketProxyDebugInfo = () => {
 };
 
 module.exports = {
+  getPolymarketHttpsAgent,
   refreshPolymarketProxyPool,
   getNextPolymarketProxyConfig,
   peekPolymarketProxyConfig,

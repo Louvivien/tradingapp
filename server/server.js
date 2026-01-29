@@ -90,7 +90,7 @@ const {
   getPolymarketExecutionMode,
   getPolymarketExecutionDebugInfo,
 } = require('./services/polymarketExecutionService');
-const { getNextPolymarketProxyConfig } = require('./services/polymarketProxyPoolService');
+const { getNextPolymarketProxyConfig, getPolymarketHttpsAgent } = require('./services/polymarketProxyPoolService');
 
 mongoose.set('bufferCommands', false);
 
@@ -378,12 +378,16 @@ app.get("/api/health/polymarket", async (req, res) => {
   };
 
   const httpGet = async (url, config = {}) => {
-    const shouldProxy = clobProxyConfig && String(url || "").startsWith(clobHost);
+    const shouldProxy =
+      Boolean(clobProxyConfig) &&
+      (String(url || "").startsWith(clobHost) || String(url || "").startsWith(dataApiHost));
+    const httpsAgent = shouldProxy ? getPolymarketHttpsAgent(clobProxyConfig) : null;
     return await Axios.get(url, {
-      timeout: httpTimeoutMs,
-      proxy: shouldProxy ? clobProxyConfig : false,
-      validateStatus: () => true,
       ...config,
+      timeout: httpTimeoutMs,
+      proxy: false,
+      ...(httpsAgent ? { httpsAgent } : {}),
+      validateStatus: () => true,
     });
   };
 
