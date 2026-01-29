@@ -78,6 +78,23 @@ const parseCountryListEnv = (value) => {
     .filter(Boolean);
 };
 
+const parseUrlListEnv = (value) => {
+  const raw = normalizeEnvValue(value);
+  if (!raw) return [];
+  const seen = new Set();
+  const urls = [];
+  raw
+    .split(/[\s,]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean)
+    .forEach((entry) => {
+      if (seen.has(entry)) return;
+      seen.add(entry);
+      urls.push(entry);
+    });
+  return urls;
+};
+
 const normalizeProxyUrl = (value) => {
   const raw = String(value || '').trim();
   if (!raw) return '';
@@ -201,6 +218,19 @@ const resolveCachePath = () => {
   return path.join(__dirname, '..', 'data', 'polymarketProxyPool.json');
 };
 
+const resolveSourceUrls = () => {
+  const configuredList = parseUrlListEnv(process.env.POLYMARKET_PROXY_LIST_URLS);
+  const fallbackSingle = normalizeEnvValue(process.env.POLYMARKET_PROXY_LIST_URL);
+  const merged = [...configuredList];
+  if (fallbackSingle && !merged.includes(fallbackSingle)) {
+    merged.push(fallbackSingle);
+  }
+  if (!merged.length) {
+    return [DEFAULT_PROXY_LIST_URL];
+  }
+  return merged;
+};
+
 const state = {
   env: {
     key: null,
@@ -212,7 +242,7 @@ const state = {
       process.env.POLYMARKET_PROXY_LIST_ENABLED,
       process.env.NODE_ENV === 'test' ? false : true
     ),
-    url: normalizeEnvValue(process.env.POLYMARKET_PROXY_LIST_URL) || DEFAULT_PROXY_LIST_URL,
+    urls: resolveSourceUrls(),
     testUrl: normalizeEnvValue(process.env.POLYMARKET_PROXY_TEST_URL) || DEFAULT_TEST_URL,
     refreshIntervalMs: clampInt(process.env.POLYMARKET_PROXY_REFRESH_INTERVAL_MS, {
       min: 60_000,
@@ -322,9 +352,10 @@ const persistCacheToDisk = () => {
     // ignore
   }
   const payload = {
-    version: 1,
+    version: 2,
     refreshedAt: new Date(state.dynamic.lastRefreshCompletedAt || Date.now()).toISOString(),
-    sourceUrl: state.dynamic.url,
+    sourceUrl: state.dynamic.urls?.[0] || null,
+    sourceUrls: Array.isArray(state.dynamic.urls) ? state.dynamic.urls : [],
     testUrl: state.dynamic.testUrl,
     denylist: Array.from(state.dynamic.denylist || []),
     allowlist: state.dynamic.allowlist ? Array.from(state.dynamic.allowlist) : null,
@@ -375,8 +406,8 @@ const shouldAllowCountry = (countryCode) => {
   return !state.dynamic.denylist.has(loc);
 };
 
-const fetchProxyListText = async () => {
-  const response = await Axios.get(state.dynamic.url, {
+const fetchProxyListText = async (url) => {
+  const response = await Axios.get(String(url || ''), {
     timeout: state.dynamic.fetchTimeoutMs,
     proxy: false,
     responseType: 'text',
@@ -390,7 +421,7 @@ const fetchProxyListText = async () => {
   return typeof response.data === 'string' ? response.data : String(response.data || '');
 };
 
-const parseProxyListText = (contents) => {
+const parseProxyListText = (contents, { limit } = {}) => {
   const lines = String(contents || '')
     .split(/\r?\n/)
     .map((line) => line.trim())
@@ -405,8 +436,44 @@ const parseProxyListText = (contents) => {
     if (!id || seen.has(id)) continue;
     seen.add(id);
     candidates.push(parsed);
-    if (candidates.length >= state.dynamic.maxCandidates) break;
+    if (limit && candidates.length >= limit) break;
   }
+  return candidates;
+};
+
+const fetchProxyCandidates = async () => {
+  const urls = Array.isArray(state.dynamic.urls) ? state.dynamic.urls : [];
+  if (!urls.length) {
+    return [];
+  }
+  const results = await Promise.allSettled(urls.map((url) => fetchProxyListText(url)));
+  const seen = new Set();
+  const candidates = [];
+  let anySuccess = false;
+
+  results.forEach((result) => {
+    if (result.status !== 'fulfilled') {
+      return;
+    }
+    anySuccess = true;
+    const parsed = parseProxyListText(result.value, { limit: state.dynamic.maxCandidates });
+    parsed.forEach((candidate) => {
+      if (candidates.length >= state.dynamic.maxCandidates) return;
+      const id = proxyId(candidate);
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      candidates.push(candidate);
+    });
+  });
+
+  if (!anySuccess) {
+    const errors = results
+      .filter((result) => result.status === 'rejected')
+      .map((result) => formatAxiosError(result.reason))
+      .filter(Boolean);
+    throw new Error(errors.length ? `Proxy list fetch failed: ${errors[0]}` : 'Proxy list fetch failed.');
+  }
+
   return candidates;
 };
 
@@ -481,8 +548,7 @@ const refreshPolymarketProxyPool = async ({ force = false, reason = 'scheduled' 
 
     let candidates;
     try {
-      const listText = await fetchProxyListText();
-      candidates = parseProxyListText(listText);
+      candidates = await fetchProxyCandidates();
     } catch (error) {
       state.dynamic.lastError = formatAxiosError(error);
       throw error;
@@ -623,7 +689,8 @@ const getPolymarketProxyDebugInfo = () => {
     authPresent,
     dynamic: {
       enabled: state.dynamic.enabled,
-      url: state.dynamic.url,
+      url: Array.isArray(state.dynamic.urls) ? state.dynamic.urls[0] || null : null,
+      urls: Array.isArray(state.dynamic.urls) ? state.dynamic.urls : [],
       testUrl: state.dynamic.testUrl,
       refreshIntervalMs: state.dynamic.refreshIntervalMs,
       lastRefreshStartedAt: state.dynamic.lastRefreshStartedAt || 0,
