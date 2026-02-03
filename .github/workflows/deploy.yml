@@ -14,6 +14,28 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
+    - name: Setup Node.js (client build)
+      uses: actions/setup-node@v3
+      with:
+        node-version: '22'
+
+    - name: Build React client
+      run: |
+        cd client
+        npm ci
+        npm run build
+        tar -czf ../client-build.tgz build
+
+    - name: Copy build to droplet
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.DO_HOST }}
+        username: ${{ secrets.DO_USERNAME }}
+        key: ${{ secrets.DO_SSH_KEY }}
+        port: 22
+        source: client-build.tgz
+        target: /tmp
+
     - name: Deploy to DigitalOcean
       uses: appleboy/ssh-action@master
       with:
@@ -33,11 +55,18 @@ jobs:
           echo "📥 Pulling latest code..."
           git pull origin master
 
+
           # Install server dependencies
           echo "📦 Installing server dependencies..."
           cd server
           npm install --omit=dev
 
+          # Replace client build with the artifact from GitHub Actions
+          echo "📦 Updating React build..."
+          cd /opt/tradingapp/client
+          rm -rf build
+          tar -xzf /tmp/client-build.tgz -C .
+          cd ../server
           # Restart server with PM2 (starts it if missing)
           echo "🔄 Restarting application..."
           command -v pm2 >/dev/null 2>&1 || npm install -g pm2

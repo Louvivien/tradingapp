@@ -201,3 +201,6 @@ curl -sS http://YOUR_DOMAIN_OR_IP/api/health | head
 Use GitHub Actions + SSH (already in this repo):
 - Workflow: `tradingapp/.github/workflows/deploy.yml`
 - Setup steps: `tradingapp/GITHUB_ACTIONS_SETUP.md`
+
+### Key change for option 1 (build on GitHub)
+The workflow now builds the React client inside GitHub Actions (node 22), packages it as `client-build.tgz`, and copies that tarball to `/tmp` on the droplet before the SSH step runs. The script on the droplet simply extracts the build into `/opt/tradingapp/client` and restarts PM2—no need to run `npm install` or `npm run build` there. This avoids the 1 GB RAM limit of the droplet while still making the latest UI available immediately after every push.

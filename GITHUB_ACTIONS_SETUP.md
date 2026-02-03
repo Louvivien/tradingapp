@@ -102,16 +102,24 @@ You push to GitHub
     ↓
 GitHub Actions triggered
     ↓
+Build React client on the runner (`npm ci && npm run build`)
+    ↓
+Package build (`client-build.tgz`) and copy it to the droplet
+    ↓
 SSH into DigitalOcean droplet
     ↓
-Pull latest code (git pull)
+Pull latest code (`git pull`)
     ↓
-Install dependencies (npm install)
+Install server deps (`npm install --omit=dev`)
+    ↓
+Replace `/opt/tradingapp/client/build` with the uploaded artifact
     ↓
 Restart server (pm2 startOrRestart)
     ↓
 ✅ Deployment complete!
 ```
+
+The workflow now builds the React client inside GitHub Actions, uploads the resulting `client-build.tgz` to `/tmp`, installs the server dependencies on the droplet, extracts the build into `/opt/tradingapp/client`, and restarts PM2 so both API and UI are refreshed after every push.
 
 ## Testing Your Setup
 
