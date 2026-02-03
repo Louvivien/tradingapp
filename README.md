@@ -124,10 +124,6 @@ Server env vars (in `tradingapp/server/config/.env`):
   - Safety: live execution runs only for incremental syncs by default; to allow a one-time live rebalance after a backfill (to enter the copied positions), set `POLYMARKET_BACKFILL_LIVE_REBALANCE=true` (requires “Size trades to my budget”).
 - Data API options (optional): `POLYMARKET_DATA_API_HOST`, `POLYMARKET_DATA_API_TAKER_ONLY`, `POLYMARKET_DATA_API_USER_AGENT`
 - CLOB HTTP user agent (optional, helps with Cloudflare 403s): `POLYMARKET_CLOB_USER_AGENT` (default: `tradingapp/1.0`)
-- CLOB HTTP proxy (optional, supports comma-separated lists; round-robin per request): `POLYMARKET_CLOB_PROXY` (fallbacks: `POLYMARKET_HTTP_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`)
-- Proxy pool (optional, untrusted): `POLYMARKET_PROXY_LIST_URLS` (comma-separated proxy list URLs), `POLYMARKET_PROXY_LIST_ENABLED=true|false`
-  - Example sources: `https://raw.githubusercontent.com/TheSpeedX/PROXY-List/refs/heads/master/http.txt`, `https://raw.githubusercontent.com/proxifly/free-proxy-list/refs/heads/main/proxies/protocols/http/data.txt`, `https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/http.txt`, `https://raw.githubusercontent.com/jetkai/proxy-list/refs/heads/main/online-proxies/txt/proxies-https.txt`
-  - Refresh/test locally: `node scripts/polymarket_proxy_pool_refresh.js --urls "<url1>,<url2>,..."`
 - CLOB auth retry cooldown in `auto` mode (optional, default 1h): `POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS`
 
 Magic/email wallets (separate signer + funded profile):
