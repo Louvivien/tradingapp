@@ -287,9 +287,25 @@ const ensureAxiosProxyFailureInterceptor = (axiosInstance, host, currentKey) => 
       try {
         const url = String(error?.config?.url || '');
         if (url.startsWith(host)) {
+          const proxyConfig = error?.config?.__polymarketProxy;
           const status = Number(error?.response?.status);
+          const code = String(error?.code || '').toUpperCase();
+
+          if (
+            proxyConfig &&
+            (code === 'ECONNRESET' ||
+              code === 'ECONNREFUSED' ||
+              code === 'ETIMEDOUT' ||
+              code === 'EHOSTUNREACH' ||
+              code === 'ENETUNREACH' ||
+              code === 'EAI_AGAIN')
+          ) {
+            notePolymarketProxyFailure(proxyConfig, { reason: `network_${code.toLowerCase()}` });
+          } else if (proxyConfig && status === 407) {
+            notePolymarketProxyFailure(proxyConfig, { reason: 'proxy_auth_required' });
+          }
+
           if (status === 403 && looksLikeCloudflareBlockPage(error?.response?.data)) {
-            const proxyConfig = error?.config?.__polymarketProxy;
             if (proxyConfig) {
               notePolymarketProxyFailure(proxyConfig, { reason: 'cloudflare_403' });
             }

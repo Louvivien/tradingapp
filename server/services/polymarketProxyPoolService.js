@@ -30,6 +30,7 @@ const clampInt = (value, { min, max, fallback }) => {
 const DEFAULT_PROXY_LIST_URL =
   'https://raw.githubusercontent.com/TheSpeedX/PROXY-List/refs/heads/master/http.txt';
 const DEFAULT_TEST_URL = 'https://www.cloudflare.com/cdn-cgi/trace';
+const DEFAULT_TARGET_TEST_URL = 'https://clob.polymarket.com/time';
 const DEFAULT_REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_FAILURE_COOLDOWN_MS = 60 * 60 * 1000;
 
@@ -214,12 +215,47 @@ const parseCloudflareTrace = (rawBody) => {
   };
 };
 
+const extractCloudflareHtmlText = (payload) => {
+  if (!payload) return '';
+  if (typeof payload === 'string') return payload;
+  if (typeof payload?.error === 'string') return payload.error;
+  if (typeof payload?.message === 'string') return payload.message;
+  return '';
+};
+
+const looksLikeCloudflareBlockPage = (payload) => {
+  const body = extractCloudflareHtmlText(payload);
+  if (!body) return false;
+  const lower = body.toLowerCase();
+  if (!lower.includes('cloudflare')) return false;
+  return (
+    lower.includes('ray id') ||
+    lower.includes('cf-error-details') ||
+    lower.includes('attention required') ||
+    lower.includes('sorry, you have been blocked')
+  );
+};
+
 const formatAxiosError = (error) => {
   const status = Number(error?.response?.status);
   if (Number.isFinite(status) && status > 0) {
     return `Request failed with status code ${status}`;
   }
   return String(error?.message || 'Request failed');
+};
+
+const axiosGetWithHardTimeout = async (url, config, timeoutMs) => {
+  const ms = toFiniteNumber(timeoutMs, null);
+  if (!Number.isFinite(ms) || ms <= 0) {
+    return await Axios.get(url, config);
+  }
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await Axios.get(url, { ...config, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
 };
 
 const isRetryableProxyTestError = (error) => {
@@ -282,6 +318,8 @@ const state = {
     ),
     urls: resolveSourceUrls(),
     testUrl: normalizeEnvValue(process.env.POLYMARKET_PROXY_TEST_URL) || DEFAULT_TEST_URL,
+    targetTestUrl: normalizeEnvValue(process.env.POLYMARKET_PROXY_TARGET_TEST_URL) || DEFAULT_TARGET_TEST_URL,
+    targetTestEnabled: parseBooleanEnv(process.env.POLYMARKET_PROXY_TARGET_TEST_ENABLED, true),
     refreshIntervalMs: clampInt(process.env.POLYMARKET_PROXY_REFRESH_INTERVAL_MS, {
       min: 60_000,
       max: 7 * 24 * 60 * 60 * 1000,
@@ -296,6 +334,11 @@ const state = {
       min: 1000,
       max: 120_000,
       fallback: 15_000,
+    }),
+    listMaxBytes: clampInt(process.env.POLYMARKET_PROXY_LIST_MAX_BYTES, {
+      min: 10_000,
+      max: 10_000_000,
+      fallback: 1_000_000,
     }),
     testTimeoutMs: clampInt(process.env.POLYMARKET_PROXY_TEST_TIMEOUT_MS, {
       min: 1000,
@@ -520,18 +563,64 @@ const shouldAllowCountry = (countryCode) => {
 };
 
 const fetchProxyListText = async (url) => {
-  const response = await Axios.get(String(url || ''), {
+  const response = await axiosGetWithHardTimeout(String(url || ''), {
     timeout: state.dynamic.fetchTimeoutMs,
     proxy: false,
-    responseType: 'text',
-    transformResponse: (data) => data,
+    responseType: 'stream',
     validateStatus: () => true,
+    headers: state.dynamic.listMaxBytes ? { Range: `bytes=0-${Math.max(0, state.dynamic.listMaxBytes - 1)}` } : undefined,
+  }, state.dynamic.fetchTimeoutMs);
+
+  const chunks = [];
+  let collected = 0;
+  const maxBytes = Number.isFinite(state.dynamic.listMaxBytes) && state.dynamic.listMaxBytes > 0 ? state.dynamic.listMaxBytes : null;
+  const stream = response?.data;
+
+  await new Promise((resolve, reject) => {
+    if (!stream || typeof stream.on !== 'function') {
+      resolve();
+      return;
+    }
+    let done = false;
+    const finish = (err) => {
+      if (done) return;
+      done = true;
+      if (err) reject(err);
+      else resolve();
+    };
+
+    stream.on('data', (chunk) => {
+      if (done) return;
+      const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      if (maxBytes !== null && collected + buf.length > maxBytes) {
+        const remaining = maxBytes - collected;
+        if (remaining > 0) {
+          chunks.push(buf.slice(0, remaining));
+          collected += remaining;
+        }
+        finish();
+        try {
+          stream.destroy();
+        } catch {
+          // ignore
+        }
+        return;
+      }
+      chunks.push(buf);
+      collected += buf.length;
+    });
+
+    stream.on('end', () => finish());
+    stream.on('error', (err) => finish(err));
+    stream.on('close', () => finish());
   });
 
   if (response.status < 200 || response.status >= 300) {
     throw new Error(`Proxy list fetch failed (status ${response.status}).`);
   }
-  return typeof response.data === 'string' ? response.data : String(response.data || '');
+
+  const payload = chunks.length ? Buffer.concat(chunks).toString('utf8') : '';
+  return payload;
 };
 
 const parseProxyListText = (contents, { limit } = {}) => {
@@ -596,7 +685,7 @@ const testProxy = async (proxyConfig) => {
   if (!httpsAgent) {
     throw new Error('Proxy config is missing host/port.');
   }
-  const response = await Axios.get(state.dynamic.testUrl, {
+  const response = await axiosGetWithHardTimeout(state.dynamic.testUrl, {
     timeout: state.dynamic.testTimeoutMs,
     proxy: false,
     httpsAgent,
@@ -604,7 +693,7 @@ const testProxy = async (proxyConfig) => {
     transformResponse: (data) => data,
     headers: { 'User-Agent': 'tradingapp/1.0' },
     validateStatus: () => true,
-  });
+  }, state.dynamic.testTimeoutMs);
 
   const latencyMs = Date.now() - startedAt;
   if (response.status < 200 || response.status >= 300) {
@@ -617,6 +706,48 @@ const testProxy = async (proxyConfig) => {
   if (!trace.loc) {
     throw new Error('Proxy test returned an unknown country code.');
   }
+
+  if (state.dynamic.targetTestEnabled) {
+    const geoToken = normalizeEnvValue(process.env.POLYMARKET_GEO_BLOCK_TOKEN || process.env.GEO_BLOCK_TOKEN) || null;
+    const targetUrlRaw = normalizeEnvValue(state.dynamic.targetTestUrl);
+    const targetUrl = (() => {
+      if (!targetUrlRaw) return null;
+      try {
+        const url = new URL(targetUrlRaw);
+        if (geoToken && !url.searchParams.has('geo_block_token')) {
+          url.searchParams.set('geo_block_token', geoToken);
+        }
+        return url.toString();
+      } catch {
+        return null;
+      }
+    })();
+
+    if (targetUrl) {
+      const targetRes = await axiosGetWithHardTimeout(targetUrl, {
+        timeout: state.dynamic.testTimeoutMs,
+        proxy: false,
+        httpsAgent,
+        responseType: 'text',
+        transformResponse: (data) => data,
+        headers: { 'User-Agent': 'tradingapp/1.0' },
+        validateStatus: () => true,
+      }, state.dynamic.testTimeoutMs);
+
+      if (looksLikeCloudflareBlockPage(targetRes.data) || targetRes.status === 403) {
+        const err = new Error(`Proxy target test blocked (status ${targetRes.status})`);
+        err.status = targetRes.status;
+        err.code = 'POLYMARKET_PROXY_TARGET_BLOCKED';
+        throw err;
+      }
+      if (targetRes.status < 200 || targetRes.status >= 300) {
+        const err = new Error(`Proxy target test returned status ${targetRes.status}`);
+        err.status = targetRes.status;
+        throw err;
+      }
+    }
+  }
+
   return {
     country: trace.loc,
     exitIp: trace.ip,
@@ -813,6 +944,8 @@ const getPolymarketProxyDebugInfo = () => {
       url: Array.isArray(state.dynamic.urls) ? state.dynamic.urls[0] || null : null,
       urls: Array.isArray(state.dynamic.urls) ? state.dynamic.urls : [],
       testUrl: state.dynamic.testUrl,
+      targetTestUrl: state.dynamic.targetTestUrl,
+      targetTestEnabled: state.dynamic.targetTestEnabled,
       refreshIntervalMs: state.dynamic.refreshIntervalMs,
       failureCooldownMs: state.dynamic.failureCooldownMs,
       cooldownActive: cooldownRemainingMs > 0,

@@ -88,6 +88,7 @@ server/config/.env
 # dotenv backups
 server/config/.env.bak*
 client/.env.bak*
+server/config/.env.backup*
 
 
 
@@ -124,3 +125,11 @@ dist
 .tern-port
 
 build
+
+# Generated proxy pool cache (do not commit)
+server/data/polymarketProxyPool.json
+
+# Local status/proof notes (often contain secrets)
+POLYMARKET_LIVE_TRADE_STATUS.md
+POLYMARKET_TRADE_PROOF.md
+WEBSHARE_SETUP_STATUS.md

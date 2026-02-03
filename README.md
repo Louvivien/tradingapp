@@ -125,6 +125,9 @@ Server env vars (in `tradingapp/server/config/.env`):
 - Data API options (optional): `POLYMARKET_DATA_API_HOST`, `POLYMARKET_DATA_API_TAKER_ONLY`, `POLYMARKET_DATA_API_USER_AGENT`
 - CLOB HTTP user agent (optional, helps with Cloudflare 403s): `POLYMARKET_CLOB_USER_AGENT` (default: `tradingapp/1.0`)
 - CLOB HTTP proxy (optional, supports comma-separated lists; round-robin per request): `POLYMARKET_CLOB_PROXY` (fallbacks: `POLYMARKET_HTTP_PROXY`, `HTTP_PROXY`, `HTTPS_PROXY`)
+- Proxy pool (optional, untrusted): `POLYMARKET_PROXY_LIST_URLS` (comma-separated proxy list URLs), `POLYMARKET_PROXY_LIST_ENABLED=true|false`
+  - Example sources: `https://raw.githubusercontent.com/TheSpeedX/PROXY-List/refs/heads/master/http.txt`, `https://raw.githubusercontent.com/proxifly/free-proxy-list/refs/heads/main/proxies/protocols/http/data.txt`, `https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/http.txt`, `https://raw.githubusercontent.com/jetkai/proxy-list/refs/heads/main/online-proxies/txt/proxies-https.txt`
+  - Refresh/test locally: `node scripts/polymarket_proxy_pool_refresh.js --urls "<url1>,<url2>,..."`
 - CLOB auth retry cooldown in `auto` mode (optional, default 1h): `POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS`
 
 Magic/email wallets (separate signer + funded profile):
@@ -136,6 +139,17 @@ Smoke test:
 ```sh
 cd tradingapp/server
 node scripts/polymarket_smoke_test.js 0xYourWalletAddress
+```
+
+Test trade (safe by default):
+```sh
+cd tradingapp/server
+
+# Dry-run (always): builds the order payload and runs geoblock + balance preflight
+node scripts/polymarket_test_trade.js --slug <market-slug> --outcome Yes --side buy --amount 1
+
+# Live submit: requires --confirm AND will refuse to submit if Polymarket geoblocks the current IP
+node scripts/polymarket_test_trade.js --slug <market-slug> --outcome Yes --side buy --amount 1 --confirm
 ```
 
 Debug endpoint (useful after deploying the backend):

@@ -781,16 +781,33 @@ const formatAxiosError = (error) => {
       return null;
     }
     if (typeof payload === 'string') {
-      return payload.trim() || null;
+      const trimmed = payload.trim();
+      if (!trimmed) return null;
+      const lower = trimmed.toLowerCase();
+      if (lower.includes('cloudflare') && (lower.includes('ray id') || lower.includes('sorry, you have been blocked') || lower.includes('attention required'))) {
+        return 'Cloudflare blocked request';
+      }
+      if (trimmed.length > 500) {
+        return `${trimmed.slice(0, 500)}…`;
+      }
+      return trimmed;
     }
     if (payload?.error) {
-      return String(payload.error).trim() || null;
+      const msg = String(payload.error).trim();
+      if (!msg) return null;
+      if (msg.length > 500) return `${msg.slice(0, 500)}…`;
+      return msg;
     }
     if (payload?.message) {
-      return String(payload.message).trim() || null;
+      const msg = String(payload.message).trim();
+      if (!msg) return null;
+      if (msg.length > 500) return `${msg.slice(0, 500)}…`;
+      return msg;
     }
     try {
-      return JSON.stringify(payload);
+      const json = JSON.stringify(payload);
+      if (json.length > 500) return `${json.slice(0, 500)}…`;
+      return json;
     } catch (stringifyError) {
       return null;
     }

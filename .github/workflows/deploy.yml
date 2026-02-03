@@ -1,0 +1,50 @@
+name: Deploy to DigitalOcean
+
+on:
+  push:
+    branches:
+      - master
+      - production
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Deploy to DigitalOcean
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.DO_HOST }}
+        username: ${{ secrets.DO_USERNAME }}
+        key: ${{ secrets.DO_SSH_KEY }}
+        port: 22
+        script: |
+          set -euo pipefail
+
+          echo "🚀 Starting deployment..."
+
+          # Navigate to app directory
+          cd /opt/tradingapp
+
+          # Pull latest changes
+          echo "📥 Pulling latest code..."
+          git pull origin master
+
+          # Install server dependencies
+          echo "📦 Installing server dependencies..."
+          cd server
+          npm install --omit=dev
+
+          # Restart server with PM2 (starts it if missing)
+          echo "🔄 Restarting application..."
+          command -v pm2 >/dev/null 2>&1 || npm install -g pm2
+          pm2 startOrRestart ecosystem.config.js --only tradingapp
+          pm2 save
+
+          # Check status
+          pm2 status
+
+          echo "✅ Deployment complete!"
