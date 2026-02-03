@@ -204,3 +204,5 @@ Use GitHub Actions + SSH (already in this repo):
 
 ### Key change for option 1 (build on GitHub)
 The workflow now builds the React client inside GitHub Actions (node 22), packages it as `client-build.tgz`, and copies that tarball to `/tmp` on the droplet before the SSH step runs. The script on the droplet simply extracts the build into `/opt/tradingapp/client` and restarts PM2—no need to run `npm install` or `npm run build` there. This avoids the 1 GB RAM limit of the droplet while still making the latest UI available immediately after every push.
+
+> **Trigger reminder:** every GitHub push that reaches `master`/`production` will kick off this workflow. If you only want to re-run the deployment for the same commit, use the **Actions → Deploy to DigitalOcean → Re-run jobs** button instead of pushing again.
