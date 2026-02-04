@@ -2167,14 +2167,33 @@ const rebalancePortfolio = async (portfolio) => {
 
 let rebalanceInProgress = false;
 
+const REBALANCE_LOCK_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.REBALANCE_LOCK_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw <= 0) return 55000;
+  return raw;
+})();
+
 const withRebalanceLock = async (handler) => {
   if (rebalanceInProgress) {
     throw new Error('Rebalance already in progress');
   }
   rebalanceInProgress = true;
+  let timer;
   try {
-    return await handler();
+    const timeoutPromise = new Promise((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`[Rebalance] Lock timed out after ${REBALANCE_LOCK_TIMEOUT_MS}ms — force releasing`));
+      }, REBALANCE_LOCK_TIMEOUT_MS);
+    });
+    return await Promise.race([handler(), timeoutPromise]);
+  } catch (err) {
+    if (err.message && err.message.includes('force releasing')) {
+      console.warn(err.message);
+    } else {
+      throw err;
+    }
   } finally {
+    if (timer) clearTimeout(timer);
     rebalanceInProgress = false;
   }
 };
@@ -2247,12 +2266,14 @@ const rebalanceNow = async ({ strategyId, userId, mode = null }) => withRebalanc
 });
 
 const isRebalanceLocked = () => rebalanceInProgress;
+const resetRebalanceLock = () => { rebalanceInProgress = false; };
 
 module.exports = {
   runDueRebalances,
   rebalancePortfolio,
   rebalanceNow,
   isRebalanceLocked,
+  resetRebalanceLock,
   buildAdjustments,
   fetchNextMarketSessionAfter,
   alignToRebalanceWindowStart,
