@@ -3233,7 +3233,7 @@ exports.compareComposerHoldingsAll = async (req, res) => {
     const asOfDate = req.query?.asOfDate ? String(req.query.asOfDate).trim() : null;
     const asOfTargetRaw = req.query?.asOfTarget ?? req.query?.target ?? null;
     const priceSource = req.query?.priceSource ? String(req.query.priceSource).trim() : null;
-    const priceRefresh = req.query?.priceRefresh ?? null;
+    const priceRefresh = req.query?.priceRefresh ?? true;
     const dataAdjustment = req.query?.dataAdjustment ? String(req.query.dataAdjustment).trim() : null;
     const rsiMethod = req.query?.rsiMethod ? String(req.query.rsiMethod).trim() : null;
     const debugIndicators = normalizeBoolean(req.query?.debugIndicators) ?? true;
