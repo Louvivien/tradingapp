@@ -301,6 +301,26 @@ const sanitizePolymarketSubdoc = (portfolio) => {
   }
 };
 
+const ensureStockOrderIds = (stocks) => {
+  if (!Array.isArray(stocks)) {
+    return;
+  }
+  stocks.forEach((stock, index) => {
+    if (!stock || typeof stock !== 'object') {
+      return;
+    }
+    if (stock.orderID) {
+      stock.orderID = String(stock.orderID);
+      return;
+    }
+    const assetId = stock.asset_id ? String(stock.asset_id) : '';
+    const market = stock.market ? String(stock.market) : '';
+    const symbol = stock.symbol ? String(stock.symbol) : '';
+    const seed = assetId || market || symbol || `stock-${index + 1}`;
+    stock.orderID = `poly-${seed.slice(-24)}`;
+  });
+};
+
 const snapshotPolymarket = (poly) => {
   if (!poly || typeof poly !== 'object') {
     return {};
@@ -3057,6 +3077,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	  portfolio.nextRebalanceAt = computeNextRebalanceAt(normalizeRecurrence(portfolio.recurrence), now);
 	  portfolio.rebalanceCount = toNumber(portfolio.rebalanceCount, 0) + 1;
 	  portfolio.lastPerformanceComputedAt = now;
+  ensureStockOrderIds(portfolio.stocks);
   sanitizePolymarketSubdoc(portfolio);
   await portfolio.save();
 
