@@ -1554,6 +1554,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     portfolio.nextRebalanceAt = computeNextRebalanceAt(normalizeRecurrence(portfolio.recurrence), now);
     portfolio.rebalanceCount = toNumber(portfolio.rebalanceCount, 0) + 1;
     portfolio.lastPerformanceComputedAt = now;
+    ensureStockOrderIds(currentHoldings);
     sanitizePolymarketSubdoc(portfolio);
     await portfolio.save();
     await recordEquitySnapshotIfPossible({
