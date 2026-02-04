@@ -793,6 +793,25 @@ const isTradeAfterAnchor = (tradeTime, anchorTime) => {
   return String(tradeTime || '') > String(anchorTime || '');
 };
 
+const safeJsonStringify = (value) => {
+  try {
+    return JSON.stringify(value);
+  } catch (error) {
+    try {
+      const seen = new WeakSet();
+      return JSON.stringify(value, (key, val) => {
+        if (typeof val === 'object' && val !== null) {
+          if (seen.has(val)) return '[Circular]';
+          seen.add(val);
+        }
+        return val;
+      });
+    } catch {
+      return null;
+    }
+  }
+};
+
 const formatAxiosError = (error) => {
   const status = Number(error?.response?.status);
   const payload = error?.response?.data;
@@ -824,13 +843,10 @@ const formatAxiosError = (error) => {
       if (msg.length > 500) return `${msg.slice(0, 500)}…`;
       return msg;
     }
-    try {
-      const json = JSON.stringify(payload);
-      if (json.length > 500) return `${json.slice(0, 500)}…`;
-      return json;
-    } catch (stringifyError) {
-      return null;
-    }
+    const json = safeJsonStringify(payload);
+    if (!json) return null;
+    if (json.length > 500) return `${json.slice(0, 500)}…`;
+    return json;
   })();
   if (Number.isFinite(status) && status > 0) {
     if ((status === 401 || status === 403) && apiMessage) {
@@ -1911,12 +1927,9 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       const raw = response.errorMsg || response.error || response.message || null;
       if (!raw) return null;
       if (typeof raw === 'string') return raw.trim() || null;
-      try {
-        const json = JSON.stringify(raw);
-        return json.length > 500 ? `${json.slice(0, 500)}…` : json;
-      } catch {
-        return String(raw);
-      }
+      const json = safeJsonStringify(raw);
+      if (!json) return String(raw);
+      return json.length > 500 ? `${json.slice(0, 500)}…` : json;
     })();
     const txHashes = Array.isArray(response.transactionsHashes)
       ? response.transactionsHashes
