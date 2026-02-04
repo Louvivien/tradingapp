@@ -2623,10 +2623,13 @@ exports.updateStrategyRecurrence = async (req, res) => {
     const provisionalNext = computeNextRebalanceAt(normalizedRecurrence, now);
     let nextRebalanceAt = provisionalNext;
     try {
-      const alpacaConfig = await getAlpacaConfig(userId);
-      if (alpacaConfig?.hasValidKeys) {
-        const tradingKeys = alpacaConfig.getTradingKeys();
-        nextRebalanceAt = await alignToRebalanceWindowStart(tradingKeys, provisionalNext);
+      const provider = String(portfolio.provider || 'alpaca').toLowerCase();
+      if (provider === 'alpaca') {
+        const alpacaConfig = await getAlpacaConfig(userId);
+        if (alpacaConfig?.hasValidKeys) {
+          const tradingKeys = alpacaConfig.getTradingKeys();
+          nextRebalanceAt = await alignToRebalanceWindowStart(tradingKeys, provisionalNext);
+        }
       }
     } catch (error) {
       nextRebalanceAt = provisionalNext;

@@ -311,16 +311,14 @@ const state = {
     pool: [],
     cursor: 0,
   },
-  dynamic: {
-    enabled: parseBooleanEnv(
-      process.env.POLYMARKET_PROXY_LIST_ENABLED,
-      process.env.NODE_ENV === 'test' ? false : true
-    ),
-    urls: resolveSourceUrls(),
-    testUrl: normalizeEnvValue(process.env.POLYMARKET_PROXY_TEST_URL) || DEFAULT_TEST_URL,
-    targetTestUrl: normalizeEnvValue(process.env.POLYMARKET_PROXY_TARGET_TEST_URL) || DEFAULT_TARGET_TEST_URL,
-    targetTestEnabled: parseBooleanEnv(process.env.POLYMARKET_PROXY_TARGET_TEST_ENABLED, true),
-    refreshIntervalMs: clampInt(process.env.POLYMARKET_PROXY_REFRESH_INTERVAL_MS, {
+	  dynamic: {
+	    // Default OFF: only enable proxies when explicitly requested via env.
+	    enabled: parseBooleanEnv(process.env.POLYMARKET_PROXY_LIST_ENABLED, false),
+	    urls: resolveSourceUrls(),
+	    testUrl: normalizeEnvValue(process.env.POLYMARKET_PROXY_TEST_URL) || DEFAULT_TEST_URL,
+	    targetTestUrl: normalizeEnvValue(process.env.POLYMARKET_PROXY_TARGET_TEST_URL) || DEFAULT_TARGET_TEST_URL,
+	    targetTestEnabled: parseBooleanEnv(process.env.POLYMARKET_PROXY_TARGET_TEST_ENABLED, true),
+	    refreshIntervalMs: clampInt(process.env.POLYMARKET_PROXY_REFRESH_INTERVAL_MS, {
       min: 60_000,
       max: 7 * 24 * 60 * 60 * 1000,
       fallback: DEFAULT_REFRESH_INTERVAL_MS,
@@ -900,36 +898,36 @@ const maybeRefreshInBackground = () => {
 };
 
 const getNextPolymarketProxyConfig = () => {
-  maybeRefreshInBackground();
-  if (state.dynamic.pool.length) {
-    const picked = pickFromPoolSkippingCooldown(state.dynamic, state.dynamic.pool);
-    if (picked) return picked;
-  }
-  const envPool = getEnvProxyPool();
-  return pickFromPoolSkippingCooldown(state.env, envPool);
+	  maybeRefreshInBackground();
+	  if (state.dynamic.enabled && state.dynamic.pool.length) {
+	    const picked = pickFromPoolSkippingCooldown(state.dynamic, state.dynamic.pool);
+	    if (picked) return picked;
+	  }
+	  const envPool = getEnvProxyPool();
+	  return pickFromPoolSkippingCooldown(state.env, envPool);
 };
 
 const peekPolymarketProxyConfig = () => {
-  if (state.dynamic.pool.length) {
-    return peekFromPoolSkippingCooldown(state.dynamic, state.dynamic.pool);
-  }
-  const envPool = getEnvProxyPool();
-  return peekFromPoolSkippingCooldown(state.env, envPool);
+	  if (state.dynamic.enabled && state.dynamic.pool.length) {
+	    return peekFromPoolSkippingCooldown(state.dynamic, state.dynamic.pool);
+	  }
+	  const envPool = getEnvProxyPool();
+	  return peekFromPoolSkippingCooldown(state.env, envPool);
 };
 
 const getPolymarketProxyPoolKey = () => {
-  if (state.dynamic.pool.length) {
-    return 'polymarket-proxy-pool:dynamic';
-  }
-  if (getEnvProxyPool().length) {
-    return 'polymarket-proxy-pool:env';
-  }
+	  if (state.dynamic.enabled && state.dynamic.pool.length) {
+	    return 'polymarket-proxy-pool:dynamic';
+	  }
+	  if (getEnvProxyPool().length) {
+	    return 'polymarket-proxy-pool:env';
+	  }
   return 'polymarket-proxy-pool:none';
 };
 
 const getPolymarketProxyDebugInfo = () => {
   const current = peekPolymarketProxyConfig();
-  const usingDynamic = state.dynamic.pool.length > 0;
+  const usingDynamic = state.dynamic.enabled && state.dynamic.pool.length > 0;
   const authPresent = Boolean(current?.auth && (current.auth.username || current.auth.password));
   const cooldownRemainingMs = current ? getProxyFailureRemainingMs(current) : 0;
   return {

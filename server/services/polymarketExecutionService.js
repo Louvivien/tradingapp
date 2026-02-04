@@ -258,11 +258,12 @@ const ensureAxiosProxyInterceptor = (axiosInstance, host, proxyProvider, current
     if (String(config.url).startsWith(host)) {
       const proxyConfig = proxyProvider.getProxy();
       const httpsAgent = proxyConfig ? getPolymarketHttpsAgent(proxyConfig) : null;
-      config.proxy = false;
-      if (httpsAgent) {
-        config.httpsAgent = httpsAgent;
-      }
       if (proxyConfig) {
+        // Disable Axios's built-in proxy support and use an explicit HTTPS proxy agent instead.
+        config.proxy = false;
+        if (httpsAgent) {
+          config.httpsAgent = httpsAgent;
+        }
         attachHiddenConfigValue(config, '__polymarketProxy', proxyConfig);
       }
     }
