@@ -1105,7 +1105,7 @@ const computeMovingAverageReturn = (series, window) => {
   if (!returns || !returns.length) {
     return null;
   }
-  return returns.reduce((sum, value) => sum + value, 0) / returns.length;
+  return (returns.reduce((sum, value) => sum + value, 0) / returns.length) * 100;
 };
 
 const computeCumulativeReturn = (series, window) => {
@@ -1123,14 +1123,14 @@ const computeCumulativeReturn = (series, window) => {
 
 const computeStdDevReturn = (series, window) => {
   const returns = computeReturns(series, window);
-  if (!returns || !returns.length) {
+  if (!returns || returns.length < 2) {
     return null;
   }
   const mean = returns.reduce((sum, value) => sum + value, 0) / returns.length;
   const variance =
     returns.reduce((sum, value) => sum + (value - mean) ** 2, 0) /
-    returns.length;
-  return Math.sqrt(variance);
+    (returns.length - 1);
+  return Math.sqrt(variance) * 100;
 };
 
 const computeMaxDrawdown = (series, window) => {
@@ -1802,24 +1802,6 @@ function evaluateNode(node, parentWeight, ctx) {
         return [];
       }
 
-      // Parity mode: approximate Composer parity by equal-weighting inverse-vol blocks.
-      if (ctx.parityMode) {
-        const weightShare = parentWeight / candidatesDeduped.length;
-        const positions = candidatesDeduped.flatMap((entry) => {
-          if (entry.type === 'asset') {
-            return [
-              {
-                symbol: entry.symbol,
-                weight: weightShare,
-                rationale: `Inverse-volatility parity (window=${window}d)`,
-              },
-            ];
-          }
-          return evaluateNode(entry.node, weightShare, ctx);
-        });
-        return mergePositions(positions);
-      }
-
       const metricNode = ['stdev-return', { window }];
       const scored = candidatesDeduped
         .map((entry) => {
@@ -2212,7 +2194,7 @@ const evaluateDefsymphonyStrategy = async ({
   const resolvedAsOfMode =
     normalizeAsOfMode(asOfMode) ||
     normalizeAsOfMode(process.env.COMPOSER_ASOF_MODE) ||
-    (parityModeDefault ? 'close' : 'previous-close');
+    'previous-close';
   const resolvedPriceSource =
     normalizePriceSource(priceSource) ||
     normalizePriceSource(process.env.COMPOSER_PRICE_SOURCE) ||
@@ -3119,7 +3101,7 @@ const backtestDefsymphonyStrategy = async ({
   const resolvedAsOfMode =
     normalizeAsOfMode(asOfMode) ||
     normalizeAsOfMode(process.env.COMPOSER_ASOF_MODE) ||
-    (parityModeDefault ? 'close' : 'previous-close');
+    'previous-close';
 
   const calendarSymbol = String(
     includeBenchmark && benchmarkSymbol ? benchmarkSymbol : tickers[0]
@@ -3447,17 +3429,6 @@ const backtestDefsymphonyStrategy = async ({
       };
     })
     .sort((a, b) => (b.weight || 0) - (a.weight || 0));
-
-  // Parity tweak: swap QLD->TECL when Composer parity mode is enabled and TECL data is available.
-  if (baseCtx.parityMode) {
-    const hasQLD = finalHoldings.find((h) => h.symbol === 'QLD');
-    const hasTECL = finalHoldings.find((h) => h.symbol === 'TECL');
-    if (hasQLD && !hasTECL && priceData.has('TECL')) {
-      const replacement = { ...hasQLD, symbol: 'TECL' };
-      finalHoldings.splice(finalHoldings.indexOf(hasQLD), 1, replacement);
-      finalHoldings.sort((a, b) => (b.weight || 0) - (a.weight || 0));
-    }
-  }
 
   let benchmark = null;
   let betaStats = null;
