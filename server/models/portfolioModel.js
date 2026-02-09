@@ -204,6 +204,10 @@ const portfolioSchema = new Schema({
       default: null,
       trim: true,
     },
+    untradeableTokenIds: {
+      type: [String],
+      default: [],
+    },
     sizingState: {
       makerCash: {
         type: Number,

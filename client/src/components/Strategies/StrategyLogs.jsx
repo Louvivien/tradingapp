@@ -275,17 +275,23 @@ const StrategyLogs = ({ strategyId, strategyName, onClose = () => {} }) => {
 		                    : `${row?.amount} shares`;
 		
 		                const suffixParts = [];
-		                if (price) suffixParts.push(`@ ${price}`);
-		                if (orderId) suffixParts.push(`order ${orderId}`);
-		                const looksFailed =
-		                  row?.reason === "execution_failed" ||
-		                  row?.reason === "execution_retryable_error" ||
-		                  (hasStatusCode && statusCode >= 400 && !orderId);
-		                if (looksFailed) {
-		                  suffixParts.push(
-		                    `FAILED${hasStatusCode ? ` (${statusCode})` : ""}: ${execError || row?.error || row?.reason || "Order rejected"}`
-		                  );
-		                }
+			                if (price) suffixParts.push(`@ ${price}`);
+			                if (orderId) suffixParts.push(`order ${orderId}`);
+			                const looksSkipped = row?.reason === "execution_skipped_untradeable_token";
+			                const looksFailed =
+			                  row?.reason === "execution_failed" ||
+			                  row?.reason === "execution_retryable_error" ||
+			                  (hasStatusCode && statusCode >= 400 && !orderId);
+			                if (looksSkipped) {
+			                  suffixParts.push(
+			                    `SKIPPED: ${execError || row?.error || row?.reason || "Untradeable token"}`
+			                  );
+			                }
+			                if (looksFailed) {
+			                  suffixParts.push(
+			                    `FAILED${hasStatusCode ? ` (${statusCode})` : ""}: ${execError || row?.error || row?.reason || "Order rejected"}`
+			                  );
+			                }
 		
 		                return (
 		                  <Typography key={`${log._id}-rebalance-${index}`} variant="body2">

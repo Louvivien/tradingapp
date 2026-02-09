@@ -694,6 +694,7 @@ jest.mock('../strategyLogger', () => ({
 	
 	    const clob = nock('https://clob.polymarket.com');
 	    clob.get('/time').query(true).reply(200, 1700000000).persist();
+	    clob.get('/book').query(true).reply(200, { bids: [], asks: [] }).persist();
 	    clob
 	      .get('/data/trades')
 	      .query(true)

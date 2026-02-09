@@ -2,7 +2,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const Axios = require('axios');
 const CryptoJS = require('crypto-js');
-const { Wallet, providers, Contract, utils } = require('ethers');
+const { Wallet, providers, Contract, utils, constants, BigNumber } = require('ethers');
 const {
   getNextPolymarketProxyConfig,
   getPolymarketProxyDebugInfo,
@@ -579,6 +579,23 @@ const getContractConfig = (chainId) => {
   };
 };
 
+const DEFAULT_GAMMA_HOST = normalizeEnvValue(process.env.POLYMARKET_GAMMA_API_HOST || 'https://gamma-api.polymarket.com').replace(
+  /\/+$/,
+  ''
+);
+
+const getRedeemContractConfig = (chainId) => {
+  // Mainnet-only for now; contract addresses may differ on testnets.
+  if (chainId !== 137) {
+    return null;
+  }
+  return {
+    proxyWalletFactory: '0xaB45c5A4B0c941a2F231C04C3f49182e1A254052',
+    conditionalTokens: '0x4D97DCd97eC945f40cF65F87097ACe5EA0476045',
+    negRiskAdapter: '0xd91E80cF2E7be2e162c6513ceD06f1dD0dA35296',
+  };
+};
+
 let cachedClient = null;
 let cachedClientKey = null;
 
@@ -948,6 +965,329 @@ const executePolymarketMarketOrder = async ({ tokenID, side, amount, price }) =>
   };
 };
 
+const looksLikeBytes32 = (value) => /^0x[a-fA-F0-9]{64}$/.test(normalizeEnvValue(value));
+
+const parseJsonArray = (value) => {
+  if (Array.isArray(value)) {
+    return value;
+  }
+  const raw = normalizeEnvValue(value);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+};
+
+const fetchGammaMarketsByConditionIds = async (conditionIds = [], options = {}) => {
+  const host = normalizeEnvValue(options.host || DEFAULT_GAMMA_HOST).replace(/\/+$/, '');
+  const ids = Array.from(
+    new Set(
+      (Array.isArray(conditionIds) ? conditionIds : [])
+        .map((id) => normalizeEnvValue(id))
+        .filter(Boolean)
+    )
+  );
+  const map = new Map();
+  if (!host || !ids.length) {
+    return map;
+  }
+
+  const query = ids.map((id) => `condition_ids=${encodeURIComponent(id)}`).join('&');
+  const url = `${host}/markets?${query}`;
+  const res = await Axios.get(url, {
+    timeout: 15000,
+    proxy: false,
+    validateStatus: () => true,
+    ...(options.axios || {}),
+  });
+
+  const ok = res && typeof res.status === 'number' && res.status >= 200 && res.status < 300;
+  const rows = ok && Array.isArray(res.data) ? res.data : [];
+  rows.forEach((row) => {
+    const conditionId = normalizeEnvValue(row?.conditionId);
+    if (!conditionId) return;
+    const outcomes = parseJsonArray(row?.outcomes);
+    map.set(conditionId, {
+      id: row?.id ?? null,
+      slug: row?.slug ?? null,
+      question: row?.question ?? null,
+      negRisk: row?.negRisk === true,
+      resolved: row?.resolved === true,
+      outcomes: outcomes.map((o) => normalizeEnvValue(o)).filter(Boolean),
+    });
+  });
+
+  return map;
+};
+
+const normalizeOutcomeKey = (value) => normalizeEnvValue(value).toLowerCase();
+
+const sumPositionsByConditionAndOutcome = (positions = []) => {
+  const byCondition = new Map();
+  (Array.isArray(positions) ? positions : []).forEach((pos) => {
+    const conditionId = normalizeEnvValue(pos?.market || pos?.conditionId);
+    if (!conditionId) return;
+    const outcomeKey = normalizeOutcomeKey(pos?.outcome);
+    const qty = Number(pos?.quantity);
+    if (!Number.isFinite(qty) || qty <= 0) return;
+
+    const entry = byCondition.get(conditionId) || { outcomes: new Map(), totalQty: 0 };
+    entry.totalQty += qty;
+    if (outcomeKey) {
+      entry.outcomes.set(outcomeKey, (entry.outcomes.get(outcomeKey) || 0) + qty);
+    }
+    byCondition.set(conditionId, entry);
+  });
+  return byCondition;
+};
+
+const toUsdcBaseUnitsString = (amount) => {
+  const num = Number(amount);
+  if (!Number.isFinite(num) || num <= 0) return '0';
+  // Polymarket shares correspond to USDC collateral (6 decimals).
+  // Convert using a decimal string to avoid JS float issues.
+  const fixed = num.toFixed(6);
+  return utils.parseUnits(fixed, 6).toString();
+};
+
+const buildSafeSignatureBytes = async (signer, txHash) => {
+  const messageArray = utils.arrayify(txHash);
+  let sig = await signer.signMessage(messageArray);
+  let v = parseInt(sig.slice(-2), 16);
+  if (v === 0 || v === 1) {
+    v += 31;
+  } else if (v === 27 || v === 28) {
+    v += 4;
+  } else {
+    throw new Error('Invalid signature');
+  }
+  const vHex = v.toString(16).padStart(2, '0');
+  sig = sig.slice(0, -2) + vHex;
+  return sig;
+};
+
+  const SAFE_MIN_ABI = [
+  'function nonce() view returns (uint256)',
+  'function getTransactionHash(address to,uint256 value,bytes data,uint8 operation,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,uint256 nonce) view returns (bytes32)',
+  'function execTransaction(address to,uint256 value,bytes data,uint8 operation,uint256 safeTxGas,uint256 baseGas,uint256 gasPrice,address gasToken,address refundReceiver,bytes signatures) payable returns (bool)',
+];
+
+const PROXY_FACTORY_ABI = [
+  {
+    constant: false,
+    inputs: [
+      {
+        components: [
+          { name: 'typeCode', type: 'uint8' },
+          { name: 'to', type: 'address' },
+          { name: 'value', type: 'uint256' },
+          { name: 'data', type: 'bytes' },
+        ],
+        name: 'calls',
+        type: 'tuple[]',
+      },
+    ],
+    name: 'proxy',
+    outputs: [{ name: 'returnValues', type: 'bytes[]' }],
+    payable: true,
+    stateMutability: 'payable',
+    type: 'function',
+  },
+];
+
+  const CTF_MIN_ABI = [
+  'function payoutDenominator(bytes32) view returns (uint256)',
+  'function redeemPositions(address collateralToken, bytes32 parentCollectionId, bytes32 conditionId, uint256[] indexSets)',
+];
+
+const NEG_RISK_ADAPTER_MIN_ABI = ['function redeemPositions(bytes32 conditionId, uint256[] amounts)'];
+
+const redeemPolymarketWinnings = async (positions = [], options = {}) => {
+  const mode = getPolymarketExecutionMode();
+  const enabled = parseBoolean(options.enabled ?? process.env.POLYMARKET_AUTO_REDEEM, false);
+  if (!enabled) {
+    return { ok: true, skipped: true, reason: 'disabled' };
+  }
+  if (mode !== 'live') {
+    return { ok: true, skipped: true, reason: 'paper_mode' };
+  }
+
+  const maxConditions = (() => {
+    const parsed = Number(options.maxConditions ?? process.env.POLYMARKET_AUTO_REDEEM_MAX_CONDITIONS ?? 20);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 20;
+  })();
+  const waitMs = (() => {
+    const parsed = Number(options.waitMs ?? process.env.POLYMARKET_AUTO_REDEEM_WAIT_MS ?? 30000);
+    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
+  })();
+
+  const env = getPolymarketLiveEnv();
+  if (!env.privateKey) {
+    throw new Error('Missing POLYMARKET_PRIVATE_KEY (or POLYMARKET_PRIVATE_KEY_FILE).');
+  }
+
+  const redeemConfig = getRedeemContractConfig(env.chainId);
+  if (!redeemConfig) {
+    return { ok: false, skipped: true, reason: `unsupported_chain_${env.chainId}` };
+  }
+
+  const rpcUrl = getPolymarketRpcUrl(env.chainId);
+  const provider = new providers.JsonRpcProvider(rpcUrl, env.chainId);
+  const signer = new Wallet(env.privateKey).connect(provider);
+  const signatureType = env.signatureType;
+  const funderAddress = isValidHexAddress(env.funderAddress) ? env.funderAddress : null;
+
+  const byCondition = sumPositionsByConditionAndOutcome(positions);
+  const conditionIds = Array.from(byCondition.keys()).filter(looksLikeBytes32);
+  if (!conditionIds.length) {
+    return { ok: true, redeemed: 0, reason: 'no_conditions' };
+  }
+
+  const ctfRead = new Contract(redeemConfig.conditionalTokens, ['function payoutDenominator(bytes32) view returns (uint256)'], provider);
+
+  const resolvedConditionIds = [];
+  for (const conditionId of conditionIds) {
+    if (resolvedConditionIds.length >= maxConditions) break;
+    try {
+      const denom = await ctfRead.payoutDenominator(conditionId);
+      const isResolved = denom && BigNumber.isBigNumber(denom) ? denom.gt(0) : Number(denom) > 0;
+      if (isResolved) {
+        resolvedConditionIds.push(conditionId);
+      }
+    } catch {
+      // ignore read failures
+    }
+  }
+
+  if (!resolvedConditionIds.length) {
+    return { ok: true, redeemed: 0, reason: 'no_resolved_conditions' };
+  }
+
+  let gammaMarkets = new Map();
+  try {
+    gammaMarkets = await fetchGammaMarketsByConditionIds(resolvedConditionIds, { host: options.gammaHost });
+  } catch {
+    gammaMarkets = new Map();
+  }
+
+  const contracts = getContractConfig(env.chainId);
+  const ctfInterface = new utils.Interface(CTF_MIN_ABI);
+  const negRiskInterface = new utils.Interface(NEG_RISK_ADAPTER_MIN_ABI);
+
+  const calls = [];
+  const planned = [];
+  for (const conditionId of resolvedConditionIds) {
+    const entry = byCondition.get(conditionId);
+    if (!entry || entry.totalQty <= 0) continue;
+    const gamma = gammaMarkets.get(conditionId) || null;
+    const negRisk = gamma?.negRisk === true;
+    const outcomes = Array.isArray(gamma?.outcomes) && gamma.outcomes.length ? gamma.outcomes : ['Yes', 'No'];
+
+    if (negRisk) {
+      if (outcomes.length !== 2) {
+        planned.push({ conditionId, skipped: true, reason: 'neg_risk_outcomes_not_binary' });
+        continue;
+      }
+      const yesKey = normalizeOutcomeKey(outcomes[0]);
+      const noKey = normalizeOutcomeKey(outcomes[1]);
+      const yesQty = entry.outcomes.get(yesKey) || 0;
+      const noQty = entry.outcomes.get(noKey) || 0;
+      const amounts = [toUsdcBaseUnitsString(yesQty), toUsdcBaseUnitsString(noQty)];
+      if (amounts.every((a) => a === '0')) {
+        planned.push({ conditionId, skipped: true, reason: 'no_balance' });
+        continue;
+      }
+      const data = negRiskInterface.encodeFunctionData('redeemPositions', [conditionId, amounts]);
+      calls.push({ typeCode: 1, to: redeemConfig.negRiskAdapter, value: 0, data });
+      planned.push({ conditionId, negRisk: true, outcomes, amounts });
+    } else {
+      const data = ctfInterface.encodeFunctionData('redeemPositions', [
+        contracts.collateral,
+        constants.HashZero,
+        conditionId,
+        [1, 2],
+      ]);
+      calls.push({ typeCode: 1, to: redeemConfig.conditionalTokens, value: 0, data });
+      planned.push({ conditionId, negRisk: false });
+    }
+  }
+
+  if (!calls.length) {
+    return { ok: true, redeemed: 0, reason: 'nothing_to_redeem', planned };
+  }
+
+  const resultBase = {
+    ok: true,
+    skipped: false,
+    chainId: env.chainId,
+    rpcUrl,
+    signatureType,
+    funderAddress,
+    conditionsResolved: resolvedConditionIds.length,
+    callsPlanned: calls.length,
+    planned,
+  };
+
+  if (signatureType === 2) {
+    if (!funderAddress) {
+      return { ok: false, skipped: true, reason: 'missing_funder_address_for_safe', ...resultBase };
+    }
+    const safe = new Contract(funderAddress, SAFE_MIN_ABI, signer);
+    const txHashes = [];
+    for (const call of calls) {
+      const nonce = await safe.nonce();
+      const safeTxGas = 0;
+      const baseGas = 0;
+      const gasPrice = 0;
+      const gasToken = constants.AddressZero;
+      const refundReceiver = constants.AddressZero;
+      const operation = 0; // Call
+      const txHash = await safe.getTransactionHash(
+        call.to,
+        String(call.value ?? 0),
+        call.data,
+        operation,
+        safeTxGas,
+        baseGas,
+        gasPrice,
+        gasToken,
+        refundReceiver,
+        nonce
+      );
+      const sigBytes = await buildSafeSignatureBytes(signer, txHash);
+      const tx = await safe.execTransaction(
+        call.to,
+        String(call.value ?? 0),
+        call.data,
+        operation,
+        safeTxGas,
+        baseGas,
+        gasPrice,
+        gasToken,
+        refundReceiver,
+        sigBytes,
+        options.txOverrides || {}
+      );
+      txHashes.push(tx.hash);
+      if (waitMs > 0) {
+        await provider.waitForTransaction(tx.hash, 1, waitMs).catch(() => {});
+      }
+    }
+    return { ...resultBase, walletType: 'safe', txHashes };
+  }
+
+  // Proxy wallet factory (Magic/Email login) and fallback for other signature types.
+  const factory = new Contract(redeemConfig.proxyWalletFactory, PROXY_FACTORY_ABI, signer);
+  const tx = await factory.proxy(calls, options.txOverrides || {});
+  if (waitMs > 0) {
+    await provider.waitForTransaction(tx.hash, 1, waitMs).catch(() => {});
+  }
+  return { ...resultBase, walletType: 'proxy', txHash: tx.hash };
+};
+
 module.exports = {
   getPolymarketExecutionMode,
   getPolymarketExecutionDebugInfo,
@@ -956,4 +1296,5 @@ module.exports = {
   getPolymarketOnchainUsdcBalance,
   getPolymarketClobBalanceAllowance,
   executePolymarketMarketOrder,
+  redeemPolymarketWinnings,
 };

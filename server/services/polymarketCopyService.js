@@ -12,6 +12,7 @@ const {
   getPolymarketBalanceAllowance,
   getPolymarketOnchainUsdcBalance,
   getPolymarketClobBalanceAllowance,
+  redeemPolymarketWinnings,
 } = require('./polymarketExecutionService');
 const { getNextPolymarketProxyConfig, getPolymarketHttpsAgent, notePolymarketProxyFailure } = require('./polymarketProxyPoolService');
 
@@ -923,6 +924,22 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   const poly = portfolio.polymarket || {};
   const requestedMode = String(options?.mode || '').trim().toLowerCase();
 
+  const MAX_UNTRADEABLE_TOKEN_IDS = 200;
+  const untradeableTokenIds = new Set(
+    (Array.isArray(poly?.untradeableTokenIds) ? poly.untradeableTokenIds : [])
+      .map((value) => String(value || '').trim())
+      .filter(Boolean)
+  );
+  let untradeableTokenIdsDirty = false;
+  const noteUntradeableTokenId = (tokenId) => {
+    const key = String(tokenId || '').trim();
+    if (!key) return false;
+    if (untradeableTokenIds.has(key)) return false;
+    untradeableTokenIds.add(key);
+    untradeableTokenIdsDirty = true;
+    return true;
+  };
+
   const envExecutionMode = getPolymarketExecutionMode();
   const portfolioExecutionMode = normalizeExecutionModeOverride(poly.executionMode) || 'paper';
   const executionMode = envExecutionMode === 'live' ? portfolioExecutionMode : 'paper';
@@ -1049,16 +1066,63 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     );
   }
 
-  const lastTradeId = poly.lastTradeId ? String(poly.lastTradeId).trim() : null;
-  const lastTradeMatchTime = poly.lastTradeMatchTime ? String(poly.lastTradeMatchTime).trim() : null;
-  const now = new Date();
-  const anchorMatchTime = !lastTradeId
-    ? (lastTradeMatchTime || now.toISOString())
-    : null;
+	  const lastTradeId = poly.lastTradeId ? String(poly.lastTradeId).trim() : null;
+	  const lastTradeMatchTime = poly.lastTradeMatchTime ? String(poly.lastTradeMatchTime).trim() : null;
+	  const now = new Date();
+	  const anchorMatchTime = !lastTradeId
+	    ? (lastTradeMatchTime || now.toISOString())
+	    : null;
 
-  const recordEquitySnapshotIfPossible = async ({ stocks, retainedCash } = {}) => {
-    if (mongoose.connection.readyState !== 1) {
-      return null;
+	  let autoRedeem = null;
+	  const autoRedeemEnabled = parseBoolean(process.env.POLYMARKET_AUTO_REDEEM, false);
+	  if (autoRedeemEnabled && executionMode === 'live' && mode === 'incremental') {
+	    const userAddress = funderAddressCandidate || authAddress;
+	    if (userAddress && isValidHexAddress(userAddress) && typeof redeemPolymarketWinnings === 'function') {
+	      try {
+	        const snapshot = await fetchDataApiPositionsSnapshot({ userAddress });
+	        const positions = Array.isArray(snapshot?.positions) ? snapshot.positions : [];
+	        autoRedeem = await redeemPolymarketWinnings(positions, { enabled: true });
+
+	        const submitted = Boolean(
+	          autoRedeem?.walletType &&
+	            (autoRedeem?.txHash || (Array.isArray(autoRedeem?.txHashes) && autoRedeem.txHashes.length > 0))
+	        );
+	        if (submitted) {
+	          try {
+	            const usdc = await getPolymarketOnchainUsdcBalance(userAddress);
+	            const onchainBalance = roundToDecimals(Math.max(0, toNumber(usdc?.balance, 0)), 6);
+	            const cap = (() => {
+	              const candidates = [portfolio.cashLimit, portfolio.budget, portfolio.initialInvestment];
+	              for (const candidate of candidates) {
+	                const num = toNumber(candidate, null);
+	                if (num !== null) return Math.max(0, num);
+	              }
+	              return null;
+	            })();
+	            const nextCash =
+	              onchainBalance !== null && cap !== null ? Math.min(onchainBalance, Math.max(0, cap)) : onchainBalance;
+	            if (nextCash !== null) {
+	              portfolio.retainedCash = nextCash;
+	              portfolio.cashBuffer = nextCash;
+	            }
+	          } catch (error) {
+	            autoRedeem = {
+	              ...(autoRedeem || {}),
+	              onchainBalanceError: formatAxiosError(error),
+	            };
+	          }
+	        }
+	      } catch (error) {
+	        autoRedeem = { ok: false, error: formatAxiosError(error) };
+	      }
+	    } else {
+	      autoRedeem = { ok: false, skipped: true, reason: 'missing_execution_wallet' };
+	    }
+	  }
+
+	  const recordEquitySnapshotIfPossible = async ({ stocks, retainedCash } = {}) => {
+	    if (mongoose.connection.readyState !== 1) {
+	      return null;
     }
     const userId = portfolio.userId ? String(portfolio.userId) : '';
     const strategyId = portfolio.strategy_id ? String(portfolio.strategy_id) : '';
@@ -2512,37 +2576,95 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       return false;
     }
 
-    sizingMeta = { makerValue, sizingBudget, scale };
-    cash = roundToDecimals(makerCashValue * scale, 6) ?? 0;
+	    sizingMeta = { makerValue, sizingBudget, scale };
+	    cash = roundToDecimals(makerCashValue * scale, 6) ?? 0;
 
-    updatedStocks = makerHoldings
-      .map((pos) => {
-        const market = pos.market ? String(pos.market) : null;
-        const asset_id = pos.asset_id ? String(pos.asset_id) : null;
-        const outcome = pos.outcome ? String(pos.outcome) : null;
-        const avgCost = toNumber(pos.avgCost, null);
-        const currentPrice = toNumber(pos.currentPrice, null);
-        const quantity = roundToDecimals(Math.max(0, toNumber(pos.quantity, 0)) * scale, 6) ?? 0;
-        if (!quantity || quantity <= 0) {
-          return null;
-        }
-        const symbol = `PM:${String(market || '').slice(0, 10)}:${outcome || 'OUTCOME'}`;
-        return {
-          symbol,
-          market,
-          asset_id,
-          outcome,
-          avgCost: avgCost !== null ? avgCost : currentPrice,
-          quantity,
-          currentPrice,
-          orderID: `poly-size-${String(asset_id || '').slice(-10)}`,
-        };
-      })
-      .filter(Boolean);
+	    const targetAssetIds = new Set();
+	    const nextStocks = [];
+	    let extraCashFromUntradeable = 0;
+	    let untradeableMakerCount = 0;
 
-    portfolio.polymarket = {
-      ...snapshotPolymarket(portfolio.polymarket),
-      sizingState: {
+	    for (const pos of makerHoldings) {
+	      const market = pos.market ? String(pos.market) : null;
+	      const asset_id = pos.asset_id ? String(pos.asset_id) : null;
+	      if (!asset_id) {
+	        continue;
+	      }
+	      const outcome = pos.outcome ? String(pos.outcome) : null;
+	      const avgCost = toNumber(pos.avgCost, null);
+	      const currentPrice = toNumber(pos.currentPrice, null);
+	      const quantity = roundToDecimals(Math.max(0, toNumber(pos.quantity, 0)) * scale, 6) ?? 0;
+	      if (!quantity || quantity <= 0) {
+	        continue;
+	      }
+
+	      if (untradeableTokenIds.has(asset_id)) {
+	        untradeableMakerCount += 1;
+	        const currentHolding = holdingsByAssetId.get(asset_id) || null;
+	        const currentQty = Math.max(0, toNumber(currentHolding?.quantity, 0));
+	        const missingQty = Math.max(0, quantity - currentQty);
+	        if (missingQty > 0 && currentPrice !== null) {
+	          extraCashFromUntradeable += missingQty * currentPrice;
+	        }
+	        continue;
+	      }
+
+	      const symbol = `PM:${String(market || '').slice(0, 10)}:${outcome || 'OUTCOME'}`;
+	      nextStocks.push({
+	        symbol,
+	        market,
+	        asset_id,
+	        outcome,
+	        avgCost: avgCost !== null ? avgCost : currentPrice,
+	        quantity,
+	        currentPrice,
+	        orderID: `poly-size-${String(asset_id || '').slice(-10)}`,
+	      });
+	      targetAssetIds.add(asset_id);
+	    }
+
+	    // Keep already-held untradeable positions in the target so we don't repeatedly try to trade them.
+	    for (const [assetId, currentHolding] of holdingsByAssetId.entries()) {
+	      if (!untradeableTokenIds.has(assetId) || targetAssetIds.has(assetId)) {
+	        continue;
+	      }
+	      const quantity = roundToDecimals(Math.max(0, toNumber(currentHolding?.quantity, 0)), 6) ?? 0;
+	      if (!quantity || quantity <= 0) {
+	        continue;
+	      }
+	      const market = currentHolding?.market ? String(currentHolding.market) : null;
+	      const outcome = currentHolding?.outcome ? String(currentHolding.outcome) : null;
+	      const currentPrice = toNumber(currentHolding?.currentPrice, null);
+	      const avgCost = toNumber(currentHolding?.avgCost, null);
+	      const symbol =
+	        String(currentHolding?.symbol || '').trim() ||
+	        (market ? `PM:${String(market).slice(0, 10)}:${outcome || 'OUTCOME'}` : `PM:${String(assetId).slice(0, 10)}`);
+	      nextStocks.push({
+	        symbol,
+	        market,
+	        asset_id: assetId,
+	        outcome,
+	        avgCost: avgCost !== null ? avgCost : currentPrice,
+	        quantity,
+	        currentPrice,
+	        orderID: currentHolding?.orderID ? String(currentHolding.orderID) : `poly-untradeable-${String(assetId).slice(-10)}`,
+	      });
+	      targetAssetIds.add(assetId);
+	    }
+
+	    updatedStocks = nextStocks;
+	    if (extraCashFromUntradeable > 0) {
+	      cash = roundToDecimals(cash + extraCashFromUntradeable, 6) ?? cash;
+	      sizingMeta = {
+	        ...sizingMeta,
+	        untradeableMakerCount,
+	        untradeableCash: roundToDecimals(extraCashFromUntradeable, 6),
+	      };
+	    }
+
+	    portfolio.polymarket = {
+	      ...snapshotPolymarket(portfolio.polymarket),
+	      sizingState: {
         makerCash: makerCashValue,
 	        holdings: makerHoldings.map((pos) => ({
 	          market: pos.market ? String(pos.market) : null,
@@ -2611,22 +2733,23 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   }
 
   const executeSizeToBudgetRebalance = async () => {
-    rebalancePlan = {
-      minNotional: POLYMARKET_LIVE_REBALANCE_MIN_NOTIONAL,
-      maxOrders: POLYMARKET_LIVE_REBALANCE_MAX_ORDERS,
-      totalAssets: 0,
-      nonZeroDeltas: 0,
-      missingPrice: 0,
-      belowMinNotional: 0,
-      eligibleCandidates: 0,
-      candidatesTrimmed: 0,
-      plannedOrders: 0,
-      attemptedOrders: 0,
-      successfulOrders: 0,
-      failedOrders: 0,
-      reason: null,
-      largestBelowMinNotional: null,
-    };
+	    rebalancePlan = {
+	      minNotional: POLYMARKET_LIVE_REBALANCE_MIN_NOTIONAL,
+	      maxOrders: POLYMARKET_LIVE_REBALANCE_MAX_ORDERS,
+	      totalAssets: 0,
+	      nonZeroDeltas: 0,
+	      missingPrice: 0,
+	      belowMinNotional: 0,
+	      eligibleCandidates: 0,
+	      candidatesTrimmed: 0,
+	      plannedOrders: 0,
+	      attemptedOrders: 0,
+	      successfulOrders: 0,
+	      skippedOrders: 0,
+	      failedOrders: 0,
+	      reason: null,
+	      largestBelowMinNotional: null,
+	    };
 
     if (!executionEnabled || !makerStateEnabled || !didSize || liveExecutionAbort) {
       rebalancePlan.reason = 'execution_disabled_or_not_sized';
@@ -2849,10 +2972,10 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
           }
           liveExecutionAbort = executionDisabledReason;
           break;
-        } else if (isRetryableExecutionError(error)) {
-          liveExecutionAbort = String(formatAxiosError(error));
-          tradeSummary.rebalance.push({
-            symbol: symbolFor(order),
+	        } else if (isRetryableExecutionError(error)) {
+	          liveExecutionAbort = String(formatAxiosError(error));
+	          tradeSummary.rebalance.push({
+	            symbol: symbolFor(order),
             assetId: order.assetId,
             side: order.side,
             amount,
@@ -2861,24 +2984,16 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
             reason: 'execution_retryable_error',
             error: liveExecutionAbort,
           });
-          rebalancePlan.failedOrders += 1;
-          break;
-        } else {
-          const errorMessage = String(formatAxiosError(error));
-          const diagnostics = liveRebalanceDebugEnabled
-            ? {
-              preflight: executionPreflight || null,
-              orderType: String(process.env.POLYMARKET_MARKET_ORDER_TYPE || process.env.POLYMARKET_ORDER_TYPE || 'fak')
-                .trim()
-                .toLowerCase() || 'fak',
-              orderbook: null,
-            }
-            : null;
+	          rebalancePlan.failedOrders += 1;
+	          break;
+	        } else {
+	          const errorMessage = String(formatAxiosError(error));
+	          const lowerErrorMessage = errorMessage.toLowerCase();
+	          const wantsOrderbookProbe =
+	            lowerErrorMessage.includes('no match') || lowerErrorMessage.includes('no orderbook');
 
-	          if (
-	            diagnostics &&
-	            (errorMessage.toLowerCase().includes('no match') || errorMessage.toLowerCase().includes('no orderbook'))
-	          ) {
+	          let orderbook = null;
+	          if (wantsOrderbookProbe) {
 	            try {
 	              const orderbookResponse = await polymarketAxiosGet(`${CLOB_HOST}/book`, {
 	                params: buildGeoParams({ token_id: order.assetId }),
@@ -2888,64 +3003,128 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	              const bidsRaw = Array.isArray(book?.bids) ? book.bids : [];
 	              const asksRaw = Array.isArray(book?.asks) ? book.asks : [];
 	              const toLevel = (row) => {
-                const price = toNumber(row?.price, null);
-                const size = toNumber(row?.size, null);
-                if (price === null || size === null) return null;
-                return { price, size };
-              };
-              const bids = bidsRaw.map(toLevel).filter(Boolean);
-              const asks = asksRaw.map(toLevel).filter(Boolean);
-              const bestBid = bids.length ? bids.reduce((best, cur) => (cur.price > best.price ? cur : best)) : null;
-              const bestAsk = asks.length ? asks.reduce((best, cur) => (cur.price < best.price ? cur : best)) : null;
-              const topBids = [...bids].sort((a, b) => b.price - a.price).slice(0, 3);
-              const topAsks = [...asks].sort((a, b) => a.price - b.price).slice(0, 3);
-              diagnostics.orderbook = {
-                ok: true,
-                market: book?.market ?? null,
-                assetId: book?.asset_id ?? null,
-                timestamp: book?.timestamp ?? null,
-                bidCount: bids.length,
-                askCount: asks.length,
-                bestBid,
-                bestAsk,
-                topBids,
-                topAsks,
-                minOrderSize: book?.min_order_size ?? null,
-                tickSize: book?.tick_size ?? null,
-                negRisk: book?.neg_risk ?? null,
-              };
-            } catch (orderbookError) {
-              const status = Number(orderbookError?.response?.status);
-              const payload = orderbookError?.response?.data;
-              const apiError = (() => {
-                if (!payload) return null;
-                if (typeof payload === 'string') return payload.trim() || null;
-                if (payload?.error) return String(payload.error).trim() || null;
-                if (payload?.message) return String(payload.message).trim() || null;
-                return null;
-              })();
-              diagnostics.orderbook = {
-                ok: false,
-                status: Number.isFinite(status) && status > 0 ? status : null,
-                error: formatAxiosError(orderbookError),
-                apiError,
-              };
-            }
-          }
+	                const price = toNumber(row?.price, null);
+	                const size = toNumber(row?.size, null);
+	                if (price === null || size === null) return null;
+	                return { price, size };
+	              };
+	              const bids = bidsRaw.map(toLevel).filter(Boolean);
+	              const asks = asksRaw.map(toLevel).filter(Boolean);
+	              const bestBid = bids.length ? bids.reduce((best, cur) => (cur.price > best.price ? cur : best)) : null;
+	              const bestAsk = asks.length ? asks.reduce((best, cur) => (cur.price < best.price ? cur : best)) : null;
+	              const topBids = [...bids].sort((a, b) => b.price - a.price).slice(0, 3);
+	              const topAsks = [...asks].sort((a, b) => a.price - b.price).slice(0, 3);
+	              orderbook = {
+	                ok: true,
+	                market: book?.market ?? null,
+	                assetId: book?.asset_id ?? null,
+	                timestamp: book?.timestamp ?? null,
+	                bidCount: bids.length,
+	                askCount: asks.length,
+	                bestBid,
+	                bestAsk,
+	                topBids,
+	                topAsks,
+	                minOrderSize: book?.min_order_size ?? null,
+	                tickSize: book?.tick_size ?? null,
+	                negRisk: book?.neg_risk ?? null,
+	              };
+	            } catch (orderbookError) {
+	              const status = Number(orderbookError?.response?.status);
+	              const payload = orderbookError?.response?.data;
+	              const apiError = (() => {
+	                if (!payload) return null;
+	                if (typeof payload === 'string') return payload.trim() || null;
+	                if (payload?.error) return String(payload.error).trim() || null;
+	                if (payload?.message) return String(payload.message).trim() || null;
+	                return null;
+	              })();
+	              orderbook = {
+	                ok: false,
+	                status: Number.isFinite(status) && status > 0 ? status : null,
+	                error: formatAxiosError(orderbookError),
+	                apiError,
+	              };
+	            }
+	          }
 
-          tradeSummary.rebalance.push({
-            symbol: symbolFor(order),
-            assetId: order.assetId,
-            side: order.side,
-            amount,
-            price: order.price,
-            notional: roundToDecimals(order.notional, 6),
-            reason: 'execution_failed',
-            error: errorMessage,
-            ...(diagnostics ? { diagnostics } : {}),
-          });
-          rebalancePlan.failedOrders += 1;
-          continue;
+	          const diagnostics = liveRebalanceDebugEnabled
+	            ? {
+	              preflight: executionPreflight || null,
+	              orderType: String(process.env.POLYMARKET_MARKET_ORDER_TYPE || process.env.POLYMARKET_ORDER_TYPE || 'fak')
+	                .trim()
+	                .toLowerCase() || 'fak',
+	              orderbook,
+	            }
+	            : null;
+
+	          const noOrderbookDetected =
+	            lowerErrorMessage.includes('no orderbook exists') ||
+	            (orderbook && orderbook.ok === false && orderbook.status === 404) ||
+	            (orderbook && orderbook.ok === false && String(orderbook.apiError || '').toLowerCase().includes('no orderbook'));
+
+	          if (noOrderbookDetected) {
+	            noteUntradeableTokenId(order.assetId);
+
+	            const skippedNotional = roundToDecimals(order.notional, 6);
+	            if (order.side === 'BUY' && skippedNotional !== null && skippedNotional > 0) {
+	              cash = roundToDecimals(cash + skippedNotional, 6) ?? cash;
+	            }
+
+	            if (Array.isArray(updatedStocks)) {
+	              updatedStocks = updatedStocks.filter((row) => String(row?.asset_id || '') !== String(order.assetId));
+	            }
+
+	            const currentHolding = holdingsByAssetId.get(order.assetId) || null;
+	            const currentQty = roundToDecimals(Math.max(0, toNumber(currentHolding?.quantity, 0)), 6) ?? 0;
+	            if (currentQty > 0 && Array.isArray(updatedStocks)) {
+	              const market = currentHolding?.market ? String(currentHolding.market) : (order.market ? String(order.market) : null);
+	              const outcome = currentHolding?.outcome ? String(currentHolding.outcome) : (order.outcome ? String(order.outcome) : null);
+	              const currentPrice = toNumber(currentHolding?.currentPrice, null) ?? toNumber(order.price, null);
+	              const avgCost = toNumber(currentHolding?.avgCost, null) ?? currentPrice;
+	              const symbol =
+	                String(currentHolding?.symbol || '').trim() ||
+	                (market ? `PM:${String(market).slice(0, 10)}:${outcome || 'OUTCOME'}` : `PM:${String(order.assetId).slice(0, 10)}`);
+	              updatedStocks.push({
+	                symbol,
+	                market,
+	                asset_id: String(order.assetId),
+	                outcome,
+	                avgCost,
+	                quantity: currentQty,
+	                currentPrice,
+	                orderID: currentHolding?.orderID ? String(currentHolding.orderID) : `poly-untradeable-${String(order.assetId).slice(-10)}`,
+	              });
+	            }
+
+	            tradeSummary.rebalance.push({
+	              symbol: symbolFor(order),
+	              assetId: order.assetId,
+	              side: order.side,
+	              amount,
+	              price: order.price,
+	              notional: roundToDecimals(order.notional, 6),
+	              reason: 'execution_skipped_untradeable_token',
+	              error: String(orderbook?.apiError || errorMessage),
+	              ...(diagnostics ? { diagnostics } : {}),
+	            });
+	            rebalancePlan.skippedOrders += 1;
+	            continue;
+	          }
+
+	          tradeSummary.rebalance.push({
+	            symbol: symbolFor(order),
+	            assetId: order.assetId,
+	            side: order.side,
+	            amount,
+	            price: order.price,
+	            notional: roundToDecimals(order.notional, 6),
+	            reason: 'execution_failed',
+	            error: errorMessage,
+	            ...(diagnostics ? { diagnostics } : {}),
+	          });
+	          rebalancePlan.failedOrders += 1;
+	          continue;
 	        }
 	      }
 
@@ -3086,14 +3265,28 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     portfolio.stocks = updatedStocks;
     portfolio.retainedCash = toNumber(cash, 0);
     portfolio.cashBuffer = toNumber(cash, 0);
-  }
-	  portfolio.lastRebalancedAt = now;
-	  portfolio.nextRebalanceAt = computeNextRebalanceAt(normalizeRecurrence(portfolio.recurrence), now);
-	  portfolio.rebalanceCount = toNumber(portfolio.rebalanceCount, 0) + 1;
-	  portfolio.lastPerformanceComputedAt = now;
-  ensureStockOrderIds(portfolio.stocks);
-  sanitizePolymarketSubdoc(portfolio);
-  await portfolio.save();
+	  }
+		  portfolio.lastRebalancedAt = now;
+		  portfolio.nextRebalanceAt = computeNextRebalanceAt(normalizeRecurrence(portfolio.recurrence), now);
+		  portfolio.rebalanceCount = toNumber(portfolio.rebalanceCount, 0) + 1;
+		  portfolio.lastPerformanceComputedAt = now;
+	  ensureStockOrderIds(portfolio.stocks);
+
+	  if (untradeableTokenIds.size > MAX_UNTRADEABLE_TOKEN_IDS) {
+	    const trimmed = Array.from(untradeableTokenIds).slice(-MAX_UNTRADEABLE_TOKEN_IDS);
+	    untradeableTokenIds.clear();
+	    trimmed.forEach((id) => untradeableTokenIds.add(id));
+	    untradeableTokenIdsDirty = true;
+	  }
+	  if (untradeableTokenIdsDirty) {
+	    portfolio.polymarket = {
+	      ...snapshotPolymarket(portfolio.polymarket),
+	      untradeableTokenIds: Array.from(untradeableTokenIds),
+	    };
+	  }
+
+	  sanitizePolymarketSubdoc(portfolio);
+	  await portfolio.save();
 
   const savedStocks = Array.isArray(portfolio.stocks) ? portfolio.stocks : [];
 
@@ -3186,11 +3379,12 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
               maxOrders: POLYMARKET_LIVE_REBALANCE_MAX_ORDERS,
               preflightEnabled: liveRebalancePreflightEnabled,
             },
-            liveRebalancePlan: rebalancePlan,
-            liveRebalancePreflight: executionPreflight,
-            executionDebug,
-            liveHoldings,
-            holdingsSource: liveHoldingsUsed ? 'data-api' : 'portfolio',
+	            liveRebalancePlan: rebalancePlan,
+	            liveRebalancePreflight: executionPreflight,
+	            autoRedeem,
+	            executionDebug,
+	            liveHoldings,
+	            holdingsSource: liveHoldingsUsed ? 'data-api' : 'portfolio',
 			      address,
             authAddress,
 			      pagesFetched,
