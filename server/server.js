@@ -664,6 +664,15 @@ const mongoOptions = {
   connectTimeoutMS: Number(process.env.MONGO_CONNECT_TIMEOUT_MS || 15000),
 };
 
+const ensureMongoIndexes = async () => {
+  // Ensure TTL indexes exist even when autoIndex is disabled in some environments.
+  const StrategyLog = require('./models/strategyLogModel');
+  const StrategyEquitySnapshot = require('./models/strategyEquitySnapshotModel');
+  const PriceCache = require('./models/priceCacheModel');
+
+  await Promise.all([StrategyLog.init(), StrategyEquitySnapshot.init(), PriceCache.init()]);
+};
+
 const connectToMongo = async () => {
   if (missingCriticalVars.length > 0) {
     console.warn('[MongoDB] Skipping connection attempt (missing critical env vars).');
@@ -678,6 +687,13 @@ const connectToMongo = async () => {
   await mongoose.connect(DB, mongoOptions);
   console.log("[MongoDB] Connected to MongoDB");
   logConnectionState('Post-connect');
+
+  try {
+    await ensureMongoIndexes();
+    console.log('[MongoDB] Ensured indexes (including TTL retention).');
+  } catch (error) {
+    console.warn('[MongoDB] Failed to ensure indexes:', error?.message || error);
+  }
 };
 
 // Initialize Alpaca client
