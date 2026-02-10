@@ -52,7 +52,7 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
   const [saleOpen, setSaleOpen] = useState(false);
   const { userData, setUserData } = useContext(UserContext);
   const [stock, setStock] = useState(undefined);
-  const [openStrategies, setOpenStrategies] = useState(true);
+  const [openStrategies, setOpenStrategies] = useState(false);
   const [openPortfolio, setOpenPortfolio] = useState({});
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [strategyToDelete, setStrategyToDelete] = useState(null);

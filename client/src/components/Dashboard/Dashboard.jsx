@@ -133,18 +133,6 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
   return (
     <Container maxWidth="lg" className={styles.container}>
       <Grid container spacing={3} marginTop="15px">
-        {/* Strategy Portfolio */}
-        <Grid item xs={12}>
-          <StyledPaper>
-            <Portfolios
-              accountBalance={accountBalance}
-              portfolios={portfolios}
-              onViewStrategyLogs={onViewStrategyLogs}
-              refreshPortfolios={getPortfolio}
-            />
-          </StyledPaper>
-        </Grid>
-
         {/* Chart */}
         <Grid item xs={12} md={8} lg={9}>
           <FixedHeightPaper>
@@ -161,6 +149,18 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
             polymarketVirtualFunds={polymarketVirtualFunds}
           />
           </FixedHeightPaper>
+        </Grid>
+
+        {/* Strategy Portfolio */}
+        <Grid item xs={12}>
+          <StyledPaper>
+            <Portfolios
+              accountBalance={accountBalance}
+              portfolios={portfolios}
+              onViewStrategyLogs={onViewStrategyLogs}
+              refreshPortfolios={getPortfolio}
+            />
+          </StyledPaper>
         </Grid>
 
         {/* Stocks */}
