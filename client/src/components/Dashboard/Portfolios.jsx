@@ -1,4 +1,4 @@
-import React, { useContext, useState } from "react";
+import React, { useContext, useEffect, useState } from "react";
 import { Link, Collapse, IconButton, Modal, Button, Typography, useTheme, LinearProgress, Box, TextField, MenuItem, CircularProgress, Tooltip, Dialog, DialogTitle, DialogContent, DialogActions, Divider, Chip } from "@mui/material";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
@@ -29,6 +29,23 @@ import {
 
 
 
+
+const PORTFOLIO_FILTER_STORAGE_KEY = "tradingapp:portfolioFilter";
+
+const loadPortfolioFilter = () => {
+  if (typeof window === "undefined") {
+    return "all";
+  }
+  try {
+    const raw = window.localStorage.getItem(PORTFOLIO_FILTER_STORAGE_KEY);
+    if (raw === "composer" || raw === "polymarket" || raw === "all") {
+      return raw;
+    }
+  } catch {
+    // ignore storage errors
+  }
+  return "all";
+};
 
 const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
   const navigate = useNavigate();
@@ -63,7 +80,7 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
     saving: false,
     error: null,
   });
-  const [portfolioFilter, setPortfolioFilter] = useState("all");
+  const [portfolioFilter, setPortfolioFilter] = useState(() => loadPortfolioFilter());
   const [aiPortfolioDialog, setAiPortfolioDialog] = useState({
     open: false,
     name: "",
@@ -71,6 +88,14 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
     apiUrl: "",
   });
   const [aiPortfolioCopied, setAiPortfolioCopied] = useState(false);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(PORTFOLIO_FILTER_STORAGE_KEY, portfolioFilter);
+    } catch {
+      // ignore storage errors
+    }
+  }, [portfolioFilter]);
 
 
 
