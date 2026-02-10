@@ -9,7 +9,7 @@ import Title from "../Template/Title.jsx";
 import SaleModal from "./SaleModal";
 import styles from "./Dashboard.module.css";
 
-const Purchases = ({ purchasedStocks = [] }) => {
+const Purchases = ({ purchasedStocks = [], showTitle = true }) => {
   const [saleOpen, setSaleOpen] = useState(false);
   const [stock, setStock] = useState(undefined);
   
@@ -33,7 +33,7 @@ let allStocksHaveAvgCost = true;
   return (
     <React.Fragment>
       <div style={{ minHeight: "200px" }}>
-        <Title>Stocks in Your Portfolio</Title>
+        {showTitle && <Title>Stocks in Your Portfolio</Title>}
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -161,4 +161,3 @@ let allStocksHaveAvgCost = true;
 };
 
 export default Purchases;
-

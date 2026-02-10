@@ -10,7 +10,7 @@ import Typography from "@mui/material/Typography";
 import Box from "@mui/material/Box";
 import Title from "../Template/Title.jsx";
 
-const Orders = ({ orderList = { orders: [] }, loading = false, error = null }) => {
+const Orders = ({ orderList = { orders: [] }, loading = false, error = null, showTitle = true }) => {
   const orders = Array.isArray(orderList.orders) ? orderList.orders : [];
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -74,7 +74,7 @@ const Orders = ({ orderList = { orders: [] }, loading = false, error = null }) =
   return (
     <React.Fragment>
       <div style={{ minHeight: "200px", display: "flex", flexDirection: "column" }}>
-        <Title>Order History</Title>
+        {showTitle && <Title>Order History</Title>}
 
         {loading && (
           <Box sx={{ display: "flex", justifyContent: "center", py: 2 }}>

@@ -4,13 +4,14 @@ import config from "../../config/Config";
 import styles from "../Template/PageTemplate.module.css";
 import clsx from "clsx";
 import { styled } from "@mui/system";
-import { Box, Container, Grid, Paper } from "@mui/material";
+import { Box, Container, Divider, Grid, Paper, Typography } from "@mui/material";
 import Chart from "./Chart";
 import Balance from "./Balance";
 import Purchases from "./Purchases";
 import Portfolios from "./Portfolios";
 import Orders from "./Orders";
 import Copyright from "../Template/Copyright";
+import Title from "../Template/Title.jsx";
 import { logDebug, logWarn, logError } from "../../utils/logger";
 
 const StyledPaper = styled(Paper)(({ theme }) => ({
@@ -132,6 +133,18 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
   return (
     <Container maxWidth="lg" className={styles.container}>
       <Grid container spacing={3} marginTop="15px">
+        {/* Strategy Portfolio */}
+        <Grid item xs={12}>
+          <StyledPaper>
+            <Portfolios
+              accountBalance={accountBalance}
+              portfolios={portfolios}
+              onViewStrategyLogs={onViewStrategyLogs}
+              refreshPortfolios={getPortfolio}
+            />
+          </StyledPaper>
+        </Grid>
+
         {/* Chart */}
         <Grid item xs={12} md={8} lg={9}>
           <FixedHeightPaper>
@@ -150,31 +163,34 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
           </FixedHeightPaper>
         </Grid>
 
-        {/* General Portfolio */}
+        {/* Stocks */}
         <Grid item xs={12}>
           <StyledPaper>
-            <Purchases accountBalance={accountBalance} purchasedStocks={purchasedStocks}/>
-          </StyledPaper>
-        </Grid>
-
-        {/* Strategy Portfolio */}
-        {portfolios && portfolios.length > 0 && (
-          <Grid item xs={12}>
-            <StyledPaper>
-              <Portfolios
-                accountBalance={accountBalance}
-                portfolios={portfolios}
-                onViewStrategyLogs={onViewStrategyLogs}
-                refreshPortfolios={getPortfolio}
-              />
-            </StyledPaper>
-          </Grid>
-        )}
-
-        {/* Orders History */}
-        <Grid item xs={12}>
-          <StyledPaper>
-            <Orders orderList={orderList} loading={ordersLoading} error={ordersError} />
+            <Title>Stocks</Title>
+            <Box sx={{ display: "flex", flexDirection: "column", gap: 2 }}>
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                  Stocks in Your Portfolio
+                </Typography>
+                <Purchases
+                  accountBalance={accountBalance}
+                  purchasedStocks={purchasedStocks}
+                  showTitle={false}
+                />
+              </Box>
+              <Divider />
+              <Box>
+                <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 1 }}>
+                  Order History
+                </Typography>
+                <Orders
+                  orderList={orderList}
+                  loading={ordersLoading}
+                  error={ordersError}
+                  showTitle={false}
+                />
+              </Box>
+            </Box>
           </StyledPaper>
         </Grid>
       </Grid>
