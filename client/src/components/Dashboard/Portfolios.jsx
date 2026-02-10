@@ -878,7 +878,7 @@ const deleteStrategy = async (strategyId) => {
                     {portfolio.name}
                   </Box>
                 )}
-                {portfolio.provider === "polymarket" && Boolean(portfolio.isRealMoney) && (
+                {Boolean(portfolio.isRealMoney) && (
                   <Chip
                     label="real money"
                     size="small"
@@ -888,7 +888,7 @@ const deleteStrategy = async (strategyId) => {
                     onClick={(event) => event.stopPropagation()}
                   />
                 )}
-                {portfolio.provider === "polymarket" && !portfolio.isRealMoney && Boolean(portfolio.isRealMoneyRequested) && (
+                {!portfolio.isRealMoney && Boolean(portfolio.isRealMoneyRequested) && (
                   <Chip
                     label="real money (disabled)"
                     size="small"

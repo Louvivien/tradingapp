@@ -33,6 +33,10 @@ const {
   getPolymarketExecutionMode: getEnvPolymarketExecutionMode,
   getPolymarketBalanceAllowance: fetchPolymarketBalanceAllowance,
 } = require('../services/polymarketExecutionService');
+const {
+  getEnvAlpacaExecutionMode,
+  normalizeExecutionModeOverride: normalizeAlpacaExecutionModeOverride,
+} = require('../services/alpacaExecutionService');
 const { runEquityBackfill, TASK_NAME: EQUITY_BACKFILL_TASK } = require('../services/equityBackfillService');
 const {
   addSubscriber,
@@ -857,6 +861,26 @@ exports.createCollaborative = async (req, res) => {
       req.body?.cashLimit !== undefined ? req.body.cashLimit : req.body?.budget,
       null
     );
+
+    const requestedExecutionMode = (() => {
+      const override =
+        normalizeAlpacaExecutionModeOverride(req.body?.executionMode) ??
+        normalizeAlpacaExecutionModeOverride(req.body?.realMoney) ??
+        normalizeAlpacaExecutionModeOverride(req.body?.realTrading) ??
+        normalizeAlpacaExecutionModeOverride(req.body?.liveTrading) ??
+        normalizeAlpacaExecutionModeOverride(req.body?.enableRealTrading);
+      return override || 'paper';
+    })();
+    const envExecutionMode = getEnvAlpacaExecutionMode();
+    if (requestedExecutionMode === 'live' && envExecutionMode !== 'live') {
+      return progressFail(
+        400,
+        'Live trading is disabled on this server. Set ALPACA_EXECUTION_MODE=live to enable real money strategies.',
+        'validation',
+        { envExecutionMode }
+      );
+    }
+
     const parseJsonData = (fullMessage) => {
       if (!fullMessage) {
         throw new Error("Empty response from OpenAI");
@@ -993,8 +1017,17 @@ exports.createCollaborative = async (req, res) => {
       console.log('Decision rationale:', JSON.stringify(workingDecisions, null, 2));
     }
 
-    const alpacaConfig = await getAlpacaConfig(UserID);
-    console.log("config key done");
+    let alpacaConfig;
+    try {
+      alpacaConfig = await getAlpacaConfig(UserID, requestedExecutionMode);
+      console.log("config key done");
+    } catch (error) {
+      return progressFail(
+        400,
+        error?.message || 'Invalid Alpaca credentials for strategy creation.',
+        'validation'
+      );
+    }
 
     const alpacaApi = new Alpaca(alpacaConfig);
     console.log("connected to alpaca");
@@ -1378,6 +1411,7 @@ exports.createCollaborative = async (req, res) => {
       orders,
       UserID,
       {
+        executionMode: requestedExecutionMode,
         budget: cashLimitInput,
         cashLimit: cashLimitInput,
         targetPositions: executedTargets,
@@ -3911,7 +3945,11 @@ exports.rebalanceNow = async (req, res) => {
     });
   } catch (error) {
     const message = String(error?.message || 'Failed to rebalance now.');
-    const statusCode = message.includes('Rebalance already in progress') ? 409 : 500;
+    const statusCode = message.includes('Rebalance already in progress')
+      ? 409
+      : message.toLowerCase().includes('live trading is disabled')
+        ? 400
+        : 500;
     console.error('[RebalanceNow] Failed:', message);
     return res.status(statusCode).json({
       status: 'fail',
@@ -3940,55 +3978,6 @@ exports.getPortfolios = async (req, res) => {
       });
     }
 
-    let accountCash = 0;
-    let positions = [];
-    const positionMap = {};
-    const priceCache = {};
-    let tradingKeys = null;
-    let dataKeys = null;
-
-    let alpacaConfig = null;
-    try {
-      alpacaConfig = await getAlpacaConfig(userId);
-    } catch (error) {
-      alpacaConfig = null;
-    }
-
-    if (alpacaConfig?.hasValidKeys) {
-      tradingKeys = alpacaConfig.getTradingKeys();
-      dataKeys = alpacaConfig.getDataKeys();
-
-      const [positionsResponse, accountResponse] = await Promise.all([
-        tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
-          headers: {
-            'APCA-API-KEY-ID': tradingKeys.keyId,
-            'APCA-API-SECRET-KEY': tradingKeys.secretKey,
-          },
-        }),
-        tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/account`, {
-          headers: {
-            'APCA-API-KEY-ID': tradingKeys.keyId,
-            'APCA-API-SECRET-KEY': tradingKeys.secretKey,
-          },
-        }),
-      ]);
-
-      accountCash = toNumber(accountResponse?.data?.cash, 0);
-      positions = Array.isArray(positionsResponse.data) ? positionsResponse.data : [];
-
-      positions.forEach((position) => {
-        const symbol = sanitizeSymbol(position.symbol);
-        if (!symbol) {
-          return;
-        }
-        positionMap[symbol] = position;
-        const price = toNumber(position.current_price, toNumber(position.avg_entry_price, null));
-        if (price) {
-          priceCache[symbol] = price;
-        }
-      });
-    }
-
     const rawPortfolios = await Portfolio.find({
       userId: String(userId),
     }).lean();
@@ -3997,9 +3986,105 @@ exports.getPortfolios = async (req, res) => {
       return res.json({
         status: 'success',
         portfolios: [],
-        cash: accountCash,
+        cash: 0,
+        cashByMode: { paper: null, live: null },
       });
     }
+
+    const envAlpacaExecutionMode = getEnvAlpacaExecutionMode();
+
+    const needsLiveSnapshot = rawPortfolios.some((portfolio) => {
+      const provider = String(portfolio?.provider || 'alpaca');
+      if (provider === 'polymarket') {
+        return false;
+      }
+      const requested = normalizeAlpacaExecutionModeOverride(portfolio?.alpaca?.executionMode) || 'paper';
+      return requested === 'live';
+    });
+
+    const needsPaperSnapshot = rawPortfolios.some((portfolio) => {
+      const provider = String(portfolio?.provider || 'alpaca');
+      if (provider === 'polymarket') {
+        return false;
+      }
+      const requested = normalizeAlpacaExecutionModeOverride(portfolio?.alpaca?.executionMode) || 'paper';
+      return requested !== 'live';
+    });
+
+    const fetchSnapshot = async (mode) => {
+      try {
+        const alpacaConfig = await getAlpacaConfig(userId, mode);
+        if (!alpacaConfig?.hasValidKeys) {
+          return null;
+        }
+
+        const tradingKeys = alpacaConfig.getTradingKeys();
+        const dataKeys = alpacaConfig.getDataKeys();
+
+        const [positionsResponse, accountResponse] = await Promise.all([
+          tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/positions`, {
+            headers: {
+              'APCA-API-KEY-ID': tradingKeys.keyId,
+              'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+            },
+          }),
+          tradingKeys.client.get(`${tradingKeys.apiUrl}/v2/account`, {
+            headers: {
+              'APCA-API-KEY-ID': tradingKeys.keyId,
+              'APCA-API-SECRET-KEY': tradingKeys.secretKey,
+            },
+          }),
+        ]);
+
+        const accountCash = toNumber(accountResponse?.data?.cash, 0);
+        const positions = Array.isArray(positionsResponse.data) ? positionsResponse.data : [];
+        const positionMap = {};
+        const priceCache = {};
+
+        positions.forEach((position) => {
+          const symbol = sanitizeSymbol(position.symbol);
+          if (!symbol) {
+            return;
+          }
+          positionMap[symbol] = position;
+          const price = toNumber(position.current_price, toNumber(position.avg_entry_price, null));
+          if (price) {
+            priceCache[symbol] = price;
+          }
+        });
+
+        return {
+          mode,
+          accountCash,
+          positions,
+          positionMap,
+          priceCache,
+          tradingKeys,
+          dataKeys,
+        };
+      } catch (error) {
+        return null;
+      }
+    };
+
+    const snapshots = {
+      paper: needsPaperSnapshot ? await fetchSnapshot('paper') : null,
+      live: needsLiveSnapshot ? await fetchSnapshot('live') : null,
+    };
+
+    const cashByMode = {
+      paper: snapshots.paper?.accountCash ?? null,
+      live: snapshots.live?.accountCash ?? null,
+    };
+
+    const accountCash = cashByMode.paper ?? cashByMode.live ?? 0;
+
+    const combinedPriceCache = {
+      ...(snapshots.paper?.priceCache || {}),
+      ...(snapshots.live?.priceCache || {}),
+    };
+
+    const dataKeys = snapshots.live?.dataKeys || snapshots.paper?.dataKeys || null;
 
     const symbolsToFetch = new Set();
     rawPortfolios.forEach((portfolio) => {
@@ -4008,13 +4093,13 @@ exports.getPortfolios = async (req, res) => {
       }
       (portfolio.stocks || []).forEach((stock) => {
         const symbol = sanitizeSymbol(stock.symbol);
-        if (symbol && priceCache[symbol] == null) {
+        if (symbol && combinedPriceCache[symbol] == null) {
           symbolsToFetch.add(symbol);
         }
       });
       (portfolio.targetPositions || []).forEach((target) => {
         const symbol = sanitizeSymbol(target.symbol);
-        if (symbol && priceCache[symbol] == null) {
+        if (symbol && combinedPriceCache[symbol] == null) {
           symbolsToFetch.add(symbol);
         }
       });
@@ -4033,7 +4118,7 @@ exports.getPortfolios = async (req, res) => {
             });
             const price = toNumber(data?.trade?.p, null);
             if (price) {
-              priceCache[symbol] = price;
+              combinedPriceCache[symbol] = price;
             }
           } catch (error) {
             console.warn(`[Portfolios] Failed to fetch latest price for ${symbol}: ${error.message}`);
@@ -4079,6 +4164,11 @@ exports.getPortfolios = async (req, res) => {
     const enhancedPortfolios = rawPortfolios.map((portfolio) => {
       const provider = String(portfolio?.provider || 'alpaca');
       const envExecutionMode = provider === 'polymarket' ? getEnvPolymarketExecutionMode() : null;
+      const alpacaRequestedExecutionMode = provider === 'polymarket'
+        ? null
+        : (normalizeAlpacaExecutionModeOverride(portfolio?.alpaca?.executionMode) || 'paper');
+      const alpacaSnapshot = alpacaRequestedExecutionMode === 'live' ? snapshots.live : snapshots.paper;
+      const positionMapForMode = alpacaSnapshot?.positionMap || {};
       let normalizedTargets = normalizeTargetPositions(portfolio.targetPositions || []);
       if (!normalizedTargets.length) {
         normalizedTargets = normalizeTargetPositions(
@@ -4132,7 +4222,7 @@ exports.getPortfolios = async (req, res) => {
         }
 
         const symbol = sanitizeSymbol(stock.symbol);
-        const alpacaPosition = symbol ? positionMap[symbol] : null;
+        const alpacaPosition = symbol ? positionMapForMode[symbol] : null;
         const storedQuantity = stock.quantity !== undefined && stock.quantity !== null
           ? toNumber(stock.quantity, 0)
           : 0;
@@ -4151,8 +4241,8 @@ exports.getPortfolios = async (req, res) => {
 
         const currentPrice = hasPendingOrder
           ? null
-          : symbol && priceCache[symbol] !== undefined
-            ? priceCache[symbol]
+          : symbol && combinedPriceCache[symbol] !== undefined
+            ? combinedPriceCache[symbol]
             : toNumber(
                 stock.currentPrice,
                 toNumber(alpacaPosition?.current_price, toNumber(alpacaPosition?.avg_entry_price, null))
@@ -4207,6 +4297,20 @@ exports.getPortfolios = async (req, res) => {
           ? storedPnlPercent
           : (initialInvestment > 0 ? (pnlValue / initialInvestment) * 100 : null);
 
+      const polymarketRequestedExecutionMode =
+        provider === 'polymarket'
+          ? (portfolio?.polymarket?.executionMode
+            ? String(portfolio.polymarket.executionMode).trim().toLowerCase()
+            : 'paper')
+          : 'paper';
+
+      const alpacaEffectiveExecutionMode =
+        provider === 'polymarket'
+          ? null
+          : envAlpacaExecutionMode === 'live'
+            ? alpacaRequestedExecutionMode
+            : 'paper';
+
       return {
         provider,
         name: portfolio.name,
@@ -4242,12 +4346,8 @@ exports.getPortfolios = async (req, res) => {
         polymarket: provider === 'polymarket'
           ? {
               envExecutionMode,
-              executionMode: portfolio?.polymarket?.executionMode
-                ? String(portfolio.polymarket.executionMode).trim().toLowerCase()
-                : 'paper',
-              requestedExecutionMode: portfolio?.polymarket?.executionMode
-                ? String(portfolio.polymarket.executionMode).trim().toLowerCase()
-                : 'paper',
+              executionMode: polymarketRequestedExecutionMode,
+              requestedExecutionMode: polymarketRequestedExecutionMode,
               effectiveExecutionMode: envExecutionMode === 'live'
                 ? (portfolio?.polymarket?.executionMode
                   ? String(portfolio.polymarket.executionMode).trim().toLowerCase()
@@ -4255,19 +4355,32 @@ exports.getPortfolios = async (req, res) => {
                 : 'paper',
             }
           : null,
+        alpaca: provider === 'polymarket'
+          ? null
+          : {
+              envExecutionMode: envAlpacaExecutionMode,
+              executionMode: alpacaRequestedExecutionMode,
+              requestedExecutionMode: alpacaRequestedExecutionMode,
+              effectiveExecutionMode: alpacaEffectiveExecutionMode,
+            },
         isRealMoney:
-          provider === 'polymarket' &&
-          envExecutionMode === 'live' &&
-          String(portfolio?.polymarket?.executionMode || '').trim().toLowerCase() === 'live',
+          (provider === 'polymarket' &&
+            envExecutionMode === 'live' &&
+            String(portfolio?.polymarket?.executionMode || '').trim().toLowerCase() === 'live') ||
+          (provider !== 'polymarket' &&
+            envAlpacaExecutionMode === 'live' &&
+            alpacaRequestedExecutionMode === 'live'),
         isRealMoneyRequested:
-          provider === 'polymarket' &&
-          String(portfolio?.polymarket?.executionMode || '').trim().toLowerCase() === 'live',
+          (provider === 'polymarket' &&
+            String(portfolio?.polymarket?.executionMode || '').trim().toLowerCase() === 'live') ||
+          (provider !== 'polymarket' && alpacaRequestedExecutionMode === 'live'),
       };
     });
 
     return res.json({
       status: 'success',
       cash: accountCash,
+      cashByMode,
       portfolios: enhancedPortfolios,
     });
   } catch (error) {
@@ -4291,6 +4404,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
   console.log('UserID', UserID);
 
   const {
+    executionMode: executionModeInput = null,
     budget = null,
     cashLimit = null,
     targetPositions = [],
@@ -4315,10 +4429,12 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
       targets = normalizeTargetPositions(orders);
     }
 
-    const alpacaConfig = await getAlpacaConfig(UserID);
+    const normalizedExecutionMode = normalizeAlpacaExecutionModeOverride(executionModeInput);
+    const alpacaConfig = await getAlpacaConfig(UserID, normalizedExecutionMode);
     const alpacaApi = new Alpaca(alpacaConfig);
     const clock = await alpacaApi.getClock();
     const now = new Date();
+    const portfolioExecutionMode = normalizedExecutionMode || (alpacaConfig.paper ? 'paper' : 'live');
 
     if (strategyName === 'AI Fund') {
       strategy_id = '01';
@@ -4364,6 +4480,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
         lastRebalancedAt: null,
         nextRebalanceAt: computeNextRebalanceAt(normalizedRecurrence, now),
         targetPositions: targets,
+        alpaca: { executionMode: portfolioExecutionMode },
         budget: toNumber(limitValue, null),
         cashLimit: toNumber(limitValue, null),
         rebalanceCount: 0,
@@ -4543,6 +4660,7 @@ exports.addPortfolio = async (strategyinput, strategyName, orders, UserID, optio
       lastRebalancedAt: now,
       nextRebalanceAt: computeNextRebalanceAt(normalizedRecurrence, now),
       targetPositions: targets,
+      alpaca: { executionMode: portfolioExecutionMode },
       budget: toNumber(limitValue, null),
       cashLimit: toNumber(limitValue, null),
       rebalanceCount: 0,
@@ -4706,7 +4824,18 @@ exports.resendCollaborativeOrders = async (req, res) => {
 
     const strategy = await Strategy.findOne({ strategy_id: strategyId, userId: userKey });
 
-    const alpacaConfig = await getAlpacaConfig(userId);
+    const requestedExecutionMode =
+      normalizeAlpacaExecutionModeOverride(portfolio?.alpaca?.executionMode) || 'paper';
+    const envExecutionMode = getEnvAlpacaExecutionMode();
+    if (requestedExecutionMode === 'live' && envExecutionMode !== 'live') {
+      return res.status(400).json({
+        status: 'fail',
+        message:
+          'Live trading is disabled on this server. Set ALPACA_EXECUTION_MODE=live to resend live orders.',
+      });
+    }
+
+    const alpacaConfig = await getAlpacaConfig(userId, requestedExecutionMode);
     if (!alpacaConfig?.hasValidKeys) {
       throw new Error('Alpaca credentials are invalid for this account.');
     }

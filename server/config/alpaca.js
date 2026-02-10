@@ -172,7 +172,15 @@ const setAlpaca = async (userId, forceMode = null) => {
     const tradingClient = createAlpacaClient();
     const dataClient = createAlpacaClient();
 
+    const normalizeMode = (value) => {
+      const raw = String(value || '').trim().toLowerCase();
+      if (raw === 'paper') return 'paper';
+      if (raw === 'live') return 'live';
+      return null;
+    };
+
     const resolveTradingKeys = (mode = forceMode) => {
+      const normalizedMode = normalizeMode(mode);
       const buildResult = (keyId, secretKey, apiUrl) => ({
         keyId,
         secretKey,
@@ -180,16 +188,18 @@ const setAlpaca = async (userId, forceMode = null) => {
         client: tradingClient
       });
 
-      if (mode === 'paper') {
+      if (normalizedMode === 'paper') {
         if (!paperKeysValid) {
-          console.log('[API Warning] Paper trading mode requested but keys are invalid. Falling back to live trading.');
-          return buildResult(liveKeyId, liveSecretKey, liveApiUrl);
+          return null;
         }
         console.log('[API Info] Forcing paper trading mode');
         return buildResult(paperKeyId, paperSecretKey, paperApiUrl);
       }
 
-      if (mode === 'live' && hasValidLiveKeys) {
+      if (normalizedMode === 'live') {
+        if (!liveKeysValid) {
+          return null;
+        }
         console.log('[API Info] Forcing live trading mode');
         return buildResult(liveKeyId, liveSecretKey, liveApiUrl);
       }
@@ -199,11 +209,29 @@ const setAlpaca = async (userId, forceMode = null) => {
         return buildResult(paperKeyId, paperSecretKey, paperApiUrl);
       }
 
-      console.log('[API Info] Using live trading keys for trading operations (paper trading keys not valid)');
-      return buildResult(liveKeyId, liveSecretKey, liveApiUrl);
+      if (liveKeysValid) {
+        console.log('[API Info] Using live trading keys for trading operations (paper trading keys not valid)');
+        return buildResult(liveKeyId, liveSecretKey, liveApiUrl);
+      }
+
+      return null;
     };
 
-    const defaultTradingKeys = resolveTradingKeys();
+    const defaultTradingKeys = resolveTradingKeys(forceMode);
+    if (!defaultTradingKeys) {
+      const requested = normalizeMode(forceMode);
+      const message =
+        requested === 'paper'
+          ? 'Paper trading mode requested but paper keys are missing/invalid'
+          : requested === 'live'
+            ? 'Live trading mode requested but live keys are missing/invalid'
+            : 'No valid API keys found';
+
+      return {
+        hasValidKeys: false,
+        error: message,
+      };
+    }
 
     // Return configuration with validation results
     return {
@@ -221,8 +249,8 @@ const setAlpaca = async (userId, forceMode = null) => {
       tradingClient: defaultTradingKeys.client,
       hasValidPaperKeys: paperKeysValid,
       hasValidLiveKeys: liveKeysValid,
-      hasValidKeys: paperKeysValid || liveKeysValid,
-      error: !paperKeysValid && !liveKeysValid ? 'No valid API keys found' : null,
+      hasValidKeys: true,
+      error: null,
       getTradingKeys: (mode = forceMode) => resolveTradingKeys(mode),
       getDataKeys: () => ({
         keyId: liveKeysValid ? liveKeyId : paperKeyId,

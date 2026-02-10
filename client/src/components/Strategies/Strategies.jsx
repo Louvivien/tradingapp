@@ -67,6 +67,7 @@ const Strategies = () => {
   const [strategyName, setstrategyName] = useState("");
   const [symphonyUrl, setSymphonyUrl] = useState("");
   const [collaborativeCashLimit, setCollaborativeCashLimit] = useState("");
+  const [collaborativeRealMoney, setCollaborativeRealMoney] = useState(false);
   const [polymarketStrategyName, setPolymarketStrategyName] = useState("");
   const [polymarketAddress, setPolymarketAddress] = useState("");
   const [polymarketCashLimit, setPolymarketCashLimit] = useState("");
@@ -594,6 +595,16 @@ const Strategies = () => {
       return;
     }
 
+    if (collaborativeRealMoney) {
+      const cashLabel = Number(collaborativeCashLimit) > 0 ? `$${Number(collaborativeCashLimit).toLocaleString()}` : "your cash limit";
+      const confirm = window.confirm(
+        `Create REAL money strategy \"${String(strategyName).trim()}\"?\n\nThis will submit MARKET orders to your Alpaca LIVE account (up to ${cashLabel}).\n\nMake sure the server has ALPACA_EXECUTION_MODE=live set.`
+      );
+      if (!confirm) {
+        return;
+      }
+    }
+
     setError(null);
     setResponseReceived(false);
     setStrategySummary("");
@@ -628,6 +639,7 @@ const Strategies = () => {
         symphonyUrl,
         recurrence: collaborativeRecurrence,
         cashLimit: collaborativeCashLimit,
+        executionMode: collaborativeRealMoney ? "live" : "paper",
         jobId,
       };
       if (activeLibraryStrategyId) {
@@ -1025,7 +1037,7 @@ const Strategies = () => {
             <br />
             <TextField
               variant="outlined"
-              label="Cash limit for this strategy"
+              label={collaborativeRealMoney ? "Max cash limit ($, live)" : "Cash limit ($, paper)"}
               value={collaborativeCashLimit}
               onChange={(e) => setCollaborativeCashLimit(e.target.value)}
               fullWidth
@@ -1033,6 +1045,21 @@ const Strategies = () => {
               type="number"
               inputProps={{ min: 0, step: "0.01" }}
             />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={collaborativeRealMoney}
+                  onChange={(event) => setCollaborativeRealMoney(event.target.checked)}
+                />
+              }
+              label="Enable real money trading (Alpaca live)"
+            />
+            {collaborativeRealMoney && (
+              <Typography variant="caption" align="left" sx={{ display: "block", color: "warning.main" }}>
+                Real money mode will place market orders in your Alpaca LIVE account. The server must be configured with{" "}
+                <code>ALPACA_EXECUTION_MODE=live</code> and live API keys.
+              </Typography>
+            )}
             <br />
             <TextField
               select

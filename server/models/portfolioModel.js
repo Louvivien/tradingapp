@@ -250,6 +250,13 @@ const portfolioSchema = new Schema({
       },
     },
   },
+  alpaca: {
+    executionMode: {
+      type: String,
+      default: null,
+      trim: true,
+    },
+  },
   budget: {
     type: Number,
     required: false,

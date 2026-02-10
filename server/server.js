@@ -81,6 +81,7 @@ const cookieParser = require("cookie-parser");
 const cors = require("cors");
 const { schedulePortfolioRebalances, schedulePolymarketProxyPoolRefresh } = require('./scheduler');
 const { getAlpacaConfig } = require('./config/alpacaConfig');
+const { getEnvAlpacaExecutionMode } = require('./services/alpacaExecutionService');
 const {
   getClobAuthCooldownStatus,
   resetClobAuthCooldown,
@@ -190,6 +191,8 @@ const runtimeEnv = {
   encryptionKey: normalizeEnvValue(process.env.ENCRYPTION_KEY || process.env.CryptoJS_secret_key),
   alpacaKeyId: normalizeEnvValue(process.env.ALPACA_API_KEY_ID),
   alpacaSecretKey: normalizeEnvValue(process.env.ALPACA_API_SECRET_KEY),
+  alpacaLiveKeyId: normalizeEnvValue(process.env.ALPACA_LIVE_API_KEY_ID),
+  alpacaLiveSecretKey: normalizeEnvValue(process.env.ALPACA_LIVE_API_SECRET_KEY),
 };
 
 const missingCriticalVars = [];
@@ -208,11 +211,12 @@ if (!runtimeEnv.alpacaSecretKey || isPlaceholder(runtimeEnv.alpacaSecretKey)) mi
 console.log('[Config] API Key Configuration:');
 console.log('[Config] - Paper Trading API Key ID:', process.env.ALPACA_API_KEY_ID ? 'Set' : 'Missing');
 console.log('[Config] - Paper Trading Secret Key:', process.env.ALPACA_API_SECRET_KEY ? 'Set' : 'Missing');
-if (process.env.ALPACA_LIVE_API_KEY_ID && process.env.ALPACA_LIVE_API_SECRET_KEY) {
+console.log('[Config] - Alpaca execution mode:', getEnvAlpacaExecutionMode());
+if (runtimeEnv.alpacaLiveKeyId && runtimeEnv.alpacaLiveSecretKey) {
   console.log('[Config] - Live Trading API Key ID: Set');
   console.log('[Config] - Live Trading Secret Key: Set');
-} else {
-  console.warn('[Config] Live trading keys not set; running in paper-only mode.');
+} else if (getEnvAlpacaExecutionMode() === 'live') {
+  console.warn('[Config] ALPACA_EXECUTION_MODE=live but live trading keys are not set.');
 }
 
 // Middleware
@@ -273,10 +277,16 @@ app.get("/api/health", (req, res) => {
       authAddressPresent: Boolean(polymarketAuthAddress),
       authAddressValid: polymarketAuthAddressValid,
     },
+    alpaca: {
+      executionMode: getEnvAlpacaExecutionMode(),
+      paperKeysPresent: Boolean(runtimeEnv.alpacaKeyId && runtimeEnv.alpacaSecretKey),
+      liveKeysPresent: Boolean(runtimeEnv.alpacaLiveKeyId && runtimeEnv.alpacaLiveSecretKey),
+    },
     env: {
       missingCritical: missingCriticalVars,
       missingOptional: missingOptionalVars,
       hasAlpacaKeys: Boolean(runtimeEnv.alpacaKeyId && runtimeEnv.alpacaSecretKey),
+      hasAlpacaLiveKeys: Boolean(runtimeEnv.alpacaLiveKeyId && runtimeEnv.alpacaLiveSecretKey),
     },
   });
 });

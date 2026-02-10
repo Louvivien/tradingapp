@@ -39,6 +39,36 @@ const MAX_LOOKBACK_DAYS = (() => {
 })();
 const CACHE_TTL_HOURS = 24;
 const SKIP_DB_CACHE = normalizeBoolean(process.env.PRICE_CACHE_SKIP_DB) === true;
+
+const DEFAULT_PRICE_CACHE_STORE_MAX_BARS = 1200; // ~5y of daily bars (trading days)
+const PRICE_CACHE_STORE_MAX_BARS = (() => {
+  const raw = process.env.PRICE_CACHE_STORE_MAX_BARS;
+  if (raw == null || String(raw).trim() === '') {
+    return DEFAULT_PRICE_CACHE_STORE_MAX_BARS;
+  }
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_PRICE_CACHE_STORE_MAX_BARS;
+  }
+  if (parsed <= 0) {
+    return null;
+  }
+  return Math.floor(parsed);
+})();
+
+const trimBarsForStorage = (bars = []) => {
+  if (!Array.isArray(bars)) {
+    return [];
+  }
+  if (!PRICE_CACHE_STORE_MAX_BARS) {
+    return bars;
+  }
+  if (bars.length <= PRICE_CACHE_STORE_MAX_BARS) {
+    return bars;
+  }
+  return bars.slice(-PRICE_CACHE_STORE_MAX_BARS);
+};
+
 const toISO = (value) => {
   const date = value instanceof Date ? value : new Date(value);
   return date.toISOString();
@@ -1118,25 +1148,41 @@ const getCachedPrices = async ({
       source: resolvedSource,
       minBars: minBarsNeeded,
     });
+    const fetchedSubset = subsetBars(bars || []);
+    if (!fetchedSubset.length) {
+      throw new Error(`Fetched data for ${uppercaseSymbol} does not cover the requested range.`);
+    }
+    const barsToStore = trimBarsForStorage(bars || []);
     const writeQuery =
       resolvedAdjustment === 'raw'
         ? { ...baseQuery, dataSource, $or: [{ adjustment: 'raw' }, { adjustment: { $exists: false } }] }
         : { ...baseQuery, dataSource, adjustment: resolvedAdjustment };
-    cache = await PriceCache.findOneAndUpdate(
-      writeQuery,
-      {
-        symbol: uppercaseSymbol,
-        start: bars[0].t,
-        end: bars[bars.length - 1].t,
-        bars,
+    try {
+      cache = await PriceCache.findOneAndUpdate(
+        writeQuery,
+        {
+          symbol: uppercaseSymbol,
+          start: barsToStore[0]?.t ?? null,
+          end: barsToStore[barsToStore.length - 1]?.t ?? null,
+          bars: barsToStore,
+          granularity: '1Day',
+          adjustment: resolvedAdjustment,
+          refreshedAt: new Date(),
+          dataSource,
+        },
+        { new: true, upsert: true }
+      );
+    } catch (cacheWriteError) {
+      console.warn(
+        `[PriceCache] Failed to write Mongo cache for ${uppercaseSymbol}: ${cacheWriteError.message}`
+      );
+      cache = {
         granularity: '1Day',
-        adjustment: resolvedAdjustment,
         refreshedAt: new Date(),
         dataSource,
-      },
-      { new: true, upsert: true }
-    );
-    subset = subsetBars(cache.bars || []);
+      };
+    }
+    subset = fetchedSubset;
   }
 
   if (!subset.length) {

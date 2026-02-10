@@ -1,5 +1,24 @@
 const mongoose = require('mongoose');
 
+const parseTtlDays = (value, defaultDays) => {
+  if (value == null) {
+    return defaultDays;
+  }
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    return defaultDays;
+  }
+  if (parsed <= 0) {
+    return null;
+  }
+  return Math.floor(parsed);
+};
+
+// Expire unused price-cache docs to keep MongoDB storage bounded.
+// Note: this is separate from the in-app freshness check (CACHE_TTL_HOURS in priceCacheService).
+// Set PRICE_CACHE_DB_TTL_DAYS<=0 to disable TTL.
+const PRICE_CACHE_DB_TTL_DAYS = parseTtlDays(process.env.PRICE_CACHE_DB_TTL_DAYS, 30);
+
 const barSchema = new mongoose.Schema(
   {
     t: { type: Date, required: true },
@@ -29,6 +48,12 @@ const priceCacheSchema = new mongoose.Schema(
 );
 
 priceCacheSchema.index({ symbol: 1, granularity: 1, adjustment: 1 });
+if (PRICE_CACHE_DB_TTL_DAYS) {
+  priceCacheSchema.index(
+    { refreshedAt: 1 },
+    { expireAfterSeconds: PRICE_CACHE_DB_TTL_DAYS * 24 * 60 * 60 }
+  );
+}
 
 const PriceCache = mongoose.model('PriceCache', priceCacheSchema);
 

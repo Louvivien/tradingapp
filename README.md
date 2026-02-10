@@ -111,6 +111,18 @@ npm run start
 
 Code explanation: [Video](https://www.loom.com/share/2411f7d34ea1491ab22c166957e107de) 
 
+## Alpaca live (real money) strategies
+By default, TradingApp uses **paper** trading for Alpaca.
+
+To enable **real money** (Alpaca live) strategy execution:
+- Set Alpaca live keys in the server environment: `ALPACA_LIVE_API_KEY_ID`, `ALPACA_LIVE_API_SECRET_KEY`
+- Enable live execution explicitly (safety gate): `ALPACA_EXECUTION_MODE=live`
+
+Then, in the UI:
+- Go to **Strategies → Collaborative strategy**
+- Check **Enable real money trading (Alpaca live)**
+- Set your **cash limit** (the server also caps it to available account cash)
+
 ## Polymarket (Copy Trader)
 The Polymarket “copy trader (paper)” strategy syncs trades for a given wallet address.
 
@@ -186,6 +198,25 @@ If you override these settings (ex: `RSI_METHOD=simple` or `PRICE_DATA_SOURCE=al
 These endpoints are helpful when investigating mismatched holdings vs expected allocation:
 - Diagnose allocation inputs/trace: `GET /api/strategies/diagnose/:userId/:strategyId`
 - Trigger an immediate rebalance: `POST /api/strategies/rebalance-now/:userId/:strategyId`
+
+## Troubleshooting
+
+### MongoDB “over your space quota (512 MB of 512 MB)”
+This means your MongoDB tier is out of storage (common on free/small clusters). Writes will fail, which can break rebalances and prevent logs from being recorded.
+
+Fix it now:
+- Delete old data (often `PriceCache` and/or `StrategyLog`) or upgrade your MongoDB tier.
+- Optional helper script (safe by default):
+  - Report only: `cd tradingapp/server && npm run mongo:cleanup -- --report`
+  - Drop price cache (rebuilds automatically): `cd tradingapp/server && npm run mongo:cleanup -- --dropPriceCache --confirm`
+  - Prune logs older than 14 days: `cd tradingapp/server && npm run mongo:cleanup -- --pruneStrategyLogsDays 14 --confirm`
+
+Prevent it from coming back (server env vars):
+- `STRATEGY_LOG_TTL_DAYS` (default `14`): auto-delete old strategy logs.
+- `STRATEGY_EQUITY_SNAPSHOT_TTL_DAYS` (default `180`): auto-delete old equity snapshots.
+- `PRICE_CACHE_DB_TTL_DAYS` (default `30`): auto-delete price cache docs that haven't been refreshed recently.
+- `PRICE_CACHE_STORE_MAX_BARS` (default `1200`): cap how many daily bars are stored per symbol in Mongo (reduces DB size).
+- `PRICE_CACHE_SKIP_DB=true`: disable MongoDB price caching entirely (fetches still work; no DB writes).
 
 
 

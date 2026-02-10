@@ -8,6 +8,7 @@
   "scripts": {
     "test": "jest --runInBand",
     "start": "node server.js",
+    "mongo:cleanup": "node scripts/mongo_cleanup.js",
     "compare:composer": "node scripts/compareComposerHoldings.js",
     "compare:composer-link": "node scripts/compareComposerLinkHoldings.js",
     "compare:composer-links-db": "node scripts/compareComposerLinksFromDb.js"

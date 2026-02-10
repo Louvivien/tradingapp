@@ -4,6 +4,10 @@ const StrategyEquitySnapshot = require('../models/strategyEquitySnapshotModel');
 const { getAlpacaConfig } = require('../config/alpacaConfig');
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('./strategyLogger');
+const {
+  getEnvAlpacaExecutionMode,
+  normalizeExecutionModeOverride: normalizeAlpacaExecutionModeOverride,
+} = require('./alpacaExecutionService');
 const { runComposerStrategy } = require('../utils/openaiComposerStrategy');
 const {
   parseSymphonyIdFromUrl,
@@ -1244,15 +1248,71 @@ const rebalancePortfolio = async (portfolio) => {
   }
   const strategy = await Strategy.findOne(strategyQuery);
   const recurrence = normalizeRecurrence(portfolio.recurrence || strategy?.recurrence);
-  const alpacaConfig = await getAlpacaConfig(portfolio.userId);
+  const now = new Date();
+  const envExecutionMode = getEnvAlpacaExecutionMode();
+  const storedExecutionMode = normalizeAlpacaExecutionModeOverride(portfolio?.alpaca?.executionMode);
+
+  const skipLiveRebalance = async ({ reason }) => {
+    const scheduledAt = computeNextRebalanceAt(recurrence, now);
+    portfolio.nextRebalanceAt = scheduledAt;
+    portfolio.nextRebalanceManual = false;
+    portfolio.recurrence = recurrence;
+    await portfolio.save();
+
+    await recordStrategyLog({
+      strategyId: portfolio.strategy_id,
+      userId: portfolio.userId,
+      strategyName: portfolio.name,
+      level: 'warn',
+      message: 'Skipped rebalance: live trading disabled',
+      details: {
+        provider: 'alpaca',
+        reason,
+        envExecutionMode,
+        requestedExecutionMode: storedExecutionMode || 'auto',
+        rescheduledFor: scheduledAt.toISOString(),
+      },
+    });
+  };
+
+  if (storedExecutionMode === 'live' && envExecutionMode !== 'live') {
+    if (portfolio.nextRebalanceManual) {
+      throw new Error(
+        'Live trading is disabled on this server. Set ALPACA_EXECUTION_MODE=live to enable real money rebalancing.'
+      );
+    }
+    await skipLiveRebalance({ reason: 'ALPACA_EXECUTION_MODE is not live.' });
+    return;
+  }
+
+  const alpacaConfig = await getAlpacaConfig(portfolio.userId, storedExecutionMode);
 
   if (!alpacaConfig?.hasValidKeys) {
     throw new Error('Invalid Alpaca credentials for portfolio rebalancing');
   }
 
+  const actualExecutionMode = storedExecutionMode
+    || (alpacaConfig.paper === true ? 'paper' : alpacaConfig.paper === false ? 'live' : 'paper');
+
+  if (actualExecutionMode === 'live' && envExecutionMode !== 'live') {
+    if (portfolio.nextRebalanceManual) {
+      throw new Error(
+        'Live trading is disabled on this server. Set ALPACA_EXECUTION_MODE=live to enable real money rebalancing.'
+      );
+    }
+    await skipLiveRebalance({ reason: 'Auto-selected live trading but ALPACA_EXECUTION_MODE is not live.' });
+    return;
+  }
+
+  if (!storedExecutionMode) {
+    portfolio.alpaca = portfolio.alpaca || {};
+    if (!portfolio.alpaca.executionMode) {
+      portfolio.alpaca.executionMode = actualExecutionMode;
+    }
+  }
+
   const tradingKeys = alpacaConfig.getTradingKeys();
   const dataKeys = alpacaConfig.getDataKeys();
-  const now = new Date();
   const snapshotSizingEnabled =
     String(process.env.COMPOSER_LOCK_SNAPSHOT_QTY ?? 'true').toLowerCase() !== 'false';
   const maxSnapshotDriftPct = normalizePercentValue(
