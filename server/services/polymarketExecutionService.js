@@ -1105,6 +1105,42 @@ const PROXY_FACTORY_ABI = [
 
 const NEG_RISK_ADAPTER_MIN_ABI = ['function redeemPositions(bytes32 conditionId, uint256[] amounts)'];
 
+const getRedeemGasOverrides = () => {
+  const overrides = {};
+  const maxFeePerGas = normalizeEnvValue(process.env.POLYMARKET_REDEEM_MAX_FEE_GWEI);
+  const maxPriorityFee = normalizeEnvValue(process.env.POLYMARKET_REDEEM_PRIORITY_FEE_GWEI);
+  const gasLimit = normalizeEnvValue(process.env.POLYMARKET_REDEEM_GAS_LIMIT);
+
+  if (maxFeePerGas) {
+    const parsed = Number(maxFeePerGas);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      overrides.maxFeePerGas = utils.parseUnits(String(parsed), 'gwei');
+    }
+  }
+  if (maxPriorityFee) {
+    const parsed = Number(maxPriorityFee);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      overrides.maxPriorityFeePerGas = utils.parseUnits(String(parsed), 'gwei');
+    }
+  }
+  if (gasLimit) {
+    const parsed = Number(gasLimit);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      overrides.gasLimit = Math.floor(parsed);
+    }
+  }
+
+  // Default to 50 gwei max fee and 30 gwei priority if not set (Polygon minimum is ~25 gwei)
+  if (!overrides.maxFeePerGas) {
+    overrides.maxFeePerGas = utils.parseUnits('50', 'gwei');
+  }
+  if (!overrides.maxPriorityFeePerGas) {
+    overrides.maxPriorityFeePerGas = utils.parseUnits('30', 'gwei');
+  }
+
+  return overrides;
+};
+
 const redeemPolymarketWinnings = async (positions = [], options = {}) => {
   const mode = getPolymarketExecutionMode();
   const enabled = parseBoolean(options.enabled ?? process.env.POLYMARKET_AUTO_REDEEM, false);
@@ -1258,6 +1294,7 @@ const redeemPolymarketWinnings = async (positions = [], options = {}) => {
         nonce
       );
       const sigBytes = await buildSafeSignatureBytes(signer, txHash);
+      const safeGasOverrides = { ...getRedeemGasOverrides(), ...(options.txOverrides || {}) };
       const tx = await safe.execTransaction(
         call.to,
         String(call.value ?? 0),
@@ -1269,7 +1306,7 @@ const redeemPolymarketWinnings = async (positions = [], options = {}) => {
         gasToken,
         refundReceiver,
         sigBytes,
-        options.txOverrides || {}
+        safeGasOverrides
       );
       txHashes.push(tx.hash);
       if (waitMs > 0) {
@@ -1281,7 +1318,8 @@ const redeemPolymarketWinnings = async (positions = [], options = {}) => {
 
   // Proxy wallet factory (Magic/Email login) and fallback for other signature types.
   const factory = new Contract(redeemConfig.proxyWalletFactory, PROXY_FACTORY_ABI, signer);
-  const tx = await factory.proxy(calls, options.txOverrides || {});
+  const gasOverrides = { ...getRedeemGasOverrides(), ...(options.txOverrides || {}) };
+  const tx = await factory.proxy(calls, gasOverrides);
   if (waitMs > 0) {
     await provider.waitForTransaction(tx.hash, 1, waitMs).catch(() => {});
   }
