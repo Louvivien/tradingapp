@@ -14,11 +14,13 @@ import {
   Card,
   CardHeader,
   CardContent,
+  Divider,
 } from "@mui/material";
 import { motion } from "framer-motion";
 import CloseIcon from "@mui/icons-material/Close";
 import Axios from "axios";
 import config from "../../config/Config";
+import { copyTextToClipboard } from "../../utils/aiportfolioIntegration";
 
 const SettingsModal = ({ setSettingsOpen }) => {
   return (
@@ -42,6 +44,9 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
   const [ALPACA_API_KEY_ID, setApiKeyId] = useState(userData.user.ALPACA_API_KEY_ID);
   const [ALPACA_API_SECRET_KEY, setApiSecretKey] = useState(userData.user.ALPACA_API_SECRET_KEY);
   const [activateSafetyButton, setActiveSafetyButton] = useState(false);
+  const [showJwt, setShowJwt] = useState(false);
+  const [jwtCopied, setJwtCopied] = useState(false);
+  const [userIdCopied, setUserIdCopied] = useState(false);
 
   
 
@@ -98,6 +103,21 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
     }
   };
 
+  const copyWithFallback = async (value, setFlag) => {
+    const text = String(value || "");
+    if (!text) {
+      return;
+    }
+    const ok = await copyTextToClipboard(text);
+    if (!ok) {
+      // Last-resort fallback that still lets the user copy.
+      window.prompt("Copy this value:", text);
+      return;
+    }
+    setFlag(true);
+    setTimeout(() => setFlag(false), 2000);
+  };
+
   return (
     <Grid
       container
@@ -133,6 +153,58 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
                   autoComplete="Username"
                   value={userData.user.username}
                 />
+
+                <Divider sx={{ my: 2 }} />
+                <Typography component="h2" variant="subtitle1" align="center">
+                  AI Portfolio Integration
+                </Typography>
+                <TextField
+                  variant="outlined"
+                  margin="normal"
+                  fullWidth
+                  InputProps={{ readOnly: true }}
+                  id="tradingapp_user_id"
+                  label="User ID"
+                  value={userData.user.id || ""}
+                />
+                <TextField
+                  variant="outlined"
+                  margin="normal"
+                  fullWidth
+                  InputProps={{ readOnly: true }}
+                  id="tradingapp_base_url"
+                  label="TradingApp base URL"
+                  value={config.base_url || ""}
+                />
+                <TextField
+                  variant="outlined"
+                  margin="normal"
+                  fullWidth
+                  InputProps={{ readOnly: true }}
+                  id="tradingapp_jwt"
+                  label="JWT (x-auth-token)"
+                  type={showJwt ? "text" : "password"}
+                  value={userData.token || ""}
+                />
+                <Box display="flex" justifyContent="center" gap={1} flexWrap="wrap" sx={{ mt: 1 }}>
+                  <Button variant="outlined" onClick={() => setShowJwt((v) => !v)}>
+                    {showJwt ? "Hide JWT" : "Show JWT"}
+                  </Button>
+                  <Button
+                    variant={userIdCopied ? "contained" : "outlined"}
+                    onClick={() => copyWithFallback(userData.user.id, setUserIdCopied)}
+                  >
+                    {userIdCopied ? "Copied user ID" : "Copy user ID"}
+                  </Button>
+                  <Button
+                    variant={jwtCopied ? "contained" : "outlined"}
+                    onClick={() => copyWithFallback(userData.token, setJwtCopied)}
+                    disabled={!userData.token}
+                  >
+                    {jwtCopied ? "Copied JWT" : "Copy JWT"}
+                  </Button>
+                </Box>
+
                 {/* <TextField
                   variant="outlined"
                   margin="normal"
@@ -144,7 +216,7 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
                   autoComplete="balance"
                   value={userData.user.balance}
                 /> */}
-                 <TextField
+                <TextField
                   variant="outlined"
                   margin="normal"
                   fullWidth

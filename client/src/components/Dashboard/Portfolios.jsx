@@ -19,6 +19,12 @@ import { useNavigate } from "react-router-dom";
 import { logError } from "../../utils/logger";
 import StrategyEquityChart from "./StrategyEquityChart";
 import LineChartPort from "../Template/LineChartPort.jsx";
+import {
+  buildAiPortfolioIntegrationLink,
+  buildTradingAppStrategyEquityUrl,
+  copyTextToClipboard,
+  suggestAiPortfolioSymbol,
+} from "../../utils/aiportfolioIntegration";
 
 
 
@@ -58,6 +64,13 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
     error: null,
   });
   const [portfolioFilter, setPortfolioFilter] = useState("all");
+  const [aiPortfolioDialog, setAiPortfolioDialog] = useState({
+    open: false,
+    name: "",
+    link: "",
+    apiUrl: "",
+  });
+  const [aiPortfolioCopied, setAiPortfolioCopied] = useState(false);
 
 
 
@@ -100,6 +113,75 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
       return "—";
     }
     return num.toFixed(3);
+  };
+
+  const pickBaselineInvestment = (portfolio) => {
+    const candidates = [
+      portfolio?.initialInvestment,
+      portfolio?.cashLimit,
+      portfolio?.budget,
+      portfolio?.currentValue,
+    ];
+    for (const v of candidates) {
+      const num = Number(v);
+      if (Number.isFinite(num) && num > 0) {
+        return num;
+      }
+    }
+    return 0;
+  };
+
+  const openAiPortfolioDialog = (portfolio, event) => {
+    if (event?.stopPropagation) {
+      event.stopPropagation();
+    }
+    if (!portfolio?.strategy_id || !userData?.user?.id) {
+      return;
+    }
+
+    const apiUrl = buildTradingAppStrategyEquityUrl({
+      baseUrl: config.base_url,
+      userId: userData.user.id,
+      strategyId: portfolio.strategy_id,
+      limit: 400,
+    });
+
+    const symbol = suggestAiPortfolioSymbol(portfolio);
+    const displayName = portfolio.name || "Strategy";
+    const costPrice = pickBaselineInvestment(portfolio);
+
+    const link = buildAiPortfolioIntegrationLink({
+      symbol,
+      displayName,
+      apiUrl,
+      apiToken: userData?.token,
+      quantity: 1,
+      costPrice,
+      tags: ["TradingApp", "Strategy", portfolio.provider || ""].filter(Boolean),
+    });
+
+    setAiPortfolioCopied(false);
+    setAiPortfolioDialog({
+      open: true,
+      name: displayName,
+      link,
+      apiUrl,
+    });
+  };
+
+  const closeAiPortfolioDialog = () => {
+    setAiPortfolioCopied(false);
+    setAiPortfolioDialog((prev) => ({ ...prev, open: false }));
+  };
+
+  const copyAiPortfolioLink = async () => {
+    const ok = await copyTextToClipboard(aiPortfolioDialog.link);
+    if (!ok) {
+      window.prompt("Copy this link:", aiPortfolioDialog.link);
+      return;
+    }
+    setAiPortfolioCopied(true);
+    setTimeout(() => setAiPortfolioCopied(false), 2000);
   };
 
   const fetchStrategyText = async (strategyId) => {
@@ -817,6 +899,20 @@ const deleteStrategy = async (strategyId) => {
                 >
                   View Logs
                 </Button>
+                <Tooltip
+                  title="Copy an aiportfolio link (includes your JWT). Paste it into aiportfolio ➜ Add Position ➜ Custom API position."
+                  arrow
+                >
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    sx={{ ml: 1 }}
+                    onClick={(event) => openAiPortfolioDialog(portfolio, event)}
+                    disabled={!userData?.token || !portfolio?.strategy_id}
+                  >
+                    AI Portfolio
+                  </Button>
+                </Tooltip>
                 {portfolio.provider !== "polymarket" && (
                   <Button
                     size="small"
@@ -1216,6 +1312,45 @@ const deleteStrategy = async (strategyId) => {
           </Box>
         </Box>
       </Modal>
+
+      <Dialog
+        open={aiPortfolioDialog.open}
+        onClose={closeAiPortfolioDialog}
+        fullWidth
+        maxWidth="md"
+      >
+        <DialogTitle>AI Portfolio link: {aiPortfolioDialog.name || "Strategy"}</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="error" sx={{ mb: 1 }}>
+            This link contains your JWT. Treat it like a password.
+          </Typography>
+          <Typography variant="body2" color="textSecondary" sx={{ mb: 2 }}>
+            In aiportfolio: enable <strong>Custom API position?</strong> then paste this link and click{" "}
+            <strong>Apply link</strong>.
+          </Typography>
+          <TextField
+            label="Copy/paste link"
+            value={aiPortfolioDialog.link}
+            fullWidth
+            multiline
+            minRows={3}
+            InputProps={{ readOnly: true }}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            label="API URL (no token)"
+            value={aiPortfolioDialog.apiUrl}
+            fullWidth
+            InputProps={{ readOnly: true }}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={closeAiPortfolioDialog}>Close</Button>
+          <Button onClick={copyAiPortfolioLink} variant="contained" disabled={!aiPortfolioDialog.link}>
+            {aiPortfolioCopied ? "Copied" : "Copy link"}
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       <Modal
         open={metadataEditor.open}
