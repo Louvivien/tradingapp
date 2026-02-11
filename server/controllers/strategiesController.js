@@ -4377,85 +4377,11 @@ exports.getPortfolios = async (req, res) => {
       };
     });
 
-    // Aggregate Polymarket strategies by address for account-level totals
-    const polymarketAggregation = {};
-    enhancedPortfolios.forEach((portfolio) => {
-      if (portfolio.provider !== 'polymarket') {
-        return;
-      }
-      const address = rawPortfolios.find((p) => p.strategy_id === portfolio.strategy_id)?.polymarket?.address;
-      if (!address) {
-        return;
-      }
-      const normalizedAddress = String(address).trim().toLowerCase();
-      if (!normalizedAddress) {
-        return;
-      }
-
-      if (!polymarketAggregation[normalizedAddress]) {
-        polymarketAggregation[normalizedAddress] = {
-          address: normalizedAddress,
-          strategies: [],
-          totalHoldingsValue: 0,
-          totalCashBuffer: 0,
-          totalEquity: 0,
-          totalInitialInvestment: 0,
-          totalPnlValue: 0,
-          totalPnlPercent: 0,
-        };
-      }
-
-      const agg = polymarketAggregation[normalizedAddress];
-      agg.strategies.push(portfolio.strategy_id);
-
-      const holdingsValue = toNumber(portfolio.currentValue, 0);
-      const cashBuffer = toNumber(portfolio.cashBuffer, 0);
-      const initialInv = toNumber(portfolio.initialInvestment, 0);
-      const pnlVal = toNumber(portfolio.pnlValue, 0);
-
-      agg.totalHoldingsValue += holdingsValue;
-      agg.totalCashBuffer += cashBuffer;
-      agg.totalEquity += holdingsValue + cashBuffer;
-      agg.totalInitialInvestment += initialInv;
-      agg.totalPnlValue += pnlVal;
-    });
-
-    // Calculate aggregate P/L percentages
-    Object.values(polymarketAggregation).forEach((agg) => {
-      if (agg.totalInitialInvestment > 0) {
-        agg.totalPnlPercent = roundToTwo((agg.totalPnlValue / agg.totalInitialInvestment) * 100);
-      }
-      agg.totalHoldingsValue = roundToTwo(agg.totalHoldingsValue);
-      agg.totalCashBuffer = roundToTwo(agg.totalCashBuffer);
-      agg.totalEquity = roundToTwo(agg.totalEquity);
-      agg.totalInitialInvestment = roundToTwo(agg.totalInitialInvestment);
-      agg.totalPnlValue = roundToTwo(agg.totalPnlValue);
-    });
-
-    // Attach aggregation data to each Polymarket portfolio
-    const portfoliosWithAggregation = enhancedPortfolios.map((portfolio) => {
-      if (portfolio.provider !== 'polymarket') {
-        return portfolio;
-      }
-      const address = rawPortfolios.find((p) => p.strategy_id === portfolio.strategy_id)?.polymarket?.address;
-      if (!address) {
-        return portfolio;
-      }
-      const normalizedAddress = String(address).trim().toLowerCase();
-      const accountTotals = polymarketAggregation[normalizedAddress];
-
-      return {
-        ...portfolio,
-        polymarketAccountTotals: accountTotals || null,
-      };
-    });
-
     return res.json({
       status: 'success',
       cash: accountCash,
       cashByMode,
-      portfolios: portfoliosWithAggregation,
-      polymarketAggregation: Object.values(polymarketAggregation),
+      portfolios: enhancedPortfolios,
     });
   } catch (error) {
     console.error('Error in getPortfolios:', error.message);

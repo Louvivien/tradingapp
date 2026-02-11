@@ -1027,46 +1027,12 @@ const deleteStrategy = async (strategyId) => {
                   Orders pending fill — portfolio value and P/L will update once trades execute.
                 </Typography>
               ) : (
-                <React.Fragment>
-                  {portfolio.provider === "polymarket" && portfolio.polymarketAccountTotals && (
-                    <Typography variant="caption" color="textSecondary" sx={{ ml: 6, fontStyle: 'italic' }}>
-                      This strategy's holdings (see account total below):
-                    </Typography>
+                <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
+                  Initial investment: {formatCurrencyValue(initialInvestmentValue)} · Holdings value: {currentValue !== null ? formatCurrencyValue(currentValue) : '—'} · Equity: {equityValue !== null ? formatCurrencyValue(equityValue) : '—'}
+                  {pnlDisplay && (
+                    <> · P/L: <span className={pnlValue >= 0 ? styles.positive : styles.negative}>{pnlDisplay}</span></>
                   )}
-                  <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
-                    Initial investment: {formatCurrencyValue(initialInvestmentValue)} · Holdings value: {currentValue !== null ? formatCurrencyValue(currentValue) : '—'} · Equity: {equityValue !== null ? formatCurrencyValue(equityValue) : '—'}
-                    {pnlDisplay && (
-                      <> · P/L: <span className={pnlValue >= 0 ? styles.positive : styles.negative}>{pnlDisplay}</span></>
-                    )}
-                  </Typography>
-                </React.Fragment>
-              )}
-              {portfolio.provider === "polymarket" && portfolio.polymarketAccountTotals && (
-                <React.Fragment>
-                  <Divider sx={{ ml: 6, mr: 6, mt: 1, mb: 1 }} />
-                  <Typography variant="body2" sx={{ ml: 6, fontWeight: 'bold', color: theme.palette.info.main }}>
-                    📊 Account Total (all strategies on this address):
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
-                    Total Holdings: {formatCurrencyValue(portfolio.polymarketAccountTotals.totalHoldingsValue)}
-                    {' · '}
-                    Total Cash: {formatCurrencyValue(portfolio.polymarketAccountTotals.totalCashBuffer)}
-                    {' · '}
-                    Total Equity: {formatCurrencyValue(portfolio.polymarketAccountTotals.totalEquity)}
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
-                    Total Initial Investment: {formatCurrencyValue(portfolio.polymarketAccountTotals.totalInitialInvestment)}
-                    {' · '}
-                    Account P/L: <span className={portfolio.polymarketAccountTotals.totalPnlValue >= 0 ? styles.positive : styles.negative}>
-                      {portfolio.polymarketAccountTotals.totalPnlValue >= 0 ? '▲' : '▼'}
-                      {formatCurrencyValue(Math.abs(portfolio.polymarketAccountTotals.totalPnlValue))}
-                      {' '}({Math.abs(portfolio.polymarketAccountTotals.totalPnlPercent).toFixed(2)}%)
-                    </span>
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary" sx={{ ml: 6, mb: 1 }}>
-                    Strategies on this account: {portfolio.polymarketAccountTotals.strategies.length}
-                  </Typography>
-                </React.Fragment>
+                </Typography>
               )}
               {limitBaseline !== null && (
                 <React.Fragment>

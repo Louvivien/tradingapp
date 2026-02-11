@@ -3270,44 +3270,6 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 		  portfolio.nextRebalanceAt = computeNextRebalanceAt(normalizeRecurrence(portfolio.recurrence), now);
 		  portfolio.rebalanceCount = toNumber(portfolio.rebalanceCount, 0) + 1;
 		  portfolio.lastPerformanceComputedAt = now;
-
-  // Calculate P/L metrics (similar to rebalanceService.js)
-  const holdingsMarketValue = updatedStocks.reduce((sum, stock) => {
-    const qty = Math.max(0, toNumber(stock?.quantity, 0));
-    const price = toNumber(stock?.currentPrice, null);
-    if (price === null) {
-      return sum;
-    }
-    return sum + (qty * price);
-  }, 0);
-  const totalCostBasis = updatedStocks.reduce((sum, stock) => {
-    const qty = Math.max(0, toNumber(stock?.quantity, 0));
-    const avgCost = toNumber(stock?.avgCost, null);
-    if (avgCost === null) {
-      return sum;
-    }
-    return sum + (qty * avgCost);
-  }, 0);
-
-  const unrealizedPnlValue = roundToTwo(holdingsMarketValue - totalCostBasis);
-  const unrealizedPnlPercent = totalCostBasis > 0 ? roundToTwo((unrealizedPnlValue / totalCostBasis) * 100) : 0;
-
-  // Note: Polymarket strategies don't track realized PnL separately (no sells that lock in gains)
-  // so totalPnl = unrealizedPnl
-  const totalPnlValue = unrealizedPnlValue;
-  const initialInvestment = toNumber(portfolio.initialInvestment, 0);
-  const totalPnlPercent = initialInvestment > 0
-    ? roundToTwo((totalPnlValue / initialInvestment) * 100)
-    : 0;
-
-  portfolio.pnlValue = totalPnlValue !== null ? totalPnlValue : 0;
-  portfolio.pnlPercent = totalPnlPercent !== null ? totalPnlPercent : 0;
-
-  // Set initialInvestment if not already set
-  if (!portfolio.initialInvestment && totalCostBasis > 0) {
-    portfolio.initialInvestment = roundToTwo(totalCostBasis);
-  }
-
 	  ensureStockOrderIds(portfolio.stocks);
 
 	  if (untradeableTokenIds.size > MAX_UNTRADEABLE_TOKEN_IDS) {
