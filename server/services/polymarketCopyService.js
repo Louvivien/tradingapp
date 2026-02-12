@@ -1002,6 +1002,10 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   );
   const liveRebalancePreflightEnabled = parseBoolean(process.env.POLYMARKET_LIVE_REBALANCE_PREFLIGHT, false);
   const liveRebalanceDebugEnabled = parseBoolean(process.env.POLYMARKET_LIVE_REBALANCE_DEBUG, false);
+  const liveRebalanceOrderbookPreflightEnabled = parseBoolean(
+    process.env.POLYMARKET_LIVE_REBALANCE_ORDERBOOK_PREFLIGHT,
+    true
+  );
   const liveHoldingsSourceSetting = normalizeLiveHoldingsSourceSetting(process.env.POLYMARKET_LIVE_HOLDINGS_SOURCE);
   const liveHoldingsReconcilePortfolio = parseBooleanEnvDefault(
     process.env.POLYMARKET_LIVE_RECONCILE_PORTFOLIO,
@@ -2934,6 +2938,151 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     const symbolFor = ({ market, outcome, assetId }) =>
       market ? `PM:${String(market).slice(0, 10)}:${outcome || 'OUTCOME'}` : `PM:${String(assetId).slice(0, 10)}`;
 
+    const orderbookCache = new Map();
+    const fetchClobOrderbook = async (assetId) => {
+      const key = String(assetId || '').trim();
+      if (!key) return null;
+      if (orderbookCache.has(key)) {
+        return orderbookCache.get(key);
+      }
+      let orderbook = null;
+      try {
+        const orderbookResponse = await polymarketAxiosGet(`${CLOB_HOST}/book`, {
+          params: buildGeoParams({ token_id: key }),
+          headers: withClobUserAgent(),
+        });
+        const book = orderbookResponse?.data || null;
+        const bidsRaw = Array.isArray(book?.bids) ? book.bids : [];
+        const asksRaw = Array.isArray(book?.asks) ? book.asks : [];
+        const toLevel = (row) => {
+          const price = toNumber(row?.price, null);
+          const size = toNumber(row?.size, null);
+          if (price === null || size === null) return null;
+          return { price, size };
+        };
+        const bids = bidsRaw.map(toLevel).filter(Boolean);
+        const asks = asksRaw.map(toLevel).filter(Boolean);
+        const bestBid = bids.length ? bids.reduce((best, cur) => (cur.price > best.price ? cur : best)) : null;
+        const bestAsk = asks.length ? asks.reduce((best, cur) => (cur.price < best.price ? cur : best)) : null;
+        const topBids = [...bids].sort((a, b) => b.price - a.price).slice(0, 3);
+        const topAsks = [...asks].sort((a, b) => a.price - b.price).slice(0, 3);
+        orderbook = {
+          ok: true,
+          market: book?.market ?? null,
+          assetId: book?.asset_id ?? null,
+          timestamp: book?.timestamp ?? null,
+          bidCount: bids.length,
+          askCount: asks.length,
+          bestBid,
+          bestAsk,
+          topBids,
+          topAsks,
+          minOrderSize: book?.min_order_size ?? null,
+          tickSize: book?.tick_size ?? null,
+          negRisk: book?.neg_risk ?? null,
+        };
+      } catch (orderbookError) {
+        const status = Number(orderbookError?.response?.status);
+        const payload = orderbookError?.response?.data;
+        const apiError = (() => {
+          if (!payload) return null;
+          if (typeof payload === 'string') return payload.trim() || null;
+          if (payload?.error) return String(payload.error).trim() || null;
+          if (payload?.message) return String(payload.message).trim() || null;
+          return null;
+        })();
+        orderbook = {
+          ok: false,
+          status: Number.isFinite(status) && status > 0 ? status : null,
+          error: formatAxiosError(orderbookError),
+          apiError,
+        };
+      }
+
+      orderbookCache.set(key, orderbook);
+      return orderbook;
+    };
+
+    const buildRebalanceDiagnostics = ({ orderbook } = {}) =>
+      liveRebalanceDebugEnabled
+        ? {
+          preflight: executionPreflight || null,
+          orderType: String(process.env.POLYMARKET_MARKET_ORDER_TYPE || process.env.POLYMARKET_ORDER_TYPE || 'fak')
+            .trim()
+            .toLowerCase() || 'fak',
+          orderbook: orderbook || null,
+        }
+        : null;
+
+    const applySkippedOrderToTarget = ({ order, amount, reason, error, diagnostics }) => {
+      const skippedNotional = roundToDecimals(order.notional, 6);
+      if (skippedNotional !== null && skippedNotional > 0) {
+        if (order.side === 'BUY') {
+          cash = roundToDecimals(cash + skippedNotional, 6) ?? cash;
+        } else if (order.side === 'SELL') {
+          cash = roundToDecimals(cash - skippedNotional, 6) ?? cash;
+          if (!Number.isFinite(cash) || cash < 0) {
+            cash = 0;
+          }
+        }
+      }
+
+      if (Array.isArray(updatedStocks)) {
+        updatedStocks = updatedStocks.filter((row) => String(row?.asset_id || '') !== String(order.assetId));
+      }
+
+      const currentHolding = holdingsByAssetId.get(order.assetId) || null;
+      const currentQty = roundToDecimals(Math.max(0, toNumber(currentHolding?.quantity, 0)), 6) ?? 0;
+      if (currentQty > 0 && Array.isArray(updatedStocks)) {
+        const orderIdFallbackPrefix =
+          reason === 'execution_skipped_untradeable_token'
+            ? 'poly-untradeable'
+            : reason === 'execution_skipped_no_liquidity'
+              ? 'poly-illiquid'
+              : 'poly-skip';
+        const market = currentHolding?.market
+          ? String(currentHolding.market)
+          : order.market
+            ? String(order.market)
+            : null;
+        const outcome = currentHolding?.outcome
+          ? String(currentHolding.outcome)
+          : order.outcome
+            ? String(order.outcome)
+            : null;
+        const currentPrice = toNumber(currentHolding?.currentPrice, null) ?? toNumber(order.price, null);
+        const avgCost = toNumber(currentHolding?.avgCost, null) ?? currentPrice;
+        const symbol =
+          String(currentHolding?.symbol || '').trim() ||
+          (market ? `PM:${String(market).slice(0, 10)}:${outcome || 'OUTCOME'}` : `PM:${String(order.assetId).slice(0, 10)}`);
+        updatedStocks.push({
+          symbol,
+          market,
+          asset_id: String(order.assetId),
+          outcome,
+          avgCost,
+          quantity: currentQty,
+          currentPrice,
+          orderID: currentHolding?.orderID
+            ? String(currentHolding.orderID)
+            : `${orderIdFallbackPrefix}-${String(order.assetId).slice(-10)}`,
+        });
+      }
+
+      tradeSummary.rebalance.push({
+        symbol: symbolFor(order),
+        assetId: order.assetId,
+        side: order.side,
+        amount,
+        price: order.price,
+        notional: roundToDecimals(order.notional, 6),
+        reason,
+        error: String(error || reason || 'Skipped'),
+        ...(diagnostics ? { diagnostics } : {}),
+      });
+      rebalancePlan.skippedOrders += 1;
+    };
+
 	    for (const order of orders) {
 	      const amount = order.side === 'BUY'
 	        ? roundToDecimals(order.notional, 6)
@@ -2941,6 +3090,32 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       if (!amount || amount <= 0) {
         rebalancePlan.failedOrders += 1;
         continue;
+      }
+
+      if (liveRebalanceOrderbookPreflightEnabled) {
+        const orderbook = await fetchClobOrderbook(order.assetId);
+        if (orderbook && orderbook.ok === true) {
+          const noLiquidity =
+            (order.side === 'BUY' && Number(orderbook.askCount) === 0) ||
+            (order.side === 'SELL' && Number(orderbook.bidCount) === 0);
+          if (noLiquidity) {
+            const diagnostics = buildRebalanceDiagnostics({ orderbook });
+            const error =
+              order.side === 'BUY'
+                ? 'no asks in orderbook'
+                : order.side === 'SELL'
+                  ? 'no bids in orderbook'
+                  : 'no liquidity';
+            applySkippedOrderToTarget({
+              order,
+              amount,
+              reason: 'execution_skipped_no_liquidity',
+              error,
+              diagnostics,
+            });
+            continue;
+          }
+        }
       }
 
 	      let execution = null;
@@ -2990,127 +3165,57 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	          const errorMessage = String(formatAxiosError(error));
 	          const lowerErrorMessage = errorMessage.toLowerCase();
 	          const wantsOrderbookProbe =
-	            lowerErrorMessage.includes('no match') || lowerErrorMessage.includes('no orderbook');
+	            lowerErrorMessage.includes('no match') ||
+              lowerErrorMessage.includes('no orders found') ||
+              lowerErrorMessage.includes('no orders to match') ||
+              lowerErrorMessage.includes('no orderbook');
 
 	          let orderbook = null;
 	          if (wantsOrderbookProbe) {
-	            try {
-	              const orderbookResponse = await polymarketAxiosGet(`${CLOB_HOST}/book`, {
-	                params: buildGeoParams({ token_id: order.assetId }),
-	                headers: withClobUserAgent(),
-	              });
-	              const book = orderbookResponse?.data || null;
-	              const bidsRaw = Array.isArray(book?.bids) ? book.bids : [];
-	              const asksRaw = Array.isArray(book?.asks) ? book.asks : [];
-	              const toLevel = (row) => {
-	                const price = toNumber(row?.price, null);
-	                const size = toNumber(row?.size, null);
-	                if (price === null || size === null) return null;
-	                return { price, size };
-	              };
-	              const bids = bidsRaw.map(toLevel).filter(Boolean);
-	              const asks = asksRaw.map(toLevel).filter(Boolean);
-	              const bestBid = bids.length ? bids.reduce((best, cur) => (cur.price > best.price ? cur : best)) : null;
-	              const bestAsk = asks.length ? asks.reduce((best, cur) => (cur.price < best.price ? cur : best)) : null;
-	              const topBids = [...bids].sort((a, b) => b.price - a.price).slice(0, 3);
-	              const topAsks = [...asks].sort((a, b) => a.price - b.price).slice(0, 3);
-	              orderbook = {
-	                ok: true,
-	                market: book?.market ?? null,
-	                assetId: book?.asset_id ?? null,
-	                timestamp: book?.timestamp ?? null,
-	                bidCount: bids.length,
-	                askCount: asks.length,
-	                bestBid,
-	                bestAsk,
-	                topBids,
-	                topAsks,
-	                minOrderSize: book?.min_order_size ?? null,
-	                tickSize: book?.tick_size ?? null,
-	                negRisk: book?.neg_risk ?? null,
-	              };
-	            } catch (orderbookError) {
-	              const status = Number(orderbookError?.response?.status);
-	              const payload = orderbookError?.response?.data;
-	              const apiError = (() => {
-	                if (!payload) return null;
-	                if (typeof payload === 'string') return payload.trim() || null;
-	                if (payload?.error) return String(payload.error).trim() || null;
-	                if (payload?.message) return String(payload.message).trim() || null;
-	                return null;
-	              })();
-	              orderbook = {
-	                ok: false,
-	                status: Number.isFinite(status) && status > 0 ? status : null,
-	                error: formatAxiosError(orderbookError),
-	                apiError,
-	              };
-	            }
+	            orderbook = await fetchClobOrderbook(order.assetId);
 	          }
 
-	          const diagnostics = liveRebalanceDebugEnabled
-	            ? {
-	              preflight: executionPreflight || null,
-	              orderType: String(process.env.POLYMARKET_MARKET_ORDER_TYPE || process.env.POLYMARKET_ORDER_TYPE || 'fak')
-	                .trim()
-	                .toLowerCase() || 'fak',
-	              orderbook,
-	            }
-	            : null;
+	          const diagnostics = buildRebalanceDiagnostics({ orderbook });
 
 	          const noOrderbookDetected =
 	            lowerErrorMessage.includes('no orderbook exists') ||
 	            (orderbook && orderbook.ok === false && orderbook.status === 404) ||
 	            (orderbook && orderbook.ok === false && String(orderbook.apiError || '').toLowerCase().includes('no orderbook'));
 
+            const noLiquidityDetected =
+              orderbook &&
+              orderbook.ok === true &&
+              ((order.side === 'BUY' && Number(orderbook.askCount) === 0) ||
+                (order.side === 'SELL' && Number(orderbook.bidCount) === 0));
+
 	          if (noOrderbookDetected) {
 	            noteUntradeableTokenId(order.assetId);
-
-	            const skippedNotional = roundToDecimals(order.notional, 6);
-	            if (order.side === 'BUY' && skippedNotional !== null && skippedNotional > 0) {
-	              cash = roundToDecimals(cash + skippedNotional, 6) ?? cash;
-	            }
-
-	            if (Array.isArray(updatedStocks)) {
-	              updatedStocks = updatedStocks.filter((row) => String(row?.asset_id || '') !== String(order.assetId));
-	            }
-
-	            const currentHolding = holdingsByAssetId.get(order.assetId) || null;
-	            const currentQty = roundToDecimals(Math.max(0, toNumber(currentHolding?.quantity, 0)), 6) ?? 0;
-	            if (currentQty > 0 && Array.isArray(updatedStocks)) {
-	              const market = currentHolding?.market ? String(currentHolding.market) : (order.market ? String(order.market) : null);
-	              const outcome = currentHolding?.outcome ? String(currentHolding.outcome) : (order.outcome ? String(order.outcome) : null);
-	              const currentPrice = toNumber(currentHolding?.currentPrice, null) ?? toNumber(order.price, null);
-	              const avgCost = toNumber(currentHolding?.avgCost, null) ?? currentPrice;
-	              const symbol =
-	                String(currentHolding?.symbol || '').trim() ||
-	                (market ? `PM:${String(market).slice(0, 10)}:${outcome || 'OUTCOME'}` : `PM:${String(order.assetId).slice(0, 10)}`);
-	              updatedStocks.push({
-	                symbol,
-	                market,
-	                asset_id: String(order.assetId),
-	                outcome,
-	                avgCost,
-	                quantity: currentQty,
-	                currentPrice,
-	                orderID: currentHolding?.orderID ? String(currentHolding.orderID) : `poly-untradeable-${String(order.assetId).slice(-10)}`,
-	              });
-	            }
-
-	            tradeSummary.rebalance.push({
-	              symbol: symbolFor(order),
-	              assetId: order.assetId,
-	              side: order.side,
-	              amount,
-	              price: order.price,
-	              notional: roundToDecimals(order.notional, 6),
-	              reason: 'execution_skipped_untradeable_token',
-	              error: String(orderbook?.apiError || errorMessage),
-	              ...(diagnostics ? { diagnostics } : {}),
-	            });
-	            rebalancePlan.skippedOrders += 1;
+	            applySkippedOrderToTarget({
+                order,
+                amount,
+                reason: 'execution_skipped_untradeable_token',
+                error: String(orderbook?.apiError || errorMessage),
+                diagnostics,
+              });
 	            continue;
 	          }
+
+            if (noLiquidityDetected) {
+              const liquidityError =
+                order.side === 'BUY'
+                  ? 'no asks in orderbook'
+                  : order.side === 'SELL'
+                    ? 'no bids in orderbook'
+                    : errorMessage;
+              applySkippedOrderToTarget({
+                order,
+                amount,
+                reason: 'execution_skipped_no_liquidity',
+                error: liquidityError,
+                diagnostics,
+              });
+              continue;
+            }
 
 	          tradeSummary.rebalance.push({
 	            symbol: symbolFor(order),
@@ -3494,6 +3599,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
               minNotional: POLYMARKET_LIVE_REBALANCE_MIN_NOTIONAL,
               maxOrders: POLYMARKET_LIVE_REBALANCE_MAX_ORDERS,
               preflightEnabled: liveRebalancePreflightEnabled,
+              orderbookPreflightEnabled: liveRebalanceOrderbookPreflightEnabled,
             },
 	            liveRebalancePlan: rebalancePlan,
 	            liveRebalancePreflight: executionPreflight,

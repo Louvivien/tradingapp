@@ -4365,6 +4365,16 @@ exports.getPortfolios = async (req, res) => {
             : 'paper')
           : 'paper';
 
+      const polymarketMakerAddress =
+        provider === 'polymarket' && portfolio?.polymarket?.address
+          ? String(portfolio.polymarket.address).trim()
+          : null;
+
+      const polymarketSizingState =
+        provider === 'polymarket' && portfolio?.polymarket?.sizingState && typeof portfolio.polymarket.sizingState === 'object'
+          ? portfolio.polymarket.sizingState
+          : {};
+
       const alpacaEffectiveExecutionMode =
         provider === 'polymarket'
           ? null
@@ -4414,6 +4424,20 @@ exports.getPortfolios = async (req, res) => {
                   ? String(portfolio.polymarket.executionMode).trim().toLowerCase()
                   : 'paper')
                 : 'paper',
+              makerAddress: polymarketMakerAddress,
+              sizeToBudget: Boolean(portfolio?.polymarket?.sizeToBudget),
+              seedFromPositions: Boolean(portfolio?.polymarket?.seedFromPositions),
+              backfillPending: Boolean(portfolio?.polymarket?.backfillPending),
+              backfilledAt: portfolio?.polymarket?.backfilledAt ? String(portfolio.polymarket.backfilledAt) : null,
+              lastTradeMatchTime: portfolio?.polymarket?.lastTradeMatchTime ? String(portfolio.polymarket.lastTradeMatchTime) : null,
+              lastTradeId: portfolio?.polymarket?.lastTradeId ? String(portfolio.polymarket.lastTradeId) : null,
+              sizing: {
+                scale: toNumber(polymarketSizingState?.scale, null),
+                scaleBudget: toNumber(polymarketSizingState?.scaleBudget, null),
+                scaleMakerValue: toNumber(polymarketSizingState?.scaleMakerValue, null),
+                scaleSetAt: polymarketSizingState?.scaleSetAt ? String(polymarketSizingState.scaleSetAt) : null,
+                lastUpdatedAt: polymarketSizingState?.lastUpdatedAt ? String(polymarketSizingState.lastUpdatedAt) : null,
+              },
             }
           : null,
         alpaca: provider === 'polymarket'

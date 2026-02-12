@@ -195,6 +195,20 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
     return `$${roundNumber(numeric).toLocaleString()}`;
   };
 
+  const formatAddressShort = (value) => {
+    const raw = value === null || value === undefined ? "" : String(value).trim();
+    if (!raw) {
+      return "—";
+    }
+    if (/^0x[a-fA-F0-9]{40}$/.test(raw)) {
+      return `${raw.slice(0, 6)}…${raw.slice(-4)}`;
+    }
+    if (raw.length > 18) {
+      return `${raw.slice(0, 18)}…`;
+    }
+    return raw;
+  };
+
   const toISODateInput = (value) => {
     const date = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(date.getTime())) {
@@ -1229,6 +1243,27 @@ const deleteStrategy = async (strategyId) => {
                 </Box>
                 {' '}· Rebalances: {rebalanceCount}
               </Typography>
+              {portfolio.provider === "polymarket" && (
+                <Typography
+                  variant="caption"
+                  color="textSecondary"
+                  sx={{ ml: 6, mt: 0.25, display: "block" }}
+                >
+                  Maker: {formatAddressShort(portfolio?.polymarket?.makerAddress)}
+                  {" "}· Exec: {String(portfolio?.polymarket?.effectiveExecutionMode || "paper").toLowerCase()}
+                  {" "}· Size-to-budget: {portfolio?.polymarket?.sizeToBudget ? "on" : "off"}
+                  {Number.isFinite(Number(portfolio?.polymarket?.sizing?.scale)) && (
+                    <>
+                      {" "}· Scale: {Number(portfolio.polymarket.sizing.scale).toFixed(6)}
+                    </>
+                  )}
+                  {portfolio?.polymarket?.backfillPending
+                    ? " · Backfill: pending"
+                    : portfolio?.polymarket?.backfilledAt
+                      ? ` · Backfilled: ${formatDateTime(portfolio.polymarket.backfilledAt)}`
+                      : ""}
+                </Typography>
+              )}
               <Box sx={{ display: "flex", alignItems: "center", ml: 6, mt: 1, gap: 1 }}>
                 <TextField
                   select

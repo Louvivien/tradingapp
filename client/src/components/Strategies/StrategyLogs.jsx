@@ -358,11 +358,13 @@ const StrategyLogs = ({ strategyId, strategyName, onClose = () => {} }) => {
 		
 		                const suffixParts = [];
 			                if (price) suffixParts.push(`@ ${price}`);
-                  if (statusText && !suffixParts.some((part) => part.startsWith("status "))) {
-                    suffixParts.push(`status ${statusText}`);
-                  }
+			                if (statusText && !suffixParts.some((part) => part.startsWith("status "))) {
+			                    suffixParts.push(`status ${statusText}`);
+			                  }
 			                if (orderId) suffixParts.push(`order ${orderId}`);
-			                const looksSkipped = row?.reason === "execution_skipped_untradeable_token";
+			                const looksSkipped =
+			                  row?.reason === "execution_skipped_untradeable_token" ||
+			                  row?.reason === "execution_skipped_no_liquidity";
 			                const looksFailed =
 			                  row?.reason === "execution_failed" ||
 			                  row?.reason === "execution_retryable_error" ||
