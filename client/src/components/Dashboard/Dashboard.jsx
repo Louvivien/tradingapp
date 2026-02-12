@@ -36,11 +36,8 @@ const Dashboard = ({ userData, setUserData, onViewStrategyLogs }) => {
     if (portfolio?.provider !== "polymarket") {
       return sum;
     }
-    const cash = Number(portfolio?.cashBuffer ?? 0);
-    const value = portfolio?.currentValue === null || portfolio?.currentValue === undefined
-      ? 0
-      : Number(portfolio.currentValue);
-    return sum + (Number.isFinite(cash) ? cash : 0) + (Number.isFinite(value) ? value : 0);
+    const cashLimit = Number(portfolio?.cashLimit ?? portfolio?.budget ?? null);
+    return sum + (Number.isFinite(cashLimit) ? cashLimit : 0);
   }, 0);
 
   // Function to get the list of purchased stocks from the server using Alpacas API

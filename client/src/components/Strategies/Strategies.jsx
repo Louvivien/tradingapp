@@ -1381,7 +1381,11 @@ const Strategies = () => {
 		                variant="outlined"
 		                label="Polymarket maker address to copy (0x...)"
 		                value={polymarketAddress}
-		                onChange={(e) => setPolymarketAddress(e.target.value)}
+		                onChange={(e) => {
+                      const raw = e.target.value;
+                      const match = String(raw || "").match(/0x[a-fA-F0-9]{40}/);
+                      setPolymarketAddress(match ? match[0] : raw);
+                    }}
 		                fullWidth
 		                margin="normal"
 		              />

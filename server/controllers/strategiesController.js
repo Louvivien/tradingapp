@@ -2704,6 +2704,67 @@ exports.updateStrategyRecurrence = async (req, res) => {
   }
 };
 
+exports.updateStrategyCashLimit = async (req, res) => {
+  try {
+    const { userId, strategyId } = req.params;
+
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
+    const cashLimitInput = toNumber(
+      req.body?.cashLimit !== undefined ? req.body.cashLimit : req.body?.budget,
+      null
+    );
+
+    if (!cashLimitInput || cashLimitInput <= 0) {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Please provide a positive cash limit.',
+      });
+    }
+
+    const portfolio = await Portfolio.findOne({ strategy_id: strategyId, userId: String(userId) });
+    if (!portfolio) {
+      return res.status(404).json({
+        status: 'fail',
+        message: 'Portfolio not found for this strategy.',
+      });
+    }
+
+    const previousCashLimit = toNumber(portfolio.cashLimit, toNumber(portfolio.budget, null));
+
+    portfolio.cashLimit = cashLimitInput;
+    portfolio.budget = cashLimitInput;
+    await portfolio.save();
+
+    await recordStrategyLog({
+      strategyId,
+      userId: String(userId),
+      strategyName: portfolio.name,
+      message: 'Cash limit updated',
+      details: {
+        previousCashLimit,
+        cashLimit: cashLimitInput,
+      },
+    });
+
+    return res.status(200).json({
+      status: 'success',
+      cashLimit: cashLimitInput,
+    });
+  } catch (error) {
+    console.error('Error updating cash limit:', error.message);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Failed to update cash limit.',
+    });
+  }
+};
+
 exports.updateNextRebalanceDate = async (req, res) => {
   try {
     const { userId, strategyId } = req.params;

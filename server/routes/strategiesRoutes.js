@@ -16,6 +16,7 @@ const {
   getEquityBackfillStatus,
   triggerEquityBackfill,
   updateStrategyRecurrence,
+  updateStrategyCashLimit,
   updateStrategyMetadata,
   streamStrategyProgress,
   resendCollaborativeOrders,
@@ -49,6 +50,7 @@ router.route("/equity/:userId/:strategyId").get(auth, getStrategyEquityHistory);
 router.route("/equity/backfill-status/:userId").get(auth, getEquityBackfillStatus);
 router.route("/equity/backfill/:userId").post(auth, triggerEquityBackfill);
 router.route("/recurrence/:userId/:strategyId").patch(auth, updateStrategyRecurrence);
+router.route("/cash-limit/:userId/:strategyId").patch(auth, updateStrategyCashLimit);
 router.route("/metadata/:userId/:strategyId").patch(auth, updateStrategyMetadata);
 router.route("/rebalance-date/:userId/:strategyId").patch(auth, updateNextRebalanceDate);
 // NOTE: place more-specific routes before parameterized catch-alls like `:userId/:strategyId`.

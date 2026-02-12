@@ -80,6 +80,13 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
     saving: false,
     error: null,
   });
+  const [cashLimitEditor, setCashLimitEditor] = useState({
+    open: false,
+    portfolio: null,
+    value: "",
+    saving: false,
+    error: null,
+  });
   const [portfolioFilter, setPortfolioFilter] = useState(() => loadPortfolioFilter());
   const [aiPortfolioDialog, setAiPortfolioDialog] = useState({
     open: false,
@@ -473,6 +480,82 @@ const handlePortfolioClick = (strategyId) => {
     }
   };
 
+  const openCashLimitEditor = (portfolio, event) => {
+    if (event?.stopPropagation) {
+      event.stopPropagation();
+    }
+    if (!portfolio) {
+      return;
+    }
+    const value = portfolio.cashLimit ?? portfolio.budget ?? "";
+    setCashLimitEditor({
+      open: true,
+      portfolio,
+      value: value === null || value === undefined ? "" : String(value),
+      saving: false,
+      error: null,
+    });
+  };
+
+  const closeCashLimitEditor = () => {
+    if (cashLimitEditor.saving) {
+      return;
+    }
+    setCashLimitEditor({
+      open: false,
+      portfolio: null,
+      value: "",
+      saving: false,
+      error: null,
+    });
+  };
+
+  const saveCashLimitEditor = async () => {
+    if (cashLimitEditor.saving) {
+      return;
+    }
+    const { portfolio } = cashLimitEditor;
+    if (!portfolio?.strategy_id) {
+      setCashLimitEditor((prev) => ({ ...prev, error: "Missing strategy id." }));
+      return;
+    }
+    const numeric = Number(cashLimitEditor.value);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+      setCashLimitEditor((prev) => ({ ...prev, error: "Please provide a positive cash limit." }));
+      return;
+    }
+    if (!userData?.user?.id || !userData?.token) {
+      setCashLimitEditor((prev) => ({ ...prev, error: "Please sign in again." }));
+      return;
+    }
+
+    setCashLimitEditor((prev) => ({ ...prev, saving: true, error: null }));
+    try {
+      const url = `${config.base_url}/api/strategies/cash-limit/${userData.user.id}/${portfolio.strategy_id}`;
+      const headers = { "x-auth-token": userData.token };
+      const payload = { cashLimit: numeric };
+      const response = await Axios.patch(url, payload, { headers });
+      if (response.status === 200 && response.data?.status === "success") {
+        closeCashLimitEditor();
+        if (typeof refreshPortfolios === "function") {
+          await refreshPortfolios();
+        }
+      } else {
+        setCashLimitEditor((prev) => ({
+          ...prev,
+          error: response.data?.message || "Failed to update cash limit.",
+        }));
+      }
+    } catch (error) {
+      setCashLimitEditor((prev) => ({
+        ...prev,
+        error: error?.response?.data?.message || error.message || "Failed to update cash limit.",
+      }));
+    } finally {
+      setCashLimitEditor((prev) => ({ ...prev, saving: false }));
+    }
+  };
+
 
   const openDeleteModal = (strategyId) => {
     // console.log('strategyId:', strategyId);
@@ -779,6 +862,21 @@ const deleteStrategy = async (strategyId) => {
   };
 
   const normalizedPortfolios = Array.isArray(portfolios) ? portfolios : [];
+  const polymarketPortfolios = normalizedPortfolios.filter((portfolio) => {
+    return String(portfolio?.provider || "").toLowerCase() === "polymarket";
+  });
+  const sumCashLimits = (rows) => {
+    return (rows || []).reduce((sum, portfolio) => {
+      const value = Number(portfolio?.cashLimit ?? portfolio?.budget ?? null);
+      return sum + (Number.isFinite(value) ? value : 0);
+    }, 0);
+  };
+  const polymarketCashLimitTotal = sumCashLimits(polymarketPortfolios);
+  const polymarketLivePortfolios = polymarketPortfolios.filter((portfolio) => Boolean(portfolio?.isRealMoney));
+  const polymarketLiveCashLimitTotal = sumCashLimits(polymarketLivePortfolios);
+  const polymarketWalletTradable = polymarketBalance?.tradable ?? polymarketBalance?.available ?? null;
+  const polymarketWalletHeadroom =
+    Number.isFinite(Number(polymarketWalletTradable)) ? Number(polymarketWalletTradable) - polymarketLiveCashLimitTotal : null;
   const visiblePortfolios = normalizedPortfolios.filter((portfolio) => {
     const provider = String(portfolio?.provider || "alpaca").toLowerCase();
     if (portfolioFilter === "polymarket") {
@@ -823,6 +921,42 @@ const deleteStrategy = async (strategyId) => {
             <MenuItem value="polymarket">Polymarket</MenuItem>
           </TextField>
         </Box>
+        {portfolioFilter !== "composer" && polymarketPortfolios.length > 0 && (
+          <Box sx={{ ml: 6, mb: 2 }}>
+            <Typography variant="body2" color="textSecondary">
+              Polymarket cash limits: {formatCurrencyValue(polymarketCashLimitTotal)}
+              {polymarketLivePortfolios.length > 0 && (
+                <>
+                  {" "}· Live: {formatCurrencyValue(polymarketLiveCashLimitTotal)}
+                  {Number.isFinite(Number(polymarketWalletTradable)) && (
+                    <>
+                      {" "}· Wallet tradable: {formatCurrencyValue(polymarketWalletTradable)}
+                      {Number.isFinite(polymarketWalletHeadroom) && (
+                        <>
+                          {" "}· Headroom:{" "}
+                          <Box
+                            component="span"
+                            sx={{
+                              color: polymarketWalletHeadroom < 0 ? "warning.main" : "inherit",
+                              fontWeight: polymarketWalletHeadroom < 0 ? 600 : 400,
+                            }}
+                          >
+                            {formatCurrencyValue(polymarketWalletHeadroom)}
+                          </Box>
+                        </>
+                      )}
+                    </>
+                  )}
+                </>
+              )}
+            </Typography>
+            {polymarketLivePortfolios.length > 1 && (
+              <Typography variant="caption" color="textSecondary">
+                Live Polymarket strategies share the same execution wallet; total live limits should not exceed wallet tradable funds.
+              </Typography>
+            )}
+          </Box>
+        )}
         {!visiblePortfolios.length ? (
           <Typography variant="body2" color="textSecondary" sx={{ ml: 6, mb: 2 }}>
             No portfolios match this filter.
@@ -1103,6 +1237,15 @@ const deleteStrategy = async (strategyId) => {
                 <React.Fragment>
                   <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
                     Cash limit: ${roundNumber(limitBaseline).toLocaleString()}
+                    <Tooltip title="Edit cash limit" arrow>
+                      <IconButton
+                        size="small"
+                        sx={{ ml: 0.5, p: 0.25 }}
+                        onClick={(event) => openCashLimitEditor(portfolio, event)}
+                      >
+                        <EditIcon fontSize="inherit" />
+                      </IconButton>
+                    </Tooltip>
                   </Typography>
                   {portfolio.provider === "polymarket" && portfolio.isRealMoney && (
                     <Box sx={{ ml: 6, mt: 0.5 }}>
@@ -1523,6 +1666,66 @@ const deleteStrategy = async (strategyId) => {
               disabled={metadataEditor.saving}
             >
               {metadataEditor.saving ? 'Saving…' : 'Save'}
+            </Button>
+          </Box>
+        </Box>
+      </Modal>
+
+      <Modal
+        open={cashLimitEditor.open}
+        onClose={cashLimitEditor.saving ? undefined : closeCashLimitEditor}
+        aria-labelledby="edit-cash-limit-title"
+        aria-describedby="edit-cash-limit-description"
+      >
+        <Box
+          sx={{
+            p: 3,
+            backgroundColor: 'background.paper',
+            width: '90%',
+            maxWidth: 420,
+            mx: 'auto',
+            mt: '15%',
+            borderRadius: 2,
+            boxShadow: 24,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+          }}
+        >
+          <Typography id="edit-cash-limit-title" variant="h6">
+            Edit cash limit
+          </Typography>
+          <Typography id="edit-cash-limit-description" variant="body2" color="textSecondary">
+            Strategy: {cashLimitEditor.portfolio?.name || '—'}
+          </Typography>
+          {cashLimitEditor.portfolio?.provider === "polymarket" && (
+            <Typography variant="body2" color="textSecondary">
+              Tip: after changing the cash limit, run a Polymarket backfill to re-import positions at the new budget.
+            </Typography>
+          )}
+          <TextField
+            label="Cash limit"
+            type="number"
+            value={cashLimitEditor.value}
+            onChange={(event) => setCashLimitEditor((prev) => ({ ...prev, value: event.target.value }))}
+            disabled={cashLimitEditor.saving}
+            inputProps={{ min: 0, step: 0.01 }}
+          />
+          {cashLimitEditor.error && (
+            <Typography variant="body2" color="error">
+              {cashLimitEditor.error}
+            </Typography>
+          )}
+          <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+            <Button onClick={closeCashLimitEditor} disabled={cashLimitEditor.saving}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              onClick={saveCashLimitEditor}
+              disabled={cashLimitEditor.saving}
+            >
+              {cashLimitEditor.saving ? 'Saving…' : 'Save'}
             </Button>
           </Box>
         </Box>
