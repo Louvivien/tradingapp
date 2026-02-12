@@ -47,7 +47,7 @@ const Balance = ({ purchasedStocks = [], accountBalance = 0, polymarketVirtualFu
           ${portfolioBalance.toLocaleString()}
         </Typography>
         <Typography color="textSecondary" align="center">
-          Polymarket Virtual Funds:
+          Polymarket Strategy Funds (capped):
         </Typography>
 
         <Typography component="p" variant="h6" align="center" gutterBottom>

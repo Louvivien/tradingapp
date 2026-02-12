@@ -347,6 +347,7 @@ const StrategyLogs = ({ strategyId, strategyName, onClose = () => {} }) => {
                       ? `${statusCode}`
                       : null;
 		                const execError = row?.execution?.error || row?.error || null;
+                    const orderbook = row?.diagnostics?.orderbook || null;
 		                const price = row?.price != null ? formatCurrency(row.price) : null;
 		                const notional = row?.notional != null ? formatCurrency(row.notional) : null;
 		
@@ -372,6 +373,14 @@ const StrategyLogs = ({ strategyId, strategyName, onClose = () => {} }) => {
 			                  );
 			                }
 			                if (looksFailed) {
+                      const lower = String(execError || row?.error || "").toLowerCase();
+                      if (lower.includes("no match") && orderbook?.ok === true) {
+                        if (side === "BUY" && Number(orderbook.askCount) === 0) {
+                          suffixParts.push("orderbook: no asks");
+                        } else if (side === "SELL" && Number(orderbook.bidCount) === 0) {
+                          suffixParts.push("orderbook: no bids");
+                        }
+                      }
 			                  suffixParts.push(
 			                    `FAILED${hasStatusCode ? ` (${statusCode})` : ""}: ${execError || row?.error || row?.reason || "Order rejected"}`
 			                  );
@@ -578,6 +587,7 @@ const buildPolymarketHumanSummary = (details) => {
   const failedOrders = plan && Number.isFinite(Number(plan.failedOrders)) ? Number(plan.failedOrders) : null;
   const skippedOrders = plan && Number.isFinite(Number(plan.skippedOrders)) ? Number(plan.skippedOrders) : null;
   const planReason = plan?.reason ? String(plan.reason) : null;
+  const rebalanceList = Array.isArray(details.rebalance) ? details.rebalance : [];
 
   const modeParts = [
     mode ? `mode ${mode}` : null,
@@ -628,6 +638,35 @@ const buildPolymarketHumanSummary = (details) => {
     const suffix = planReason ? ` (reason: ${planReason})` : "";
     if (parts.length) {
       lines.push(`• My live orders: ${parts.join(" · ")}${suffix}.`);
+    }
+  }
+
+  const firstFailure = rebalanceList.find((row) => {
+    if (row?.reason !== "execution_failed") {
+      return false;
+    }
+    return Boolean(row?.execution?.error || row?.error);
+  });
+  if (firstFailure) {
+    const side = firstFailure?.side ? String(firstFailure.side).toUpperCase() : "ORDER";
+    const symbol = firstFailure?.symbol || "PM";
+    const errorText = String(firstFailure?.execution?.error || firstFailure?.error || "").trim();
+    const orderbook = firstFailure?.diagnostics?.orderbook || null;
+    const liquidityHint = (() => {
+      if (!orderbook || orderbook.ok !== true) {
+        return null;
+      }
+      if (side === "BUY" && Number(orderbook.askCount) === 0) {
+        return "no asks in orderbook";
+      }
+      if (side === "SELL" && Number(orderbook.bidCount) === 0) {
+        return "no bids in orderbook";
+      }
+      return null;
+    })();
+    const hintSuffix = liquidityHint ? ` (${liquidityHint})` : "";
+    if (errorText) {
+      lines.push(`• Latest failure: ${side} ${symbol} — ${errorText}${hintSuffix}.`);
     }
   }
 

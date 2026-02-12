@@ -88,6 +88,9 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
     apiUrl: "",
   });
   const [aiPortfolioCopied, setAiPortfolioCopied] = useState(false);
+  const [polymarketBalance, setPolymarketBalance] = useState(null);
+  const [polymarketBalanceLoading, setPolymarketBalanceLoading] = useState(false);
+  const [polymarketBalanceError, setPolymarketBalanceError] = useState(null);
 
   useEffect(() => {
     try {
@@ -96,6 +99,68 @@ const Portfolios = ({ portfolios, onViewStrategyLogs, refreshPortfolios }) => {
       // ignore storage errors
     }
   }, [portfolioFilter]);
+
+  useEffect(() => {
+    const hasLivePolymarket = Array.isArray(portfolios) && portfolios.some((portfolio) => {
+      return portfolio?.provider === "polymarket" && Boolean(portfolio?.isRealMoney);
+    });
+
+    if (!hasLivePolymarket) {
+      setPolymarketBalance(null);
+      setPolymarketBalanceError(null);
+      setPolymarketBalanceLoading(false);
+      return;
+    }
+    if (!userData?.token || !userData?.user?.id) {
+      setPolymarketBalanceLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchPolymarketBalanceAllowance = async () => {
+      setPolymarketBalanceLoading(true);
+      setPolymarketBalanceError(null);
+
+      try {
+        const headers = { "x-auth-token": userData.token };
+        const url = `${config.base_url}/api/strategies/polymarket/balance/${userData.user.id}`;
+        const response = await Axios.get(url, { headers });
+
+        if (cancelled) {
+          return;
+        }
+
+        if (response.status === 200 && response.data?.status === "success") {
+          setPolymarketBalance({
+            source: response.data.source ?? null,
+            address: response.data.address ?? null,
+            balance: response.data.balance ?? null,
+            allowance: response.data.allowance ?? null,
+            available: response.data.available ?? null,
+            tradable: response.data.tradable ?? null,
+          });
+        } else {
+          setPolymarketBalance(null);
+          setPolymarketBalanceError(response.data?.message || "Failed to fetch Polymarket balance.");
+        }
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+        setPolymarketBalance(null);
+        setPolymarketBalanceError(error.response?.data?.message || error.message || "Failed to fetch Polymarket balance.");
+      } finally {
+        if (!cancelled) {
+          setPolymarketBalanceLoading(false);
+        }
+      }
+    };
+
+    fetchPolymarketBalanceAllowance();
+    return () => {
+      cancelled = true;
+    };
+  }, [portfolios, userData?.token, userData?.user?.id]);
 
 
 
@@ -1039,6 +1104,30 @@ const deleteStrategy = async (strategyId) => {
                   <Typography variant="body2" color="textSecondary" sx={{ ml: 6 }}>
                     Cash limit: ${roundNumber(limitBaseline).toLocaleString()}
                   </Typography>
+                  {portfolio.provider === "polymarket" && portfolio.isRealMoney && (
+                    <Box sx={{ ml: 6, mt: 0.5 }}>
+                      {polymarketBalanceLoading ? (
+                        <Typography variant="body2" color="textSecondary">
+                          Polymarket wallet: fetching balance…
+                        </Typography>
+                      ) : polymarketBalanceError ? (
+                        <Typography variant="body2" color="error">
+                          Polymarket wallet: {polymarketBalanceError}
+                        </Typography>
+                      ) : polymarketBalance ? (
+                        <Typography variant="body2" color="textSecondary">
+                          Polymarket wallet: balance {formatCurrencyValue(polymarketBalance.balance ?? polymarketBalance.available)} · tradable {formatCurrencyValue(polymarketBalance.tradable)}{polymarketBalance.allowance !== null && polymarketBalance.allowance !== undefined ? ` (allowance: ${formatCurrencyValue(polymarketBalance.allowance)})` : ""}
+                        </Typography>
+                      ) : (
+                        <Typography variant="body2" color="textSecondary">
+                          Polymarket wallet: —
+                        </Typography>
+                      )}
+                      <Typography variant="caption" color="textSecondary">
+                        TradingApp caps strategy cash to your cash limit; Polymarket shows your full wallet.
+                      </Typography>
+                    </Box>
+                  )}
                   {limitUsagePct !== null && (
                     <Box sx={{ ml: 6, mt: 0.5, mr: 2 }}>
                       <LinearProgress
