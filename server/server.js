@@ -48,12 +48,24 @@ const CryptoJS = require("crypto-js");
   // eslint-disable-next-line no-console
   console.error = (...args) => {
     try {
-      if (
-        typeof args[0] === "string" &&
-        args[0].includes("[CLOB Client] request error") &&
-        typeof args[1] === "string"
-      ) {
-        return originalError(args[0], redactClobClientPayload(args[1]), ...args.slice(2));
+      if (typeof args[0] === "string" && args[0].includes("[CLOB Client] request error")) {
+        if (typeof args[1] === "string") {
+          return originalError(args[0], redactClobClientPayload(args[1]), ...args.slice(2));
+        }
+        if (args[1] && typeof args[1] === "object") {
+          const code = args[1]?.code;
+          if (code === "POLYMARKET_RATE_LIMIT") {
+            return originalError(
+              args[0],
+              {
+                message: args[1]?.message || "Polymarket CLOB rate limited",
+                status: args[1]?.status || args[1]?.response?.status || 429,
+                code,
+              },
+              ...args.slice(2)
+            );
+          }
+        }
       }
     } catch {
       // ignore

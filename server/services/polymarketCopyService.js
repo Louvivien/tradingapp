@@ -1016,6 +1016,14 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     true
   );
   const previousLiveExecutionOk = parseBooleanEnvDefault(poly?.lastLiveExecutionOk, false);
+  const getClobCooldownMessage = () => {
+    const status = typeof getClobRateLimitCooldownStatus === 'function' ? getClobRateLimitCooldownStatus() : null;
+    if (!status || status.active !== true) {
+      return null;
+    }
+    const remainingSec = Math.max(0, Math.ceil(Number(status.remainingMs || 0) / 1000));
+    return `Polymarket CLOB temporarily rate limited (cooldown ${remainingSec}s remaining).`;
+  };
 
   const makerStateMissing = (() => {
     if (!sizeToBudget) {
@@ -1530,6 +1538,9 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
   };
 
   const initialTradeSource = (() => {
+    if (tradesSourceSetting === 'auto' && getClobCooldownMessage()) {
+      return 'data-api';
+    }
     if (tradesSourceSetting === 'data-api') {
       return 'data-api';
     }
@@ -1565,24 +1576,54 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     pendingTrades = collected.pendingTrades;
     pagesFetched = collected.pagesFetched;
   } catch (error) {
-    if (tradesSourceSetting === 'auto' && tradeSourceUsed === 'clob-l2' && isPolymarketAuthFailure(error)) {
+    const status = Number(error?.status || error?.response?.status);
+    const code = String(error?.code || '').toUpperCase();
+    const messageLower = String(error?.message || '').toLowerCase();
+    const rateLimited =
+      code === 'POLYMARKET_RATE_LIMIT' ||
+      status === 429 ||
+      messageLower.includes('error 1015') ||
+      messageLower.includes('rate limit');
+
+    if (
+      tradesSourceSetting === 'auto' &&
+      tradeSourceUsed === 'clob-l2' &&
+      (isPolymarketAuthFailure(error) || rateLimited)
+    ) {
       tradeSourceUsed = 'data-api';
-      const nextRetryAt = noteClobAuthFailure();
-      await recordStrategyLog({
-        strategyId: portfolio.strategy_id,
-        userId: portfolio.userId,
-        strategyName: portfolio.name,
-        level: 'warn',
-        message: 'Polymarket CLOB auth failed; falling back to data-api trades endpoint',
-        details: {
-          provider: 'polymarket',
-          mode,
-          address,
-          error: String(error?.message || error),
-          clobRetryAfterMs: POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS || 0,
-          clobNextRetryAt: nextRetryAt,
-        },
-      });
+      if (isPolymarketAuthFailure(error)) {
+        const nextRetryAt = noteClobAuthFailure();
+        await recordStrategyLog({
+          strategyId: portfolio.strategy_id,
+          userId: portfolio.userId,
+          strategyName: portfolio.name,
+          level: 'warn',
+          message: 'Polymarket CLOB auth failed; falling back to data-api trades endpoint',
+          details: {
+            provider: 'polymarket',
+            mode,
+            address,
+            error: String(error?.message || error),
+            clobRetryAfterMs: POLYMARKET_CLOB_AUTH_FAILURE_COOLDOWN_MS || 0,
+            clobNextRetryAt: nextRetryAt,
+          },
+        });
+      } else {
+        await recordStrategyLog({
+          strategyId: portfolio.strategy_id,
+          userId: portfolio.userId,
+          strategyName: portfolio.name,
+          level: 'warn',
+          message: 'Polymarket CLOB rate limited; falling back to data-api trades endpoint',
+          details: {
+            provider: 'polymarket',
+            mode,
+            address,
+            error: String(error?.message || error),
+            clobRateLimit: getClobRateLimitCooldownStatus(),
+          },
+        });
+      }
       const collected = await collectTrades(tradeSourceUsed);
       pendingTrades = collected.pendingTrades;
       pagesFetched = collected.pagesFetched;
@@ -2188,6 +2229,18 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 
       let execution = null;
       if (executionEnabled) {
+        const clobCooldownMessage = getClobCooldownMessage();
+        if (clobCooldownMessage) {
+          liveExecutionAbort = clobCooldownMessage;
+          tradeSummary.skipped.push({
+            id: tradeId,
+            side,
+            assetId,
+            reason: 'execution_rate_limited',
+            error: liveExecutionAbort,
+          });
+          break;
+        }
         try {
           execution = await executePolymarketMarketOrder({
             tokenID: assetId,
@@ -2398,6 +2451,18 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 
       let execution = null;
       if (executionEnabled) {
+        const clobCooldownMessage = getClobCooldownMessage();
+        if (clobCooldownMessage) {
+          liveExecutionAbort = clobCooldownMessage;
+          tradeSummary.skipped.push({
+            id: tradeId,
+            side,
+            assetId,
+            reason: 'execution_rate_limited',
+            error: liveExecutionAbort,
+          });
+          break;
+        }
         try {
           execution = await executePolymarketMarketOrder({
             tokenID: assetId,
@@ -2768,6 +2833,13 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       return;
     }
 
+    const clobCooldownMessage = getClobCooldownMessage();
+    if (clobCooldownMessage) {
+      liveExecutionAbort = clobCooldownMessage;
+      rebalancePlan.reason = 'execution_rate_limited';
+      return;
+    }
+
     if (liveRebalancePreflightEnabled) {
       const preflight = {
         ok: false,
@@ -2847,6 +2919,13 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       }
 
       executionPreflight = preflight;
+    }
+
+    const clobCooldownMessageAfterPreflight = getClobCooldownMessage();
+    if (clobCooldownMessageAfterPreflight) {
+      liveExecutionAbort = clobCooldownMessageAfterPreflight;
+      rebalancePlan.reason = 'execution_rate_limited';
+      return;
     }
 
     const targetByAssetId = new Map(
@@ -3167,14 +3246,30 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         }
       }
 
-	      let execution = null;
-	      try {
-	        rebalancePlan.attemptedOrders += 1;
-	        execution = await executePolymarketMarketOrder({
-	          tokenID: order.assetId,
-	          side: order.side,
-	          amount,
-	        });
+		      let execution = null;
+		      try {
+            const clobCooldownMessage = getClobCooldownMessage();
+            if (clobCooldownMessage) {
+              liveExecutionAbort = clobCooldownMessage;
+              tradeSummary.rebalance.push({
+                symbol: symbolFor(order),
+                assetId: order.assetId,
+                side: order.side,
+                amount,
+                price: order.price,
+                notional: roundToDecimals(order.notional, 6),
+                reason: 'execution_rate_limited',
+                error: liveExecutionAbort,
+              });
+              rebalancePlan.failedOrders += 1;
+              break;
+            }
+		        rebalancePlan.attemptedOrders += 1;
+		        execution = await executePolymarketMarketOrder({
+		          tokenID: order.assetId,
+		          side: order.side,
+		          amount,
+		        });
 	      } catch (error) {
         if (isExecutionConfigError(error)) {
           executionEnabled = false;
@@ -3654,10 +3749,10 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 		      executionDisabledReason,
 			      executionAbort: liveExecutionAbort,
 	          portfolioUpdated: shouldApplyPortfolioUpdate,
-			  hasClobCredentials,
-			      clobAuthCooldown: getClobAuthCooldownStatus(),
-            clobRateLimitCooldown: getClobRateLimitCooldownStatus(),
-				      sizeToBudget: makerStateEnabled,
+				  hasClobCredentials,
+				      clobAuthCooldown: getClobAuthCooldownStatus(),
+	            clobRateLimitCooldown: typeof getClobRateLimitCooldownStatus === 'function' ? getClobRateLimitCooldownStatus() : null,
+					      sizeToBudget: makerStateEnabled,
 				      sizedToBudget: didSize,
 	            seedFromPositions,
             seededFromPositionsSnapshot,

@@ -692,13 +692,16 @@ jest.mock('../strategyLogger', () => ({
 	    process.env.POLYMARKET_LIVE_REBALANCE_MIN_NOTIONAL = '0.01';
 	    process.env.POLYMARKET_LIVE_REBALANCE_MAX_ORDERS = '10';
 	
-	    const clob = nock('https://clob.polymarket.com');
-	    clob.get('/time').query(true).reply(200, 1700000000).persist();
-	    clob.get('/book').query(true).reply(200, { bids: [], asks: [] }).persist();
-	    clob
-	      .get('/data/trades')
-	      .query(true)
-	      .reply(200, {
+		    const clob = nock('https://clob.polymarket.com');
+		    clob.get('/time').query(true).reply(200, 1700000000).persist();
+		    clob.get('/book').query(true).reply(200, {
+		      bids: [{ price: 0.49, size: 100 }],
+		      asks: [{ price: 0.51, size: 100 }],
+		    }).persist();
+		    clob
+		      .get('/data/trades')
+		      .query(true)
+		      .reply(200, {
 	        data: [
 	          {
 	            id: 'trade-2',
@@ -767,12 +770,12 @@ jest.mock('../strategyLogger', () => ({
 	    expect(executePolymarketMarketOrder).toHaveBeenCalledTimes(2);
 	
 	    const lastLog = recordStrategyLog.mock.calls[recordStrategyLog.mock.calls.length - 1]?.[0] || null;
-	    expect(lastLog?.details?.executionAbort).toBeNull();
-	    expect(Array.isArray(lastLog?.details?.rebalance)).toBe(true);
-	    const rebalance = lastLog.details.rebalance;
-	    expect(rebalance.some((row) => row.reason === 'execution_failed')).toBe(true);
-	    expect(rebalance.some((row) => row.execution?.orderId)).toBe(true);
-	  });
+		    expect(lastLog?.details?.executionAbort).toBeNull();
+		    expect(Array.isArray(lastLog?.details?.rebalance)).toBe(true);
+		    const rebalance = lastLog.details.rebalance;
+		    expect(rebalance.some((row) => row.reason === 'execution_skipped_no_match')).toBe(true);
+		    expect(rebalance.some((row) => row.execution?.orderId)).toBe(true);
+		  });
 
 	  it('defaults polymarket.executionMode to paper when missing (even if env is live)', async () => {
 	    const executionModulePath = require.resolve('../polymarketExecutionService');
