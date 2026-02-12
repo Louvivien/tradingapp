@@ -2250,19 +2250,16 @@ const withRebalanceLock = async (handler) => {
   }
   rebalanceInProgress = true;
   let timer;
+  const startedAtMs = Date.now();
   try {
-    const timeoutPromise = new Promise((_, reject) => {
+    if (REBALANCE_LOCK_TIMEOUT_MS > 0) {
       timer = setTimeout(() => {
-        reject(new Error(`[Rebalance] Lock timed out after ${REBALANCE_LOCK_TIMEOUT_MS}ms — force releasing`));
+        console.warn(
+          `[Rebalance] Cycle still running after ${REBALANCE_LOCK_TIMEOUT_MS}ms (started ${new Date(startedAtMs).toISOString()})`
+        );
       }, REBALANCE_LOCK_TIMEOUT_MS);
-    });
-    return await Promise.race([handler(), timeoutPromise]);
-  } catch (err) {
-    if (err.message && err.message.includes('force releasing')) {
-      console.warn(err.message);
-    } else {
-      throw err;
     }
+    return await handler();
   } finally {
     if (timer) clearTimeout(timer);
     rebalanceInProgress = false;

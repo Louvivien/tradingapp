@@ -74,12 +74,67 @@ const parseBoolean = (value, fallback = false) => {
 
 const getPolymarketUseServerTime = () => parseBoolean(process.env.POLYMARKET_USE_SERVER_TIME, true);
 
+const POLYMARKET_CLOB_TIMEOUT_MS = (() => {
+  const raw = Number(process.env.POLYMARKET_CLOB_TIMEOUT_MS);
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return 15_000;
+  }
+  return Math.max(1_000, Math.min(Math.floor(raw), 120_000));
+})();
+
+const POLYMARKET_CLOB_RATE_LIMIT_COOLDOWN_MS = (() => {
+  const raw = Number(process.env.POLYMARKET_CLOB_RATE_LIMIT_COOLDOWN_MS);
+  if (!Number.isFinite(raw)) {
+    return 60_000;
+  }
+  return Math.max(0, Math.min(Math.floor(raw), 60 * 60 * 1000));
+})();
+
+const clobRateLimitState = {
+  disabledUntilMs: 0,
+  lastStatus: null,
+  lastTriggeredAtMs: 0,
+  lastRetryAfterMs: 0,
+};
+
+const isClobRateLimitActive = () =>
+  POLYMARKET_CLOB_RATE_LIMIT_COOLDOWN_MS > 0 && Date.now() < clobRateLimitState.disabledUntilMs;
+
+const getClobRateLimitCooldownStatus = () => {
+  const cooldownMs = POLYMARKET_CLOB_RATE_LIMIT_COOLDOWN_MS;
+  const disabledUntilMs = Number(clobRateLimitState.disabledUntilMs) || 0;
+  const now = Date.now();
+  const active = cooldownMs > 0 && disabledUntilMs > now;
+  const remainingMs = active ? disabledUntilMs - now : 0;
+  return {
+    cooldownMs,
+    active,
+    remainingMs,
+    disabledUntilMs: active ? disabledUntilMs : 0,
+    disabledUntil: active ? new Date(disabledUntilMs).toISOString() : null,
+    lastStatus: clobRateLimitState.lastStatus,
+    lastTriggeredAt: clobRateLimitState.lastTriggeredAtMs
+      ? new Date(clobRateLimitState.lastTriggeredAtMs).toISOString()
+      : null,
+    lastRetryAfterMs: clobRateLimitState.lastRetryAfterMs || 0,
+  };
+};
+
+const resetClobRateLimitCooldown = () => {
+  clobRateLimitState.disabledUntilMs = 0;
+  clobRateLimitState.lastStatus = null;
+  clobRateLimitState.lastTriggeredAtMs = 0;
+  clobRateLimitState.lastRetryAfterMs = 0;
+};
+
 let clobUserAgentInterceptorKeyCjs = null;
 let clobUserAgentInterceptorKeyEsm = null;
 let clobProxyInterceptorKeyCjs = null;
 let clobProxyInterceptorKeyEsm = null;
 let clobProxyFailureInterceptorKeyCjs = null;
 let clobProxyFailureInterceptorKeyEsm = null;
+let clobRequestGuardInterceptorKeyCjs = null;
+let clobRequestGuardInterceptorKeyEsm = null;
 let clobProxyPoolKey = null;
 let clobProxyPool = [];
 let clobProxyCursor = 0;
@@ -242,6 +297,13 @@ const looksLikeCloudflareBlockPage = (payload) => {
   );
 };
 
+const looksLikeCloudflareRateLimitPage = (payload) => {
+  const body = extractCloudflareHtmlText(payload);
+  if (!body) return false;
+  const lower = body.toLowerCase();
+  return lower.includes('error 1015') || (lower.includes('rate') && lower.includes('limited'));
+};
+
 const ensureAxiosProxyInterceptor = (axiosInstance, host, proxyProvider, currentKey) => {
   if (!axiosInstance || !axiosInstance.interceptors?.request || !host || !proxyProvider?.getProxy) {
     return currentKey;
@@ -269,6 +331,104 @@ const ensureAxiosProxyInterceptor = (axiosInstance, host, proxyProvider, current
     }
     return config;
   });
+
+  return key;
+};
+
+const parseRetryAfterMs = (headers) => {
+  if (!headers || typeof headers !== 'object') {
+    return null;
+  }
+  const raw = headers['retry-after'] ?? headers['Retry-After'] ?? null;
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+  const seconds = Number(raw);
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return null;
+  }
+  return Math.floor(seconds * 1000);
+};
+
+const noteClobRateLimit = ({ status, headers, payload } = {}) => {
+  if (POLYMARKET_CLOB_RATE_LIMIT_COOLDOWN_MS <= 0) {
+    return null;
+  }
+  const now = Date.now();
+  const retryAfterMs = parseRetryAfterMs(headers) || 0;
+  const cooldownMs = Math.max(POLYMARKET_CLOB_RATE_LIMIT_COOLDOWN_MS, retryAfterMs);
+  const disabledUntilMs = now + cooldownMs;
+  clobRateLimitState.disabledUntilMs = Math.max(clobRateLimitState.disabledUntilMs || 0, disabledUntilMs);
+  clobRateLimitState.lastStatus = Number.isFinite(Number(status)) ? Number(status) : null;
+  clobRateLimitState.lastTriggeredAtMs = now;
+  clobRateLimitState.lastRetryAfterMs = retryAfterMs;
+
+  const isCloudflare = looksLikeCloudflareBlockPage(payload) || looksLikeCloudflareRateLimitPage(payload);
+  if (isCloudflare) {
+    try {
+      console.warn(
+        `[CLOB Client] Rate limited by Cloudflare; pausing requests for ${Math.round(cooldownMs / 1000)}s.`
+      );
+    } catch {
+      // ignore
+    }
+  }
+
+  return new Date(clobRateLimitState.disabledUntilMs).toISOString();
+};
+
+const ensureAxiosRequestGuardInterceptor = (axiosInstance, host, currentKey) => {
+  if (!axiosInstance || !axiosInstance.interceptors?.request || !axiosInstance.interceptors?.response || !host) {
+    return currentKey;
+  }
+  const key = `${host}|polymarket-clob-guard`;
+  if (currentKey === key) {
+    return currentKey;
+  }
+
+  axiosInstance.interceptors.request.use((config) => {
+    if (!config || !config.url) {
+      return config;
+    }
+    if (!String(config.url).startsWith(host)) {
+      return config;
+    }
+
+    if (!config.timeout || Number(config.timeout) <= 0) {
+      config.timeout = POLYMARKET_CLOB_TIMEOUT_MS;
+    }
+
+    if (isClobRateLimitActive()) {
+      const remainingMs = Math.max(0, clobRateLimitState.disabledUntilMs - Date.now());
+      const err = new Error(
+        `Polymarket CLOB temporarily rate limited (cooldown ${Math.ceil(remainingMs / 1000)}s remaining).`
+      );
+      err.status = 429;
+      err.code = 'POLYMARKET_RATE_LIMIT';
+      throw err;
+    }
+
+    return config;
+  });
+
+  axiosInstance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      try {
+        const url = String(error?.config?.url || '');
+        if (url.startsWith(host)) {
+          const status = Number(error?.response?.status);
+          const payload = error?.response?.data;
+          if (status === 429 || looksLikeCloudflareRateLimitPage(payload)) {
+            noteClobRateLimit({ status, headers: error?.response?.headers, payload });
+          }
+        }
+      } catch {
+        // ignore
+      }
+      return Promise.reject(error);
+    }
+  );
 
   return key;
 };
@@ -374,6 +534,25 @@ const ensureClobProxyFailureInterceptor = async (host) => {
       axiosEsm,
       host,
       clobProxyFailureInterceptorKeyEsm
+    );
+  }
+};
+
+const ensureClobRequestGuardInterceptor = async (host) => {
+  if (!host) {
+    return;
+  }
+  clobRequestGuardInterceptorKeyCjs = ensureAxiosRequestGuardInterceptor(
+    Axios,
+    host,
+    clobRequestGuardInterceptorKeyCjs
+  );
+  const axiosEsm = await getAxiosEsm();
+  if (axiosEsm) {
+    clobRequestGuardInterceptorKeyEsm = ensureAxiosRequestGuardInterceptor(
+      axiosEsm,
+      host,
+      clobRequestGuardInterceptorKeyEsm
     );
   }
 };
@@ -518,6 +697,7 @@ const getPolymarketExecutionDebugInfo = () => {
     proxy: getPolymarketProxyDebugInfo(),
     l2CredsPresent,
     decryptError,
+    clobRateLimit: getClobRateLimitCooldownStatus(),
     authAddressPresent,
     authAddressValid,
     authMatchesPrivateKey,
@@ -610,6 +790,7 @@ const getPolymarketClobClient = async (options = {}) => {
   ensureClobUserAgentInterceptor(env.host);
   ensureClobProxyInterceptor(env.host);
   ensureClobProxyFailureInterceptor(env.host);
+  ensureClobRequestGuardInterceptor(env.host);
   if (!env.creds.apiKey || !env.creds.secret || !env.creds.passphrase) {
     throw new Error('Missing POLYMARKET_* CLOB credentials for live trading.');
   }
@@ -1335,4 +1516,6 @@ module.exports = {
   getPolymarketClobBalanceAllowance,
   executePolymarketMarketOrder,
   redeemPolymarketWinnings,
+  getClobRateLimitCooldownStatus,
+  resetClobRateLimitCooldown,
 };

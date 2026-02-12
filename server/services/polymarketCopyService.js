@@ -9,6 +9,7 @@ const {
   getPolymarketExecutionMode,
   executePolymarketMarketOrder,
   getPolymarketExecutionDebugInfo,
+  getClobRateLimitCooldownStatus,
   getPolymarketBalanceAllowance,
   getPolymarketOnchainUsdcBalance,
   getPolymarketClobBalanceAllowance,
@@ -368,6 +369,9 @@ const isRetryablePolymarketProxyError = (error) => {
     return status >= 500;
   }
   const code = String(error?.code || '').toUpperCase();
+  if (code === 'POLYMARKET_RATE_LIMIT') {
+    return false;
+  }
   if (!code) return true;
   if (
     code === 'ECONNRESET' ||
@@ -3096,6 +3100,49 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 
       if (liveRebalanceOrderbookPreflightEnabled) {
         const orderbook = await fetchClobOrderbook(order.assetId);
+        if (orderbook && orderbook.ok === false) {
+          const status = Number(orderbook.status);
+          const apiErrorLower = String(orderbook.apiError || '').toLowerCase();
+          const noOrderbookDetected =
+            status === 404 ||
+            apiErrorLower.includes('no orderbook exists') ||
+            apiErrorLower.includes('no orderbook');
+          const rateLimitedDetected =
+            status === 429 ||
+            apiErrorLower.includes('error 1015') ||
+            apiErrorLower.includes('rate limited');
+
+          if (noOrderbookDetected) {
+            noteUntradeableTokenId(order.assetId);
+            const diagnostics = buildRebalanceDiagnostics({ orderbook });
+            applySkippedOrderToTarget({
+              order,
+              amount,
+              reason: 'execution_skipped_untradeable_token',
+              error: String(orderbook.apiError || orderbook.error || 'No orderbook exists for token'),
+              diagnostics,
+            });
+            continue;
+          }
+
+          if (status === 403 || status === 408 || rateLimitedDetected || (Number.isFinite(status) && status >= 500)) {
+            const diagnostics = buildRebalanceDiagnostics({ orderbook });
+            liveExecutionAbort = String(orderbook.error || orderbook.apiError || 'CLOB orderbook request failed');
+            tradeSummary.rebalance.push({
+              symbol: symbolFor(order),
+              assetId: order.assetId,
+              side: order.side,
+              amount,
+              price: order.price,
+              notional: roundToDecimals(order.notional, 6),
+              reason: 'execution_retryable_error',
+              error: liveExecutionAbort,
+              ...(diagnostics ? { diagnostics } : {}),
+            });
+            rebalancePlan.failedOrders += 1;
+            break;
+          }
+        }
         if (orderbook && orderbook.ok === true) {
           const noLiquidity =
             (order.side === 'BUY' && Number(orderbook.askCount) === 0) ||
@@ -3607,8 +3654,9 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 		      executionDisabledReason,
 			      executionAbort: liveExecutionAbort,
 	          portfolioUpdated: shouldApplyPortfolioUpdate,
-			      hasClobCredentials,
+			  hasClobCredentials,
 			      clobAuthCooldown: getClobAuthCooldownStatus(),
+            clobRateLimitCooldown: getClobRateLimitCooldownStatus(),
 				      sizeToBudget: makerStateEnabled,
 				      sizedToBudget: didSize,
 	            seedFromPositions,
