@@ -2,6 +2,7 @@ const User = require("../models/userModel");
 const Strategy = require("../models/strategyModel");
 const Portfolio = require("../models/portfolioModel");
 const StrategyLog = require("../models/strategyLogModel");
+const mongoose = require("mongoose");
 const StrategyTemplate = require('../models/strategyTemplateModel');
 const StrategyEquitySnapshot = require('../models/strategyEquitySnapshotModel');
 const MaintenanceTask = require('../models/maintenanceTaskModel');
@@ -2512,6 +2513,105 @@ exports.getStrategyLogs = async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching strategy logs:', error.message);
+    return res.status(500).json({
+      status: 'fail',
+      message: 'Failed to load strategy logs',
+    });
+  }
+};
+
+exports.getAllStrategyLogs = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: 'Credentials could not be validated.',
+      });
+    }
+
+    const limitParam = Number(req.query?.limit);
+    const limit = Number.isFinite(limitParam)
+      ? Math.min(1000, Math.max(1, Math.floor(limitParam)))
+      : 200;
+
+    const compact = String(req.query?.compact ?? '1') !== '0';
+    const afterRaw = req.query?.after ? String(req.query.after) : null;
+    const after = afterRaw ? new Date(afterRaw) : null;
+    const hasAfter = after && !Number.isNaN(after.getTime());
+    const afterIdRaw = req.query?.afterId ? String(req.query.afterId) : null;
+    const afterObjectId =
+      hasAfter && afterIdRaw && mongoose.Types.ObjectId.isValid(afterIdRaw)
+        ? new mongoose.Types.ObjectId(afterIdRaw)
+        : null;
+
+    const filter = {
+      userId: String(userId),
+    };
+
+    if (hasAfter) {
+      filter.$or = afterObjectId
+        ? [
+            { createdAt: { $gt: after } },
+            { createdAt: after, _id: { $gt: afterObjectId } },
+          ]
+        : [{ createdAt: { $gt: after } }];
+    }
+
+    const logs = await StrategyLog.find(filter)
+      .sort({ createdAt: -1, _id: -1 })
+      .limit(limit)
+      .lean();
+
+    const compactLogs = compact
+      ? logs.map((log) => {
+          const details = log?.details;
+          const trimmedDetails = (() => {
+            if (!details || typeof details !== 'object' || Array.isArray(details)) {
+              return null;
+            }
+            const trimmed = {
+              provider: details?.provider ?? null,
+              humanSummary: details?.humanSummary ?? null,
+              mode: details?.mode ?? null,
+              executionMode: details?.executionMode ?? null,
+              portfolioUpdated: details?.portfolioUpdated ?? null,
+            };
+            if (details?.sizeToBudget != null) {
+              trimmed.sizeToBudget = details.sizeToBudget;
+            }
+            if (details?.sizing && typeof details.sizing === 'object' && !Array.isArray(details.sizing)) {
+              trimmed.sizing = {
+                sizingBudget: details.sizing?.sizingBudget ?? null,
+                scale: details.sizing?.scale ?? null,
+                makerValue: details.sizing?.makerValue ?? null,
+              };
+            }
+            if (details?.liveRebalancePlan && typeof details.liveRebalancePlan === 'object') {
+              trimmed.liveRebalancePlan = details.liveRebalancePlan;
+            }
+            return Object.keys(trimmed).some((key) => trimmed[key] != null) ? trimmed : null;
+          })();
+
+          return {
+            _id: log?._id,
+            strategy_id: log?.strategy_id,
+            strategyName: log?.strategyName ?? null,
+            level: log?.level ?? null,
+            message: log?.message ?? null,
+            createdAt: log?.createdAt ?? null,
+            details: trimmedDetails,
+          };
+        })
+      : logs;
+
+    return res.status(200).json({
+      status: 'success',
+      logs: compactLogs,
+    });
+  } catch (error) {
+    console.error('Error fetching all strategy logs:', error.message);
     return res.status(500).json({
       status: 'fail',
       message: 'Failed to load strategy logs',

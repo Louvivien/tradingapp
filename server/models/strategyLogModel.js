@@ -55,6 +55,7 @@ const strategyLogSchema = new Schema(
 );
 
 strategyLogSchema.index({ userId: 1, strategy_id: 1, createdAt: -1 });
+strategyLogSchema.index({ userId: 1, createdAt: -1 });
 if (STRATEGY_LOG_TTL_DAYS) {
   strategyLogSchema.index(
     { createdAt: 1 },

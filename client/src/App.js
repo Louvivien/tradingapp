@@ -111,6 +111,7 @@ function App() {
               <>
                 <Route path="/" element={<PageTemplate />} />
                 <Route path="/strategies/:strategyId/logs" element={<StrategyLogsRoute />} />
+                <Route path="/logs" element={<PageTemplate initialPage="allLogs" />} />
                 <Route path="/test" element={<Test />} />
               </>
             ) : (

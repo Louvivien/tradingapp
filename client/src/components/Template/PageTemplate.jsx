@@ -20,6 +20,7 @@ import SecondNavbar from "../Template/SecondNavbar";
 import Dashboard from "../Dashboard/Dashboard";
 import Strategies from "../Strategies/Strategies";
 import StrategyLogs from "../Strategies/StrategyLogs";
+import LiveLogs from "../Strategies/LiveLogs";
 import HoldingsCompare from "../Strategies/HoldingsCompare";
 import News from "../News/News";
 import Search from "../Search/Search";
@@ -91,6 +92,7 @@ const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, ini
     name: initialStrategyName,
   });
   const isStrategyLogsRoute = /^\/strategies\/[^/]+\/logs/.test(location.pathname);
+  const isLiveLogsRoute = /^\/logs/.test(location.pathname);
 
 
 
@@ -133,14 +135,24 @@ const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, ini
       if (currentPage !== "strategyLogs") {
         setCurrentPage("strategyLogs");
       }
-    } else if (currentPage === "strategyLogs") {
+      return;
+    }
+
+    if (isLiveLogsRoute) {
+      if (currentPage !== "allLogs") {
+        setCurrentPage("allLogs");
+      }
+      return;
+    }
+
+    if (currentPage === "strategyLogs" || currentPage === "allLogs") {
       setCurrentPage("dashboard");
       setSelectedStrategyForLogs({
         id: null,
         name: "",
       });
     }
-  }, [isStrategyLogsRoute, currentPage]);
+  }, [isStrategyLogsRoute, isLiveLogsRoute, currentPage]);
 
 
   const logout = () => {
@@ -190,7 +202,7 @@ const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, ini
     if (page === "strategyLogs") {
       return;
     }
-    if (isStrategyLogsRoute) {
+    if (isStrategyLogsRoute || isLiveLogsRoute) {
       navigate("/");
     }
     if (page !== "strategyLogs") {
@@ -244,6 +256,7 @@ const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, ini
             {currentPage === "strategies" && "Strategies"}
             {currentPage === "holdingsCompare" && "Holdings Compare"}
             {currentPage === "strategyLogs" && "Strategy Logs"}
+            {currentPage === "allLogs" && "Live Logs"}
           </Typography>
           <Typography color="inherit">
             Hello,{" "}
@@ -296,6 +309,7 @@ const PageTemplate = ({ initialPage = "dashboard", initialStrategyId = null, ini
             onClose={handleCloseStrategyLogs}
           />
         )}
+        {currentPage === "allLogs" && <LiveLogs />}
         {currentPage === "search" && (
 
 

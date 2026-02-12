@@ -12,6 +12,7 @@ const {
   getStrategies,
   getStrategyTemplates,
   getStrategyLogs,
+  getAllStrategyLogs,
   getStrategyEquityHistory,
   getEquityBackfillStatus,
   triggerEquityBackfill,
@@ -45,6 +46,7 @@ router.route("/polymarket/").post(auth, createPolymarketCopyTrader);
 router.route("/polymarket/balance/:userId").get(auth, getPolymarketBalanceAllowance);
 router.route("/all/:userId").get(auth, getStrategies);
 router.route("/templates/:userId").get(auth, getStrategyTemplates);
+router.route("/logs/all/:userId").get(auth, getAllStrategyLogs);
 router.route("/logs/:userId/:strategyId").get(auth, getStrategyLogs);
 router.route("/equity/:userId/:strategyId").get(auth, getStrategyEquityHistory);
 router.route("/equity/backfill-status/:userId").get(auth, getEquityBackfillStatus);

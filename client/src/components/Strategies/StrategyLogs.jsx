@@ -1,5 +1,6 @@
 import React, { useContext, useEffect, useState } from "react";
 import { Box, Button, CircularProgress, Collapse, Paper, Typography } from "@mui/material";
+import { Link as RouterLink } from "react-router-dom";
 import Axios from "axios";
 import config from "../../config/Config";
 import UserContext from "../../context/UserContext";
@@ -498,6 +499,11 @@ const StrategyLogs = ({ strategyId, strategyName, onClose = () => {} }) => {
         </Button>
       </Box>
       {renderBody()}
+      <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+        <Button component={RouterLink} to="/logs" variant="text">
+          View live logs (all strategies)
+        </Button>
+      </Box>
     </Box>
   );
 };
