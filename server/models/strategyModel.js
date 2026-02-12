@@ -39,6 +39,8 @@ const strategySchema = new Schema(
     recurrence: {
       type: String,
       enum: [
+        'every_10_seconds',
+        'every_30_seconds',
         'every_minute',
         'every_5_minutes',
         'every_15_minutes',

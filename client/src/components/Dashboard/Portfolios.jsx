@@ -1274,11 +1274,16 @@ const deleteStrategy = async (strategyId) => {
                   disabled={!!updatingRecurrence[portfolio.strategy_id]}
                   sx={{ minWidth: 220 }}
                 >
-                  {Object.entries(RECURRENCE_LABELS).map(([value, label]) => (
+                  {Object.entries(RECURRENCE_LABELS)
+                    .filter(([value]) => {
+                      const isSubMinute = String(value).endsWith("_seconds");
+                      return portfolio.provider === "polymarket" || !isSubMinute;
+                    })
+                    .map(([value, label]) => (
                     <MenuItem key={value} value={value}>
                       {label}
                     </MenuItem>
-                  ))}
+                    ))}
                 </TextField>
                 {updatingRecurrence[portfolio.strategy_id] && <CircularProgress size={18} />}
               </Box>
@@ -1904,6 +1909,8 @@ const deleteStrategy = async (strategyId) => {
 
 export default Portfolios;
 const RECURRENCE_LABELS = {
+  every_10_seconds: "Every 10 seconds",
+  every_30_seconds: "Every 30 seconds",
   every_minute: "Every minute",
   every_5_minutes: "Every 5 minutes",
   every_15_minutes: "Every 15 minutes",

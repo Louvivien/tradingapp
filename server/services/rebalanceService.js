@@ -28,6 +28,8 @@ const ENABLE_FRACTIONAL_ORDERS =
   String(process.env.ALPACA_ENABLE_FRACTIONAL ?? 'true').toLowerCase() !== 'false';
 
 const RECURRENCE_LABELS = {
+  every_10_seconds: 'Every 10 seconds',
+  every_30_seconds: 'Every 30 seconds',
   every_minute: 'Every minute',
   every_5_minutes: 'Every 5 minutes',
   every_15_minutes: 'Every 15 minutes',
@@ -2270,6 +2272,11 @@ const runDueRebalances = async () => {
         ],
       });
 
+      if (!Array.isArray(duePortfolios) || duePortfolios.length === 0) {
+        return { ok: true, checkedAt: now.toISOString(), due: 0, processed: 0 };
+      }
+
+      let processed = 0;
       for (const portfolio of duePortfolios) {
         try {
           const provider = String(portfolio.provider || 'alpaca');
@@ -2278,6 +2285,7 @@ const runDueRebalances = async () => {
           } else {
             await rebalancePortfolio(portfolio);
           }
+          processed += 1;
         } catch (error) {
           console.error(`[Rebalance] Failed for portfolio ${portfolio._id}:`, error.message);
           const provider = String(portfolio.provider || 'alpaca');
@@ -2296,11 +2304,13 @@ const runDueRebalances = async () => {
           });
         }
       }
+
+      return { ok: true, checkedAt: now.toISOString(), due: duePortfolios.length, processed };
     });
   } catch (error) {
     if (String(error?.message || '').includes('Rebalance already in progress')) {
       console.log('[Rebalance] Skipping run; previous cycle still in progress.');
-      return;
+      return { ok: true, skipped: true, reason: 'lock_in_progress' };
     }
     throw error;
   }

@@ -51,6 +51,8 @@ const FixedHeightPaper = styled(StyledPaper)({
 });
 
 const RECURRENCE_OPTIONS = [
+  { value: "every_10_seconds", label: "Every 10 seconds" },
+  { value: "every_30_seconds", label: "Every 30 seconds" },
   { value: "every_minute", label: "Every minute" },
   { value: "every_5_minutes", label: "Every 5 minutes" },
   { value: "every_15_minutes", label: "Every 15 minutes" },
@@ -59,6 +61,10 @@ const RECURRENCE_OPTIONS = [
   { value: "weekly", label: "Weekly" },
   { value: "monthly", label: "Monthly" },
 ];
+
+const NON_POLYMARKET_RECURRENCE_OPTIONS = RECURRENCE_OPTIONS.filter(
+  (option) => !String(option.value).endsWith("_seconds")
+);
 
 const Strategies = () => {
   const [collaborative, setcollaborative] = useState("");
@@ -784,7 +790,7 @@ const Strategies = () => {
                 fullWidth
                 margin="normal"
               >
-                {RECURRENCE_OPTIONS.map((option) => (
+                {NON_POLYMARKET_RECURRENCE_OPTIONS.map((option) => (
                   <MenuItem key={option.value} value={option.value}>
                     {option.label}
                   </MenuItem>
@@ -1070,7 +1076,7 @@ const Strategies = () => {
               fullWidth
               margin="normal"
             >
-              {RECURRENCE_OPTIONS.map((option) => (
+              {NON_POLYMARKET_RECURRENCE_OPTIONS.map((option) => (
                 <MenuItem key={option.value} value={option.value}>
                   {option.label}
                 </MenuItem>

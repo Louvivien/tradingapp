@@ -49,6 +49,8 @@ const {
 	const { compareComposerStrategySemantics } = require('../utils/composerStrategySemantics');
 
 const RECURRENCE_LABELS = {
+  every_10_seconds: 'Every 10 seconds',
+  every_30_seconds: 'Every 30 seconds',
   every_minute: 'Every minute',
   every_5_minutes: 'Every 5 minutes',
   every_15_minutes: 'Every 15 minutes',
@@ -58,7 +60,17 @@ const RECURRENCE_LABELS = {
   monthly: 'Monthly',
 };
 
-const VALID_RECURRENCES = new Set(['every_minute','every_5_minutes','every_15_minutes','hourly','daily','weekly','monthly']);
+const VALID_RECURRENCES = new Set([
+  'every_10_seconds',
+  'every_30_seconds',
+  'every_minute',
+  'every_5_minutes',
+  'every_15_minutes',
+  'hourly',
+  'daily',
+  'weekly',
+  'monthly',
+]);
 
 const parseOptionalHttpUrl = (value) => {
   if (value === undefined) {
@@ -984,6 +996,13 @@ exports.createCollaborative = async (req, res) => {
       return progressFail(502, `Composer evaluation failed: ${error.message || 'unknown error'}`, 'composer_evaluation');
     }
     const recurrence = normalizeRecurrence(req.body?.recurrence);
+    if (String(recurrence).endsWith('_seconds')) {
+      return progressFail(
+        400,
+        'Sub-minute frequency is only supported for Polymarket strategies.',
+        'validation'
+      );
+    }
 
     publishProgress(jobId, {
       step: 'validation',
@@ -2651,13 +2670,21 @@ exports.updateStrategyRecurrence = async (req, res) => {
       });
     }
 
+    const provider = String(portfolio.provider || 'alpaca').toLowerCase();
+    const isSubMinuteRecurrence = String(normalizedRecurrence).endsWith('_seconds');
+    if (isSubMinuteRecurrence && provider !== 'polymarket') {
+      return res.status(400).json({
+        status: 'fail',
+        message: 'Sub-minute frequency is only supported for Polymarket strategies.',
+      });
+    }
+
     const strategy = await Strategy.findOne({ strategy_id: strategyId, userId: String(userId) });
 
     const now = new Date();
     const provisionalNext = computeNextRebalanceAt(normalizedRecurrence, now);
     let nextRebalanceAt = provisionalNext;
     try {
-      const provider = String(portfolio.provider || 'alpaca').toLowerCase();
       if (provider === 'alpaca') {
         const alpacaConfig = await getAlpacaConfig(userId);
         if (alpacaConfig?.hasValidKeys) {

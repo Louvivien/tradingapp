@@ -1,4 +1,6 @@
 const RECURRENCE_MAP = {
+  every_10_seconds: { seconds: 10 },
+  every_30_seconds: { seconds: 30 },
   every_minute: { minutes: 1 },
   every_5_minutes: { minutes: 5 },
   every_15_minutes: { minutes: 15 },
@@ -25,6 +27,10 @@ const computeNextRebalanceAt = (recurrence, fromDate = new Date()) => {
   const normalized = normalizeRecurrence(recurrence);
   const config = RECURRENCE_MAP[normalized];
   const base = new Date(fromDate);
+
+  if (config.seconds) {
+    base.setUTCSeconds(base.getUTCSeconds() + config.seconds);
+  }
 
   if (config.minutes) {
     base.setUTCMinutes(base.getUTCMinutes() + config.minutes);

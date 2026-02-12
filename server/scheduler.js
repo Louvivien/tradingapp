@@ -47,14 +47,27 @@ function scheduleSentimentVertex() {
 }
 
 function schedulePortfolioRebalances() {
-  cron.schedule('* * * * *', async () => {
+  const defaultSchedule = '*/10 * * * * *'; // every 10 seconds
+  const schedule = String(process.env.REBALANCE_SCHEDULER_CRON || '').trim() || defaultSchedule;
+  console.log('[Scheduler] Portfolio rebalance schedule:', schedule);
+
+  cron.schedule(schedule, async () => {
     try {
       if (mongoose.connection.readyState !== 1) {
         console.warn('[Scheduler] MongoDB not connected; skipping rebalance check.');
         return;
       }
-      console.log('[Scheduler] Checking for portfolios due for rebalancing...');
-      await runDueRebalances();
+      const result = await runDueRebalances();
+      if (result?.skipped) {
+        return;
+      }
+      if (result?.due > 0) {
+        console.log('[Scheduler] Ran due portfolio rebalances:', {
+          due: result.due,
+          processed: result.processed,
+          checkedAt: result.checkedAt,
+        });
+      }
     } catch (error) {
       console.error('[Scheduler] Portfolio rebalance check failed:', error.message);
     }
