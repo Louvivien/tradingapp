@@ -364,7 +364,8 @@ const StrategyLogs = ({ strategyId, strategyName, onClose = () => {} }) => {
 			                if (orderId) suffixParts.push(`order ${orderId}`);
 			                const looksSkipped =
 			                  row?.reason === "execution_skipped_untradeable_token" ||
-			                  row?.reason === "execution_skipped_no_liquidity";
+			                  row?.reason === "execution_skipped_no_liquidity" ||
+			                  row?.reason === "execution_skipped_no_match";
 			                const looksFailed =
 			                  row?.reason === "execution_failed" ||
 			                  row?.reason === "execution_retryable_error" ||

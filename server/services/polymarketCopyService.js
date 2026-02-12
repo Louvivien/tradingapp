@@ -3039,6 +3039,8 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
             ? 'poly-untradeable'
             : reason === 'execution_skipped_no_liquidity'
               ? 'poly-illiquid'
+              : reason === 'execution_skipped_no_match'
+                ? 'poly-nomatch'
               : 'poly-skip';
         const market = currentHolding?.market
           ? String(currentHolding.market)
@@ -3188,6 +3190,13 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
               ((order.side === 'BUY' && Number(orderbook.askCount) === 0) ||
                 (order.side === 'SELL' && Number(orderbook.bidCount) === 0));
 
+            const noMatchDetected =
+              lowerErrorMessage.includes('no orders found to match') ||
+              lowerErrorMessage.includes('no orders to match') ||
+              lowerErrorMessage.includes('fak orders are partially filled or killed') ||
+              lowerErrorMessage.includes('fok orders are') ||
+              lowerErrorMessage.includes('no match');
+
 	          if (noOrderbookDetected) {
 	            noteUntradeableTokenId(order.assetId);
 	            applySkippedOrderToTarget({
@@ -3212,6 +3221,17 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
                 amount,
                 reason: 'execution_skipped_no_liquidity',
                 error: liquidityError,
+                diagnostics,
+              });
+              continue;
+            }
+
+            if (noMatchDetected) {
+              applySkippedOrderToTarget({
+                order,
+                amount,
+                reason: 'execution_skipped_no_match',
+                error: errorMessage,
                 diagnostics,
               });
               continue;
