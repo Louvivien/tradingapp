@@ -2228,6 +2228,15 @@ const rebalancePortfolio = async (portfolio) => {
 };
 
 let rebalanceInProgress = false;
+let lastLockSkipLogAtMs = 0;
+
+const REBALANCE_LOCK_SKIP_LOG_THROTTLE_MS = (() => {
+  const raw = Number(process.env.REBALANCE_LOCK_SKIP_LOG_THROTTLE_MS);
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return 60 * 1000;
+  }
+  return Math.max(1000, Math.min(Math.floor(raw), 15 * 60 * 1000));
+})();
 
 const REBALANCE_LOCK_TIMEOUT_MS = (() => {
   const raw = Number(process.env.REBALANCE_LOCK_TIMEOUT_MS);
@@ -2309,7 +2318,11 @@ const runDueRebalances = async () => {
     });
   } catch (error) {
     if (String(error?.message || '').includes('Rebalance already in progress')) {
-      console.log('[Rebalance] Skipping run; previous cycle still in progress.');
+      const nowMs = Date.now();
+      if (nowMs - lastLockSkipLogAtMs >= REBALANCE_LOCK_SKIP_LOG_THROTTLE_MS) {
+        lastLockSkipLogAtMs = nowMs;
+        console.log('[Rebalance] Skipping run; previous cycle still in progress.');
+      }
       return { ok: true, skipped: true, reason: 'lock_in_progress' };
     }
     throw error;

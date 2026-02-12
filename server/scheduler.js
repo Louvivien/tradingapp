@@ -3,7 +3,7 @@
 const cron = require('node-cron');
 const { spawn } = require('child_process');
 const mongoose = require('mongoose');
-const { runDueRebalances } = require('./services/rebalanceService');
+const { runDueRebalances, isRebalanceLocked } = require('./services/rebalanceService');
 const { refreshPolymarketProxyPool } = require('./services/polymarketProxyPoolService');
 
 // Schedule news_fromstockslist.py to run every day at 1:00 AM
@@ -53,6 +53,9 @@ function schedulePortfolioRebalances() {
 
   cron.schedule(schedule, async () => {
     try {
+      if (isRebalanceLocked()) {
+        return;
+      }
       if (mongoose.connection.readyState !== 1) {
         console.warn('[Scheduler] MongoDB not connected; skipping rebalance check.');
         return;
