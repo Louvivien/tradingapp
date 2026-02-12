@@ -3315,6 +3315,121 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	        ? 'Polymarket copy-trader seeded from positions snapshot'
 	        : 'Polymarket copy-trader synced';
 
+  const humanSummary = (() => {
+    const lines = [];
+    lines.push('Polymarket copy-trader sync.');
+
+    const metaParts = [
+      mode ? `mode ${mode}` : null,
+      executionMode ? `execution ${executionMode}` : null,
+    ].filter(Boolean);
+    if (metaParts.length) {
+      lines.push(`• ${metaParts.join(' · ')}.`);
+    }
+
+    const formatUsd = (value) => {
+      const num = toNumber(value, null);
+      if (num === null) return null;
+      try {
+        return `$${num.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      } catch {
+        return `$${num.toFixed(2)}`;
+      }
+    };
+
+    const formatNum = (value, digits = 8) => {
+      const num = toNumber(value, null);
+      if (num === null) return null;
+      const rounded = roundToDecimals(num, digits);
+      return rounded === null ? String(num) : String(rounded);
+    };
+
+    if (makerStateEnabled === true) {
+      const segments = [];
+      if (sizingMeta?.sizingBudget !== undefined && sizingMeta?.sizingBudget !== null) {
+        const label = formatUsd(sizingMeta.sizingBudget);
+        if (label) segments.push(`budget ${label}`);
+      }
+      if (sizingMeta?.scale !== undefined && sizingMeta?.scale !== null) {
+        const label = formatNum(sizingMeta.scale, 8);
+        if (label) segments.push(`scale ${label}`);
+      }
+      if (sizingMeta?.makerValue !== undefined && sizingMeta?.makerValue !== null) {
+        const label = formatUsd(sizingMeta.makerValue);
+        if (label) segments.push(`maker value ${label}`);
+      }
+      lines.push(`• Size-to-budget: ON${segments.length ? ` (${segments.join(' · ')})` : ''}.`);
+    }
+
+    const buysCount = Array.isArray(tradeSummary?.buys) ? tradeSummary.buys.length : 0;
+    const sellsCount = Array.isArray(tradeSummary?.sells) ? tradeSummary.sells.length : 0;
+    if (buysCount || sellsCount) {
+      lines.push(
+        makerStateEnabled === true
+          ? `• Maker trades ingested: buys ${buysCount} · sells ${sellsCount}.`
+          : `• Trades processed: buys ${buysCount} · sells ${sellsCount}.`
+      );
+    }
+
+    const pickLargest = (list, field) => {
+      if (!Array.isArray(list) || !list.length) return null;
+      let best = null;
+      let bestValue = null;
+      list.forEach((entry) => {
+        const val = toNumber(entry?.[field], null);
+        if (val === null) return;
+        if (bestValue === null || val > bestValue) {
+          bestValue = val;
+          best = entry;
+        }
+      });
+      return best;
+    };
+
+    const largestBuy = pickLargest(tradeSummary?.buys, 'cost');
+    if (largestBuy?.symbol && largestBuy?.cost !== undefined && largestBuy?.cost !== null) {
+      const cost = formatUsd(largestBuy.cost);
+      const price = largestBuy?.price !== undefined && largestBuy?.price !== null ? formatUsd(largestBuy.price) : null;
+      const label = makerStateEnabled === true ? 'Largest maker buy' : 'Largest buy';
+      lines.push(`• ${label}: ${largestBuy.symbol} cost ${cost || 'n/a'}${price ? ` @ ${price}` : ''}.`);
+    }
+
+    const largestSell = pickLargest(tradeSummary?.sells, 'proceeds');
+    if (largestSell?.symbol && largestSell?.proceeds !== undefined && largestSell?.proceeds !== null) {
+      const proceeds = formatUsd(largestSell.proceeds);
+      const price = largestSell?.price !== undefined && largestSell?.price !== null ? formatUsd(largestSell.price) : null;
+      const label = makerStateEnabled === true ? 'Largest maker sell' : 'Largest sell';
+      lines.push(`• ${label}: ${largestSell.symbol} proceeds ${proceeds || 'n/a'}${price ? ` @ ${price}` : ''}.`);
+    }
+
+    if (rebalancePlan) {
+      const parts = [
+        Number.isFinite(rebalancePlan?.attemptedOrders) ? `attempted ${rebalancePlan.attemptedOrders}` : null,
+        Number.isFinite(rebalancePlan?.successfulOrders) ? `matched ${rebalancePlan.successfulOrders}` : null,
+        Number.isFinite(rebalancePlan?.failedOrders) ? `failed ${rebalancePlan.failedOrders}` : null,
+        Number.isFinite(rebalancePlan?.skippedOrders) ? `skipped ${rebalancePlan.skippedOrders}` : null,
+      ].filter(Boolean);
+      const suffix = rebalancePlan?.reason ? ` (reason: ${rebalancePlan.reason})` : '';
+      if (parts.length) {
+        lines.push(`• My live orders: ${parts.join(' · ')}${suffix}.`);
+      }
+      const firstFailure = Array.isArray(tradeSummary?.rebalance)
+        ? tradeSummary.rebalance.find((entry) => entry?.reason === 'execution_failed' && entry?.error)
+        : null;
+      if (firstFailure?.side && firstFailure?.symbol && firstFailure?.error) {
+        lines.push(`• Latest failure: ${String(firstFailure.side).toUpperCase()} ${firstFailure.symbol} — ${firstFailure.error}.`);
+      }
+    }
+
+    if (shouldApplyPortfolioUpdate === true) {
+      lines.push('• Portfolio updated: yes.');
+    } else if (shouldApplyPortfolioUpdate === false) {
+      lines.push('• Portfolio updated: no.');
+    }
+
+    return lines.join('\n');
+  })();
+
   const executionDebug = (() => {
     if (typeof getPolymarketExecutionDebugInfo !== 'function') {
       return null;
@@ -3356,6 +3471,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	    message: summaryMessage,
 		    details: {
 		      provider: 'polymarket',
+          humanSummary,
 		      mode,
 		      tradeSource: tradeSourceUsed,
 		      tradesSourceSetting,
