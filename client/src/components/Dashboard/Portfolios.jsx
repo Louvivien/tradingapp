@@ -38,7 +38,14 @@ const loadPortfolioFilter = () => {
   }
   try {
     const raw = window.localStorage.getItem(PORTFOLIO_FILTER_STORAGE_KEY);
-    if (raw === "composer" || raw === "polymarket" || raw === "all") {
+    if (
+      raw === "composer" ||
+      raw === "polymarket" ||
+      raw === "all" ||
+      raw === "real_money" ||
+      raw === "composer_real_money" ||
+      raw === "polymarket_real_money"
+    ) {
       return raw;
     }
   } catch {
@@ -879,14 +886,30 @@ const deleteStrategy = async (strategyId) => {
     Number.isFinite(Number(polymarketWalletTradable)) ? Number(polymarketWalletTradable) - polymarketLiveCashLimitTotal : null;
   const visiblePortfolios = normalizedPortfolios.filter((portfolio) => {
     const provider = String(portfolio?.provider || "alpaca").toLowerCase();
+    const realMoneyRequested = Boolean(portfolio?.isRealMoneyRequested);
     if (portfolioFilter === "polymarket") {
       return provider === "polymarket";
     }
     if (portfolioFilter === "composer") {
       return provider !== "polymarket";
     }
+    if (portfolioFilter === "real_money") {
+      return realMoneyRequested;
+    }
+    if (portfolioFilter === "composer_real_money") {
+      return provider !== "polymarket" && realMoneyRequested;
+    }
+    if (portfolioFilter === "polymarket_real_money") {
+      return provider === "polymarket" && realMoneyRequested;
+    }
     return true;
   });
+
+  const showPolymarketTotals =
+    portfolioFilter === "all" ||
+    portfolioFilter === "polymarket" ||
+    portfolioFilter === "real_money" ||
+    portfolioFilter === "polymarket_real_money";
 
   return (
     <React.Fragment>
@@ -919,9 +942,12 @@ const deleteStrategy = async (strategyId) => {
             <MenuItem value="all">All</MenuItem>
             <MenuItem value="composer">Composer</MenuItem>
             <MenuItem value="polymarket">Polymarket</MenuItem>
+            <MenuItem value="real_money">Real Money</MenuItem>
+            <MenuItem value="composer_real_money">Composer - Real Money</MenuItem>
+            <MenuItem value="polymarket_real_money">Polymarket - Real Money</MenuItem>
           </TextField>
         </Box>
-        {portfolioFilter !== "composer" && polymarketPortfolios.length > 0 && (
+        {showPolymarketTotals && polymarketPortfolios.length > 0 && (
           <Box sx={{ ml: 6, mb: 2 }}>
             <Typography variant="body2" color="textSecondary">
               Polymarket cash limits: {formatCurrencyValue(polymarketCashLimitTotal)}
