@@ -1116,7 +1116,7 @@ const deleteStrategy = async (strategyId) => {
                         </Typography>
                       ) : polymarketBalance ? (
                         <Typography variant="body2" color="textSecondary">
-                          Polymarket wallet: balance {formatCurrencyValue(polymarketBalance.balance ?? polymarketBalance.available)} · tradable {formatCurrencyValue(polymarketBalance.tradable)}{polymarketBalance.allowance !== null && polymarketBalance.allowance !== undefined ? ` (allowance: ${formatCurrencyValue(polymarketBalance.allowance)})` : ""}
+                          Polymarket wallet: balance {formatCurrencyValue(polymarketBalance.balance ?? polymarketBalance.available)} · tradable {formatCurrencyValue(polymarketBalance.tradable)}
                         </Typography>
                       ) : (
                         <Typography variant="body2" color="textSecondary">

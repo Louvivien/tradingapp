@@ -1435,10 +1435,7 @@ const Strategies = () => {
 	                        </Typography>
 	                      )}
 	                      <Typography variant="body2" color="textSecondary">
-	                        Tradable now: {polymarketBalance.tradable ?? "—"}{" "}
-	                        {polymarketBalance.allowance !== null && polymarketBalance.allowance !== undefined
-	                          ? `(allowance: ${polymarketBalance.allowance})`
-	                          : ""}
+	                        Tradable now: {polymarketBalance.tradable ?? "—"}
 	                      </Typography>
 	                      {polymarketBalance.available > 0 &&
 	                        (polymarketBalance.tradable === 0 || polymarketBalance.tradable === null) && (
