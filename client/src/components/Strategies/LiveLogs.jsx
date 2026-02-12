@@ -52,8 +52,7 @@ const LiveLogs = () => {
         compact: 1,
       };
 
-      const after = cursorRef.current.after;
-      const afterId = cursorRef.current.afterId;
+      const { after, afterId } = cursorRef.current;
       if (!initial && after) {
         params.after = after;
         if (afterId) {
@@ -247,4 +246,3 @@ const formatDateTime = (value) => {
 };
 
 export default LiveLogs;
-
