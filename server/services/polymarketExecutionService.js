@@ -74,12 +74,33 @@ const parseBoolean = (value, fallback = false) => {
 
 const getPolymarketUseServerTime = () => parseBoolean(process.env.POLYMARKET_USE_SERVER_TIME, true);
 
+const sleep = (ms) =>
+  new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+
 const POLYMARKET_CLOB_TIMEOUT_MS = (() => {
   const raw = Number(process.env.POLYMARKET_CLOB_TIMEOUT_MS);
   if (!Number.isFinite(raw) || raw <= 0) {
     return 15_000;
   }
   return Math.max(1_000, Math.min(Math.floor(raw), 120_000));
+})();
+
+const POLYMARKET_CLOB_MIN_REQUEST_INTERVAL_MS = (() => {
+  const raw = Number(process.env.POLYMARKET_CLOB_MIN_REQUEST_INTERVAL_MS);
+  if (!Number.isFinite(raw)) {
+    return 250;
+  }
+  return Math.max(0, Math.min(Math.floor(raw), 10_000));
+})();
+
+const POLYMARKET_CLOB_SERVER_TIME_CACHE_MS = (() => {
+  const raw = Number(process.env.POLYMARKET_CLOB_SERVER_TIME_CACHE_MS);
+  if (!Number.isFinite(raw)) {
+    return 10_000;
+  }
+  return Math.max(0, Math.min(Math.floor(raw), 60_000));
 })();
 
 const POLYMARKET_CLOB_RATE_LIMIT_COOLDOWN_MS = (() => {
@@ -89,6 +110,42 @@ const POLYMARKET_CLOB_RATE_LIMIT_COOLDOWN_MS = (() => {
   }
   return Math.max(0, Math.min(Math.floor(raw), 60 * 60 * 1000));
 })();
+
+const clobThrottleStateByHost = new Map();
+const getClobThrottleState = (host) => {
+  const key = normalizeEnvValue(host);
+  if (!key) {
+    return null;
+  }
+  const existing = clobThrottleStateByHost.get(key);
+  if (existing) {
+    return existing;
+  }
+  const created = {
+    nextAllowedAtMs: 0,
+  };
+  clobThrottleStateByHost.set(key, created);
+  return created;
+};
+
+const clobServerTimeCacheByHost = new Map();
+const getClobServerTimeCacheState = (host) => {
+  const key = normalizeEnvValue(host);
+  if (!key) {
+    return null;
+  }
+  const existing = clobServerTimeCacheByHost.get(key);
+  if (existing) {
+    return existing;
+  }
+  const created = {
+    value: null,
+    fetchedAtMs: 0,
+    inFlight: null,
+  };
+  clobServerTimeCacheByHost.set(key, created);
+  return created;
+};
 
 const clobRateLimitState = {
   disabledUntilMs: 0,
@@ -386,7 +443,7 @@ const ensureAxiosRequestGuardInterceptor = (axiosInstance, host, currentKey) => 
     return currentKey;
   }
 
-  axiosInstance.interceptors.request.use((config) => {
+  axiosInstance.interceptors.request.use(async (config) => {
     if (!config || !config.url) {
       return config;
     }
@@ -406,6 +463,19 @@ const ensureAxiosRequestGuardInterceptor = (axiosInstance, host, currentKey) => 
       err.status = 429;
       err.code = 'POLYMARKET_RATE_LIMIT';
       throw err;
+    }
+
+    if (POLYMARKET_CLOB_MIN_REQUEST_INTERVAL_MS > 0) {
+      const state = getClobThrottleState(host);
+      if (state) {
+        const now = Date.now();
+        const scheduledAt = Math.max(now, Number(state.nextAllowedAtMs) || 0);
+        state.nextAllowedAtMs = scheduledAt + POLYMARKET_CLOB_MIN_REQUEST_INTERVAL_MS;
+        const waitMs = scheduledAt - now;
+        if (waitMs > 0) {
+          await sleep(waitMs);
+        }
+      }
     }
 
     return config;
@@ -842,6 +912,53 @@ const getPolymarketClobClient = async (options = {}) => {
     env.geoBlockToken || undefined,
     env.useServerTime
   );
+
+  if (env.useServerTime && POLYMARKET_CLOB_SERVER_TIME_CACHE_MS > 0 && typeof client.getServerTime === 'function') {
+    const state = getClobServerTimeCacheState(env.host);
+    const originalGetServerTime = client.getServerTime.bind(client);
+    if (state) {
+      client.getServerTime = async () => {
+        const now = Date.now();
+        const cachedValue = state.value;
+        if (
+          cachedValue !== null &&
+          cachedValue !== undefined &&
+          Number.isFinite(Number(cachedValue)) &&
+          now - Number(state.fetchedAtMs || 0) < POLYMARKET_CLOB_SERVER_TIME_CACHE_MS
+        ) {
+          return cachedValue;
+        }
+
+        if (state.inFlight) {
+          return await state.inFlight;
+        }
+
+        state.inFlight = (async () => {
+          try {
+            const fetched = await originalGetServerTime();
+            const parsed = Number(fetched);
+            if (Number.isFinite(parsed) && parsed > 0) {
+              state.value = parsed;
+              state.fetchedAtMs = Date.now();
+              return parsed;
+            }
+          } catch {
+            // ignore
+          }
+          const fallback = Math.floor(Date.now() / 1000);
+          state.value = fallback;
+          state.fetchedAtMs = Date.now();
+          return fallback;
+        })();
+
+        try {
+          return await state.inFlight;
+        } finally {
+          state.inFlight = null;
+        }
+      };
+    }
+  }
 
   cachedClient = client;
   cachedClientKey = cacheKey;

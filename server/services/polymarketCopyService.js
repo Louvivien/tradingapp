@@ -737,6 +737,75 @@ const fetchMarket = async (conditionId) => {
   return response?.data || null;
 };
 
+const POLYMARKET_MARKET_CACHE_TTL_MS = (() => {
+  const raw = Number(process.env.POLYMARKET_MARKET_CACHE_TTL_MS);
+  if (!Number.isFinite(raw)) {
+    return 60_000;
+  }
+  return Math.max(0, Math.min(Math.floor(raw), 10 * 60_000));
+})();
+
+const POLYMARKET_MARKET_CACHE_MAX_ENTRIES = (() => {
+  const raw = Number(process.env.POLYMARKET_MARKET_CACHE_MAX_ENTRIES);
+  if (!Number.isFinite(raw) || raw <= 0) {
+    return 2000;
+  }
+  return Math.max(50, Math.min(Math.floor(raw), 50_000));
+})();
+
+const marketCacheByConditionId = new Map();
+const marketCacheInFlight = new Map();
+const fetchMarketCached = async (conditionId) => {
+  const key = String(conditionId || '').trim();
+  if (!key) {
+    return null;
+  }
+
+  if (POLYMARKET_MARKET_CACHE_TTL_MS > 0) {
+    const cached = marketCacheByConditionId.get(key);
+    if (cached && Date.now() - Number(cached.fetchedAtMs || 0) < POLYMARKET_MARKET_CACHE_TTL_MS) {
+      // LRU bump
+      marketCacheByConditionId.delete(key);
+      marketCacheByConditionId.set(key, cached);
+      return cached.market;
+    }
+  }
+
+  const inFlight = marketCacheInFlight.get(key);
+  if (inFlight) {
+    return await inFlight;
+  }
+
+  const run = (async () => {
+    try {
+      const market = await fetchMarket(key);
+      if (POLYMARKET_MARKET_CACHE_TTL_MS > 0) {
+        marketCacheByConditionId.set(key, { market, fetchedAtMs: Date.now() });
+        while (marketCacheByConditionId.size > POLYMARKET_MARKET_CACHE_MAX_ENTRIES) {
+          const oldestKey = marketCacheByConditionId.keys().next().value;
+          if (!oldestKey) break;
+          marketCacheByConditionId.delete(oldestKey);
+        }
+      }
+      return market;
+    } catch {
+      if (POLYMARKET_MARKET_CACHE_TTL_MS > 0) {
+        marketCacheByConditionId.set(key, { market: null, fetchedAtMs: Date.now() });
+      }
+      return null;
+    }
+  })();
+
+  marketCacheInFlight.set(key, run);
+  try {
+    return await run;
+  } finally {
+    if (marketCacheInFlight.get(key) === run) {
+      marketCacheInFlight.delete(key);
+    }
+  }
+};
+
 const buildMarketTokenPriceIndex = (market) => {
   const tokens = Array.isArray(market?.tokens) ? market.tokens : [];
   const index = new Map();
@@ -1190,7 +1259,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         return marketCache.get(key);
       }
       try {
-        const market = await fetchMarket(key);
+        const market = await fetchMarketCached(key);
         marketCache.set(key, market);
         return market;
       } catch (error) {
@@ -1997,7 +2066,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       return marketCache.get(key);
     }
     try {
-      const market = await fetchMarket(key);
+      const market = await fetchMarketCached(key);
       marketCache.set(key, market);
       return market;
     } catch (error) {
