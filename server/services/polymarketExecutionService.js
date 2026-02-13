@@ -1165,12 +1165,29 @@ const extractClobErrorMessage = (payload) => {
   return fallback ? fallback : null;
 };
 
-const executePolymarketMarketOrder = async ({ tokenID, side, amount, price }) => {
+const normalizeTickSize = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const raw = typeof value === 'number' ? String(value) : String(value).trim();
+  if (!raw) return null;
+  const cleaned = raw.startsWith('.') ? `0${raw}` : raw;
+  const allowed = new Set(['0.1', '0.01', '0.001', '0.0001']);
+  if (allowed.has(cleaned)) {
+    return cleaned;
+  }
+  const numeric = Number(cleaned);
+  if (!Number.isFinite(numeric) || numeric <= 0) return null;
+  const normalized = numeric.toFixed(4).replace(/0+$/, '').replace(/\.$/, '');
+  return allowed.has(normalized) ? normalized : null;
+};
+
+const executePolymarketMarketOrder = async ({ tokenID, side, amount, price, tickSize, negRisk }) => {
   const mode = getPolymarketExecutionMode();
   const cleanedToken = normalizeEnvValue(tokenID);
   const cleanedSide = normalizeEnvValue(side).toUpperCase();
   const cleanedAmount = Number(amount);
   const cleanedPrice = price === undefined || price === null || price === '' ? null : Number(price);
+  const cleanedTickSize = normalizeTickSize(tickSize);
+  const cleanedNegRisk = typeof negRisk === 'boolean' ? negRisk : null;
 
   if (!cleanedToken) {
     throw new Error('tokenID is required.');
@@ -1197,6 +1214,8 @@ const executePolymarketMarketOrder = async ({ tokenID, side, amount, price }) =>
         side: cleanedSide,
         amount: cleanedAmount,
         price: cleanedPrice,
+        tickSize: cleanedTickSize,
+        negRisk: cleanedNegRisk,
         orderType: orderTypeSetting,
       },
       response: null,
@@ -1216,7 +1235,19 @@ const executePolymarketMarketOrder = async ({ tokenID, side, amount, price }) =>
     orderType: orderTypeEnum,
   };
 
-  const response = await clobClient.createAndPostMarketOrder(userMarketOrder, undefined, orderTypeEnum);
+  if (cleanedTickSize && cleanedToken && clobClient?.tickSizes && !clobClient.tickSizes[cleanedToken]) {
+    clobClient.tickSizes[cleanedToken] = cleanedTickSize;
+  }
+  if (cleanedNegRisk !== null && cleanedToken && clobClient?.negRisk && clobClient.negRisk[cleanedToken] === undefined) {
+    clobClient.negRisk[cleanedToken] = cleanedNegRisk;
+  }
+
+  const createOrderOptions = {
+    ...(cleanedTickSize ? { tickSize: cleanedTickSize } : {}),
+    ...(cleanedNegRisk !== null ? { negRisk: cleanedNegRisk } : {}),
+  };
+
+  const response = await clobClient.createAndPostMarketOrder(userMarketOrder, createOrderOptions, orderTypeEnum);
   if (response && typeof response === 'object') {
     const orderId = response.orderID || response.orderId || response.order_id || response.id || null;
     const txHashes = Array.isArray(response.transactionsHashes)

@@ -53,7 +53,13 @@ jobs:
 
           # Pull latest changes
           echo "📥 Pulling latest code..."
-          git pull origin master
+          BRANCH="${{ github.ref_name }}"
+          git fetch origin "$BRANCH"
+          git checkout -B "$BRANCH" "origin/$BRANCH"
+
+          # Ensure non-secret runtime defaults exist (keeps existing values)
+          echo "⚙️ Ensuring .env defaults..."
+          node server/scripts/ensure_env_defaults.js
 
 
           # Install server dependencies
@@ -70,10 +76,24 @@ jobs:
           # Restart server with PM2 (starts it if missing)
           echo "🔄 Restarting application..."
           command -v pm2 >/dev/null 2>&1 || npm install -g pm2
-          pm2 startOrRestart ecosystem.config.js --only tradingapp
+          pm2 startOrRestart ecosystem.config.js --only tradingapp --update-env
           pm2 save
 
           # Check status
           pm2 status
+
+          # Basic health check
+          echo "🏥 Checking /api/ping..."
+          for i in $(seq 1 15); do
+            if curl -fsS --max-time 5 "http://127.0.0.1:3000/api/ping" >/dev/null; then
+              echo "✅ Health check OK"
+              break
+            fi
+            if [ "$i" -eq 15 ]; then
+              echo "❌ Health check failed"
+              exit 1
+            fi
+            sleep 1
+          done
 
           echo "✅ Deployment complete!"

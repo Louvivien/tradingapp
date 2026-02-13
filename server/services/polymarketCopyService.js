@@ -5,8 +5,9 @@ const mongoose = require('mongoose');
 const { normalizeRecurrence, computeNextRebalanceAt } = require('../utils/recurrence');
 const { recordStrategyLog } = require('./strategyLogger');
 const StrategyEquitySnapshot = require('../models/strategyEquitySnapshotModel');
-const {
+  const {
   getPolymarketExecutionMode,
+  getPolymarketClobClient,
   executePolymarketMarketOrder,
   getPolymarketExecutionDebugInfo,
   getClobRateLimitCooldownStatus,
@@ -361,6 +362,33 @@ const axiosGet = async (url, config = {}) => {
   }
 };
 
+const axiosPost = async (url, data, config = {}) => {
+  const timeout = config.timeout ? config.timeout : POLYMARKET_HTTP_TIMEOUT_MS;
+  const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+  const timer = controller
+    ? setTimeout(() => {
+      try {
+        controller.abort();
+      } catch (error) {
+        // ignore
+      }
+    }, timeout)
+    : null;
+
+  try {
+    return await Axios.post(url, data, {
+      ...config,
+      timeout,
+      proxy: false,
+      ...(controller ? { signal: controller.signal } : {}),
+    });
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+};
+
 const isRetryablePolymarketProxyError = (error) => {
   const status = Number(error?.status || error?.response?.status);
   if (Number.isFinite(status) && status > 0) {
@@ -425,6 +453,46 @@ const polymarketAxiosGet = async (url, config = {}) => {
 
     try {
       return await axiosGet(url, {
+        ...config,
+        ...(usingProxy ? { httpsAgent } : {}),
+      });
+    } catch (error) {
+      lastError = error;
+      attemptedDirect = attemptedDirect || !usingProxy;
+      if (usingProxy) {
+        try {
+          const status = Number(error?.response?.status);
+          if (status === 403 && looksLikeCloudflareBlockPage(error?.response?.data)) {
+            notePolymarketProxyFailure(proxy, { reason: 'cloudflare_403' });
+          }
+        } catch {
+          // ignore
+        }
+      }
+      if (attempt >= attempts || !isRetryablePolymarketProxyError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError || new Error('Polymarket request failed.');
+};
+
+const polymarketAxiosPost = async (url, data, config = {}) => {
+  const attempts = POLYMARKET_PROXY_REQUEST_ATTEMPTS;
+  let lastError = null;
+  let attemptedDirect = false;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const proxy = getClobProxyConfig();
+    const httpsAgent = proxy ? getPolymarketHttpsAgent(proxy) : null;
+    const usingProxy = Boolean(proxy && httpsAgent);
+    if (!usingProxy && attemptedDirect) {
+      break;
+    }
+
+    try {
+      return await axiosPost(url, data, {
         ...config,
         ...(usingProxy ? { httpsAgent } : {}),
       });
@@ -1079,6 +1147,16 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     process.env.POLYMARKET_LIVE_REBALANCE_ORDERBOOK_PREFLIGHT,
     true
   );
+  const liveMarketOrderTypeSetting = (() => {
+    const raw = String(
+      process.env.POLYMARKET_MARKET_ORDER_TYPE || process.env.POLYMARKET_ORDER_TYPE || ''
+    )
+      .trim()
+      .toLowerCase();
+    if (!raw) return 'fak';
+    if (raw === 'fok') return 'fok';
+    return 'fak';
+  })();
   const liveHoldingsSourceSetting = normalizeLiveHoldingsSourceSetting(process.env.POLYMARKET_LIVE_HOLDINGS_SOURCE);
   const liveHoldingsReconcilePortfolio = parseBooleanEnvDefault(
     process.env.POLYMARKET_LIVE_RECONCILE_PORTFOLIO,
@@ -3090,20 +3168,11 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
     const symbolFor = ({ market, outcome, assetId }) =>
       market ? `PM:${String(market).slice(0, 10)}:${outcome || 'OUTCOME'}` : `PM:${String(assetId).slice(0, 10)}`;
 
-    const orderbookCache = new Map();
-    const fetchClobOrderbook = async (assetId) => {
-      const key = String(assetId || '').trim();
-      if (!key) return null;
-      if (orderbookCache.has(key)) {
-        return orderbookCache.get(key);
-      }
-      let orderbook = null;
-      try {
-        const orderbookResponse = await polymarketAxiosGet(`${CLOB_HOST}/book`, {
-          params: buildGeoParams({ token_id: key }),
-          headers: withClobUserAgent(),
-        });
-        const book = orderbookResponse?.data || null;
+	    const orderbookCache = new Map();
+      const orderbookLevelsSymbol = Symbol('clob-orderbook-levels');
+
+      const buildOrderbookSummary = (book) => {
+        if (!book || typeof book !== 'object') return null;
         const bidsRaw = Array.isArray(book?.bids) ? book.bids : [];
         const asksRaw = Array.isArray(book?.asks) ? book.asks : [];
         const toLevel = (row) => {
@@ -3118,7 +3187,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         const bestAsk = asks.length ? asks.reduce((best, cur) => (cur.price < best.price ? cur : best)) : null;
         const topBids = [...bids].sort((a, b) => b.price - a.price).slice(0, 3);
         const topAsks = [...asks].sort((a, b) => a.price - b.price).slice(0, 3);
-        orderbook = {
+        const summary = {
           ok: true,
           market: book?.market ?? null,
           assetId: book?.asset_id ?? null,
@@ -3133,11 +3202,32 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
           tickSize: book?.tick_size ?? null,
           negRisk: book?.neg_risk ?? null,
         };
-      } catch (orderbookError) {
-        const status = Number(orderbookError?.response?.status);
-        const payload = orderbookError?.response?.data;
-        const apiError = (() => {
-          if (!payload) return null;
+        summary[orderbookLevelsSymbol] = {
+          bids: bidsRaw,
+          asks: asksRaw,
+        };
+        return summary;
+      };
+
+	    const fetchClobOrderbook = async (assetId) => {
+	      const key = String(assetId || '').trim();
+	      if (!key) return null;
+	      if (orderbookCache.has(key)) {
+	        return orderbookCache.get(key);
+	      }
+	      let orderbook = null;
+	      try {
+	        const orderbookResponse = await polymarketAxiosGet(`${CLOB_HOST}/book`, {
+	          params: buildGeoParams({ token_id: key }),
+	          headers: withClobUserAgent(),
+	        });
+	        const book = orderbookResponse?.data || null;
+          orderbook = buildOrderbookSummary(book);
+	      } catch (orderbookError) {
+	        const status = Number(orderbookError?.response?.status);
+	        const payload = orderbookError?.response?.data;
+	        const apiError = (() => {
+	          if (!payload) return null;
           if (typeof payload === 'string') return payload.trim() || null;
           if (payload?.error) return String(payload.error).trim() || null;
           if (payload?.message) return String(payload.message).trim() || null;
@@ -3149,15 +3239,110 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
           error: formatAxiosError(orderbookError),
           apiError,
         };
-      }
+	      }
 
-      orderbookCache.set(key, orderbook);
-      return orderbook;
-    };
+        if (!orderbook) {
+          orderbook = {
+            ok: false,
+            status: null,
+            error: 'Unable to parse orderbook response',
+            apiError: null,
+          };
+        }
 
-    const buildRebalanceDiagnostics = ({ orderbook } = {}) =>
-      liveRebalanceDebugEnabled
-        ? {
+	      orderbookCache.set(key, orderbook);
+	      return orderbook;
+	    };
+
+      const prefetchClobOrderbooks = async () => {
+        if (!liveRebalanceOrderbookPreflightEnabled) return;
+
+        const params = [];
+        const seen = new Set();
+        for (const order of orders) {
+          const tokenId = String(order?.assetId || '').trim();
+          if (!tokenId) continue;
+          if (seen.has(tokenId) || orderbookCache.has(tokenId)) continue;
+          seen.add(tokenId);
+          params.push({
+            token_id: tokenId,
+            side: String(order?.side || '').toUpperCase() === 'SELL' ? 'SELL' : 'BUY',
+          });
+        }
+
+        if (params.length <= 1) return;
+
+        try {
+          const response = await polymarketAxiosPost(`${CLOB_HOST}/books`, params, {
+            params: buildGeoParams({}),
+            headers: withClobUserAgent(),
+          });
+          const books = Array.isArray(response?.data) ? response.data : [];
+          for (const book of books) {
+            const key = String(book?.asset_id || '').trim();
+            if (!key || orderbookCache.has(key)) continue;
+            const summary = buildOrderbookSummary(book);
+            if (summary) {
+              orderbookCache.set(key, summary);
+            }
+          }
+        } catch {
+          // Best-effort prefetch: fall back to per-order GET /book
+        }
+      };
+
+      const calculateBuyMarketPrice = (positions, amountToMatch, orderType) => {
+        if (!Array.isArray(positions) || positions.length === 0) {
+          throw new Error('no match');
+        }
+        let sum = 0;
+        for (let i = positions.length - 1; i >= 0; i -= 1) {
+          const p = positions[i];
+          sum += parseFloat(p.size) * parseFloat(p.price);
+          if (sum >= amountToMatch) {
+            return parseFloat(p.price);
+          }
+        }
+        if (orderType === 'fok') {
+          throw new Error('no match');
+        }
+        return parseFloat(positions[0].price);
+      };
+
+      const calculateSellMarketPrice = (positions, amountToMatch, orderType) => {
+        if (!Array.isArray(positions) || positions.length === 0) {
+          throw new Error('no match');
+        }
+        let sum = 0;
+        for (let i = positions.length - 1; i >= 0; i -= 1) {
+          const p = positions[i];
+          sum += parseFloat(p.size);
+          if (sum >= amountToMatch) {
+            return parseFloat(p.price);
+          }
+        }
+        if (orderType === 'fok') {
+          throw new Error('no match');
+        }
+        return parseFloat(positions[0].price);
+      };
+
+      const computeMarketOrderLimitPrice = ({ orderbook, side, amount }) => {
+        if (!orderbook || orderbook.ok !== true) return null;
+        const levels = orderbook[orderbookLevelsSymbol] || null;
+        const orderType = liveMarketOrderTypeSetting === 'fok' ? 'fok' : 'fak';
+        if (side === 'BUY') {
+          return calculateBuyMarketPrice(levels?.asks || [], amount, orderType);
+        }
+        if (side === 'SELL') {
+          return calculateSellMarketPrice(levels?.bids || [], amount, orderType);
+        }
+        return null;
+      };
+
+	    const buildRebalanceDiagnostics = ({ orderbook } = {}) =>
+	      liveRebalanceDebugEnabled
+	        ? {
           preflight: executionPreflight || null,
           orderType: String(process.env.POLYMARKET_MARKET_ORDER_TYPE || process.env.POLYMARKET_ORDER_TYPE || 'fak')
             .trim()
@@ -3228,29 +3413,45 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         assetId: order.assetId,
         side: order.side,
         amount,
-        price: order.price,
+        price: order.limitPrice ?? order.price,
         notional: roundToDecimals(order.notional, 6),
         reason,
         error: String(error || reason || 'Skipped'),
         ...(diagnostics ? { diagnostics } : {}),
       });
-      rebalancePlan.skippedOrders += 1;
-    };
+	      rebalancePlan.skippedOrders += 1;
+	    };
 
-	    for (const order of orders) {
-	      const amount = order.side === 'BUY'
-	        ? roundToDecimals(order.notional, 6)
-	        : roundToDecimals(Math.abs(order.deltaQty), 6);
-      if (!amount || amount <= 0) {
-        rebalancePlan.failedOrders += 1;
-        continue;
+      try {
+        if (typeof getPolymarketClobClient === 'function') {
+          await getPolymarketClobClient({ requireLiveMode: true });
+        }
+      } catch (error) {
+        if (isExecutionConfigError(error)) {
+          executionEnabled = false;
+          executionDisabledReason = formatAxiosError(error);
+          liveExecutionAbort = executionDisabledReason;
+          rebalancePlan.reason = 'execution_config_error';
+          return;
+        }
       }
 
-      if (liveRebalanceOrderbookPreflightEnabled) {
-        const orderbook = await fetchClobOrderbook(order.assetId);
-        if (orderbook && orderbook.ok === false) {
-          const status = Number(orderbook.status);
-          const apiErrorLower = String(orderbook.apiError || '').toLowerCase();
+      await prefetchClobOrderbooks();
+
+		    for (const order of orders) {
+		      const amount = order.side === 'BUY'
+		        ? roundToDecimals(order.notional, 6)
+		        : roundToDecimals(Math.abs(order.deltaQty), 6);
+	      if (!amount || amount <= 0) {
+	        rebalancePlan.failedOrders += 1;
+	        continue;
+	      }
+
+	      if (liveRebalanceOrderbookPreflightEnabled) {
+	        const orderbook = await fetchClobOrderbook(order.assetId);
+	        if (orderbook && orderbook.ok === false) {
+	          const status = Number(orderbook.status);
+	          const apiErrorLower = String(orderbook.apiError || '').toLowerCase();
           const noOrderbookDetected =
             status === 404 ||
             apiErrorLower.includes('no orderbook exists') ||
@@ -3281,7 +3482,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
               assetId: order.assetId,
               side: order.side,
               amount,
-              price: order.price,
+              price: order.limitPrice ?? order.price,
               notional: roundToDecimals(order.notional, 6),
               reason: 'execution_retryable_error',
               error: liveExecutionAbort,
@@ -3291,32 +3492,56 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
             break;
           }
         }
-        if (orderbook && orderbook.ok === true) {
-          const noLiquidity =
-            (order.side === 'BUY' && Number(orderbook.askCount) === 0) ||
-            (order.side === 'SELL' && Number(orderbook.bidCount) === 0);
-          if (noLiquidity) {
-            const diagnostics = buildRebalanceDiagnostics({ orderbook });
-            const error =
-              order.side === 'BUY'
-                ? 'no asks in orderbook'
-                : order.side === 'SELL'
-                  ? 'no bids in orderbook'
-                  : 'no liquidity';
-            applySkippedOrderToTarget({
-              order,
-              amount,
-              reason: 'execution_skipped_no_liquidity',
-              error,
-              diagnostics,
-            });
-            continue;
-          }
-        }
-      }
+	          if (orderbook && orderbook.ok === true) {
+	          const noLiquidity =
+	            (order.side === 'BUY' && Number(orderbook.askCount) === 0) ||
+	            (order.side === 'SELL' && Number(orderbook.bidCount) === 0);
+	          if (noLiquidity) {
+	            const diagnostics = buildRebalanceDiagnostics({ orderbook });
+	            const error =
+	              order.side === 'BUY'
+	                ? 'no asks in orderbook'
+	                : order.side === 'SELL'
+	                  ? 'no bids in orderbook'
+	                  : 'no liquidity';
+	            applySkippedOrderToTarget({
+	              order,
+	              amount,
+	              reason: 'execution_skipped_no_liquidity',
+	              error,
+	              diagnostics,
+	            });
+	            continue;
+	          }
 
-		      let execution = null;
-		      try {
+	            try {
+	              order.tickSize = orderbook.tickSize ?? null;
+	              order.negRisk = typeof orderbook.negRisk === 'boolean' ? orderbook.negRisk : null;
+	              const limitPrice = computeMarketOrderLimitPrice({
+	                orderbook,
+	                side: order.side,
+	                amount,
+	              });
+	              if (Number.isFinite(limitPrice) && limitPrice > 0 && limitPrice < 1) {
+	                order.limitPrice = limitPrice;
+	              }
+	            } catch (priceError) {
+	              const msg = String(priceError?.message || priceError || 'no match');
+	              const diagnostics = buildRebalanceDiagnostics({ orderbook });
+	              applySkippedOrderToTarget({
+	                order,
+                amount,
+                reason: 'execution_skipped_no_match',
+                error: msg,
+                diagnostics,
+              });
+              continue;
+            }
+	        }
+	      }
+
+			      let execution = null;
+			      try {
             const clobCooldownMessage = getClobCooldownMessage();
             if (clobCooldownMessage) {
               liveExecutionAbort = clobCooldownMessage;
@@ -3325,7 +3550,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
                 assetId: order.assetId,
                 side: order.side,
                 amount,
-                price: order.price,
+                price: order.limitPrice ?? order.price,
                 notional: roundToDecimals(order.notional, 6),
                 reason: 'execution_rate_limited',
                 error: liveExecutionAbort,
@@ -3333,16 +3558,19 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
               rebalancePlan.failedOrders += 1;
               break;
             }
-		        rebalancePlan.attemptedOrders += 1;
-		        execution = await executePolymarketMarketOrder({
-		          tokenID: order.assetId,
-		          side: order.side,
-		          amount,
-		        });
-	      } catch (error) {
-        if (isExecutionConfigError(error)) {
-          executionEnabled = false;
-          executionDisabledReason = formatAxiosError(error);
+			        rebalancePlan.attemptedOrders += 1;
+			        execution = await executePolymarketMarketOrder({
+			          tokenID: order.assetId,
+			          side: order.side,
+			          amount,
+                price: order.limitPrice,
+                tickSize: order.tickSize,
+                negRisk: order.negRisk,
+			        });
+		      } catch (error) {
+	        if (isExecutionConfigError(error)) {
+	          executionEnabled = false;
+	          executionDisabledReason = formatAxiosError(error);
           if (!liveExecutionConfigLogged) {
             liveExecutionConfigLogged = true;
             await recordStrategyLog({
@@ -3362,16 +3590,16 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
           break;
 	        } else if (isRetryableExecutionError(error)) {
 	          liveExecutionAbort = String(formatAxiosError(error));
-	          tradeSummary.rebalance.push({
-	            symbol: symbolFor(order),
-            assetId: order.assetId,
-            side: order.side,
-            amount,
-            price: order.price,
-            notional: roundToDecimals(order.notional, 6),
-            reason: 'execution_retryable_error',
-            error: liveExecutionAbort,
-          });
+		          tradeSummary.rebalance.push({
+		            symbol: symbolFor(order),
+		            assetId: order.assetId,
+		            side: order.side,
+		            amount,
+		            price: order.limitPrice ?? order.price,
+		            notional: roundToDecimals(order.notional, 6),
+		            reason: 'execution_retryable_error',
+		            error: liveExecutionAbort,
+		          });
 	          rebalancePlan.failedOrders += 1;
 	          break;
 	        } else {
@@ -3448,18 +3676,18 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
               continue;
             }
 
-	          tradeSummary.rebalance.push({
-	            symbol: symbolFor(order),
-	            assetId: order.assetId,
-	            side: order.side,
-	            amount,
-	            price: order.price,
-	            notional: roundToDecimals(order.notional, 6),
-	            reason: 'execution_failed',
-	            error: errorMessage,
-	            ...(diagnostics ? { diagnostics } : {}),
-	          });
-	          rebalancePlan.failedOrders += 1;
+		          tradeSummary.rebalance.push({
+		            symbol: symbolFor(order),
+		            assetId: order.assetId,
+		            side: order.side,
+		            amount,
+		            price: order.limitPrice ?? order.price,
+		            notional: roundToDecimals(order.notional, 6),
+		            reason: 'execution_failed',
+		            error: errorMessage,
+		            ...(diagnostics ? { diagnostics } : {}),
+		          });
+		          rebalancePlan.failedOrders += 1;
 	          continue;
 	        }
 	      }
@@ -3474,16 +3702,16 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 
 	      if (looksRejected) {
 	        const errorMessage = meta.error || (statusCode !== null ? `Order rejected (status ${statusCode})` : 'Order rejected');
-	        tradeSummary.rebalance.push({
-	          symbol: symbolFor(order),
-	          assetId: order.assetId,
-	          side: order.side,
-	          amount,
-	          price: order.price,
-	          notional: roundToDecimals(order.notional, 6),
-	          reason: 'execution_failed',
-	          error: errorMessage,
-	          execution: {
+		        tradeSummary.rebalance.push({
+		          symbol: symbolFor(order),
+		          assetId: order.assetId,
+		          side: order.side,
+		          amount,
+		          price: order.limitPrice ?? order.price,
+		          notional: roundToDecimals(order.notional, 6),
+		          reason: 'execution_failed',
+		          error: errorMessage,
+		          execution: {
 	            mode: execution?.mode ?? executionMode,
 	            dryRun: execution?.dryRun ?? false,
 	            orderId: meta.orderId,
@@ -3503,16 +3731,16 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	        }
 	        continue;
 	      }
-	      tradeSummary.rebalance.push({
-	        symbol: symbolFor(order),
-	        assetId: order.assetId,
-	        side: order.side,
-	        amount,
-	        price: order.price,
-	        notional: roundToDecimals(order.notional, 6),
-	        execution: {
-	          mode: execution.mode,
-	          dryRun: execution.dryRun,
+		      tradeSummary.rebalance.push({
+		        symbol: symbolFor(order),
+		        assetId: order.assetId,
+		        side: order.side,
+		        amount,
+		        price: order.limitPrice ?? order.price,
+		        notional: roundToDecimals(order.notional, 6),
+		        execution: {
+		          mode: execution.mode,
+		          dryRun: execution.dryRun,
 	          orderId: meta.orderId,
 	          status: meta.status,
 	          txHashes: meta.txHashes,
