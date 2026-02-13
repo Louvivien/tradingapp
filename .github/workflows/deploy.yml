@@ -60,6 +60,7 @@ jobs:
           # Ensure non-secret runtime defaults exist (keeps existing values)
           echo "⚙️ Ensuring .env defaults..."
           node server/scripts/ensure_env_defaults.js
+          chmod 600 server/config/.env || true
 
 
           # Install server dependencies

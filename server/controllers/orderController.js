@@ -278,7 +278,7 @@ exports.getOrders = async (req, res) => {
 
 exports.editAccount = async (req, res) => {
   try {
-    const { ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY, } = req.body;
+    const { ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY } = req.body || {};
     if (req.user !== req.params.userId) {
       return res.status(200).json({
         status: "fail",
@@ -286,11 +286,26 @@ exports.editAccount = async (req, res) => {
       });
     }
 
-    const updatedUser = await User.findByIdAndUpdate(req.params.userId, {
-      balance: User.balance,
-      ALPACA_API_KEY_ID: ALPACA_API_KEY_ID,
-      ALPACA_API_SECRET_KEY: ALPACA_API_SECRET_KEY
-    });
+    const { decryptIfEncrypted, encryptIfPlaintext } = require('../utils/secretUtils');
+
+    const keyIdPlain = decryptIfEncrypted(ALPACA_API_KEY_ID);
+    const secretPlain = decryptIfEncrypted(ALPACA_API_SECRET_KEY);
+
+    if (!keyIdPlain || !secretPlain) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Missing Alpaca API keys.",
+      });
+    }
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.params.userId,
+      {
+        ALPACA_API_KEY_ID: encryptIfPlaintext(keyIdPlain),
+        ALPACA_API_SECRET_KEY: encryptIfPlaintext(secretPlain),
+      },
+      { new: true }
+    );
 
     return res.status(200).json({
       status: "success",
@@ -298,8 +313,7 @@ exports.editAccount = async (req, res) => {
         username: updatedUser.username,
         id: updatedUser._id,
         balance: updatedUser.balance,
-        ALPACA_API_KEY_ID: updatedUser.ALPACA_API_KEY_ID,
-        ALPACA_API_SECRET_KEY: updatedUser.ALPACA_API_SECRET_KEY
+        alpacaKeysPresent: true,
       },
     });
   } catch (error) {

@@ -2629,6 +2629,13 @@ exports.getStrategyEquityHistory = async (req, res) => {
       });
     }
 
+    if (req.user !== userId) {
+      return res.status(403).json({
+        status: 'fail',
+        message: 'Credentials could not be validated.',
+      });
+    }
+
     const limitParam = Number(req.query?.limit);
     const limit = Number.isFinite(limitParam)
       ? Math.min(1000, Math.max(1, Math.floor(limitParam)))
@@ -4158,6 +4165,13 @@ exports.getPortfolios = async (req, res) => {
       });
     }
 
+    if (!userKey || req.user !== userKey) {
+      return res.status(403).json({
+        status: 'fail',
+        message: "Credentials couldn't be validated.",
+      });
+    }
+
     const user = await User.findById(userId);
     if (!user) {
       return res.status(404).json({
@@ -5459,7 +5473,7 @@ function retry(fn, retriesLeft = 5, interval = 1000) {
 exports.streamStrategyProgress = async (req, res) => {
   try {
     const { jobId } = req.params;
-    const token = req.query?.token;
+    const token = req.header('x-auth-token') || req.query?.token;
 
     if (!jobId) {
       return res.status(400).json({
@@ -5476,7 +5490,10 @@ exports.streamStrategyProgress = async (req, res) => {
     }
 
     try {
-      jwt.verify(token, process.env.JWT_SECRET);
+      const verified = jwt.verify(token, process.env.JWT_SECRET);
+      if (verified?.id) {
+        req.user = verified.id;
+      }
     } catch (error) {
       return res.status(401).json({
         status: "fail",

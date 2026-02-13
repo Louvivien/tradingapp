@@ -457,23 +457,77 @@ const Strategies = () => {
     }
     closeProgressStream();
     setProgressEvents([]);
-    const tokenParam = encodeURIComponent(userData.token);
-    const source = new EventSource(`${config.base_url}/api/strategies/progress/${jobId}?token=${tokenParam}`);
-    source.onmessage = (event) => {
+
+    const controller = new AbortController();
+    progressSourceRef.current = { close: () => controller.abort() };
+
+    const run = async () => {
       try {
-        const payload = JSON.parse(event.data);
-        setProgressEvents((prev) => [...prev, payload]);
-        if (payload.step === 'finished') {
+        const response = await fetch(`${config.base_url}/api/strategies/progress/${jobId}`, {
+          method: "GET",
+          headers: {
+            "x-auth-token": userData.token,
+          },
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
           closeProgressStream();
+          return;
+        }
+
+        if (!response.body) {
+          closeProgressStream();
+          return;
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder("utf-8");
+        let buffer = "";
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            break;
+          }
+          buffer += decoder.decode(value, { stream: true });
+
+          let boundaryIdx = buffer.indexOf("\n\n");
+          while (boundaryIdx !== -1) {
+            const packet = buffer.slice(0, boundaryIdx);
+            buffer = buffer.slice(boundaryIdx + 2);
+            boundaryIdx = buffer.indexOf("\n\n");
+
+            const lines = packet.split("\n");
+            for (const line of lines) {
+              if (!line.startsWith("data:")) {
+                continue;
+              }
+              const json = line.slice("data:".length).trim();
+              if (!json) {
+                continue;
+              }
+              try {
+                const payload = JSON.parse(json);
+                setProgressEvents((prev) => [...prev, payload]);
+                if (payload.step === "finished") {
+                  closeProgressStream();
+                }
+              } catch (error) {
+                // ignore malformed events
+              }
+            }
+          }
         }
       } catch (error) {
-        // ignore malformed events
+        // Ignore abort errors; otherwise close the stream.
+        if (error?.name !== "AbortError") {
+          closeProgressStream();
+        }
       }
     };
-    source.onerror = () => {
-      closeProgressStream();
-    };
-    progressSourceRef.current = source;
+
+    run();
   };
 
   const handleLoadSavedStrategy = () => {

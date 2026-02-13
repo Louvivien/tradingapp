@@ -91,6 +91,8 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cookieParser = require("cookie-parser");
 const cors = require("cors");
+const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 const { schedulePortfolioRebalances, schedulePolymarketProxyPoolRefresh } = require('./scheduler');
 const { getAlpacaConfig } = require('./config/alpacaConfig');
 const { getEnvAlpacaExecutionMode } = require('./services/alpacaExecutionService');
@@ -131,6 +133,10 @@ mongoose.connection.on('disconnecting', () => logConnectionState('Event: disconn
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+app.disable('x-powered-by');
+// If behind a reverse proxy (Nginx/DO LB), trust `X-Forwarded-For` so IP-based rate limits work.
+app.set('trust proxy', String(process.env.TRUST_PROXY || '1') === '1');
 
 const normalizeEnvValue = (value) => String(value || '').trim();
 let clobProxyPoolKey = null;
@@ -235,9 +241,51 @@ if (runtimeEnv.alpacaLiveKeyId && runtimeEnv.alpacaLiveSecretKey) {
 const bodyParserLimit = process.env.REQUEST_BODY_LIMIT || '5mb';
 app.use(express.urlencoded({ extended: true, limit: bodyParserLimit }));
 app.use(express.json({ limit: bodyParserLimit }));
-app.use(cookieParser("secretcode"));
-app.use(cors());
-app.options('*', cors());
+app.use(cookieParser(process.env.COOKIE_SECRET || "secretcode"));
+
+app.use(
+  helmet({
+    // This API server does not serve HTML; disable CSP to avoid accidental breakage if a UI is ever proxied through it.
+    contentSecurityPolicy: false,
+  })
+);
+
+const corsOrigins = String(process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) {
+      return callback(null, true);
+    }
+    if (corsOrigins.length === 0) {
+      return callback(null, true);
+    }
+    return callback(null, corsOrigins.includes(origin));
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "x-auth-token", "x-debug-token"],
+};
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
+const apiLimiter = rateLimit({
+  windowMs: Number(process.env.API_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
+  max: Number(process.env.API_RATE_LIMIT_MAX || 6000),
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+const authLimiter = rateLimit({
+  windowMs: Number(process.env.AUTH_RATE_LIMIT_WINDOW_MS || 15 * 60 * 1000),
+  max: Number(process.env.AUTH_RATE_LIMIT_MAX || 30),
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use("/api", apiLimiter);
+app.use("/api/auth/login", authLimiter);
+app.use("/api/auth/register", authLimiter);
 
 // Logs
 app.use((req, res, next) => {
@@ -246,7 +294,8 @@ app.use((req, res, next) => {
     req.url = req.url.replace(/^\/+/, '/');
     console.warn(`[HTTP] Normalized leading slashes: ${originalUrl} -> ${req.url}`);
   }
-  console.log(`[HTTP] Incoming ${req.method} request for ${req.url}`);
+  const pathForLog = req.path || String(req.url || '').split('?')[0] || req.url;
+  console.log(`[HTTP] Incoming ${req.method} request for ${pathForLog}`);
   next();
 });
 

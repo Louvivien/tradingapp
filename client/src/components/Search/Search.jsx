@@ -72,10 +72,15 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock, accountB
 
   useEffect(() => {
     if (!currentStock) return;
+    if (!userData?.token) return;
+
+    const headers = {
+      "x-auth-token": userData.token,
+    };
 
     const getInfo = async () => {
       const url = config.base_url + `/api/data/prices/${currentStock.ticker}`;
-      const response = await Axios.get(url);
+      const response = await Axios.get(url, { headers });
       if (response.data.status === "success") {
         setStockInfo(response.data.data);
       }
@@ -84,7 +89,7 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock, accountB
     const getData = async () => {
       const url =
         config.base_url + `/api/data/prices/${currentStock.ticker}/full`;
-      const response = await Axios.get(url);
+      const response = await Axios.get(url, { headers });
       if (response.data.status === "success") {
         setSixMonthAverages(response.data.sixMonthAverages);
         setPastDay(response.data.pastDay);
@@ -96,7 +101,7 @@ const StockCard = ({ setPurchasedStocks, purchasedStocks, currentStock, accountB
 
     getInfo();
     getData();
-  }, [currentStock]);
+  }, [currentStock, userData?.token]);
 
   return (
     <div className={styles.root}>
@@ -262,4 +267,3 @@ const Search = ({ setPurchasedStocks, purchasedStocks, accountBalance }) => {
 
 
 export default Search;
-

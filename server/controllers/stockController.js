@@ -356,7 +356,7 @@ exports.getStockForUser = async (req, res) => {
 
 exports.editAccount = async (req, res) => {
   try {
-    const { ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY } = req.body;
+    const { ALPACA_API_KEY_ID, ALPACA_API_SECRET_KEY } = req.body || {};
 
     if (req.user !== req.params.userId) {
       return res.status(401).json({
@@ -365,11 +365,24 @@ exports.editAccount = async (req, res) => {
       });
     }
 
+    const { decryptIfEncrypted, encryptIfPlaintext, maskKey } = require('../utils/secretUtils');
+    const { clearAlpacaConfigCache } = require('../config/alpacaConfig');
+
+    const keyIdPlain = decryptIfEncrypted(ALPACA_API_KEY_ID);
+    const secretPlain = decryptIfEncrypted(ALPACA_API_SECRET_KEY);
+
+    if (!keyIdPlain || !secretPlain) {
+      return res.status(400).json({
+        status: "fail",
+        message: "Missing Alpaca API keys.",
+      });
+    }
+
     // Validate API keys by trying to connect to Alpaca
     const testConfig = {
-      keyId: ALPACA_API_KEY_ID,
-      secretKey: ALPACA_API_SECRET_KEY,
-      tradingApiURL: ALPACA_API_KEY_ID.startsWith('PK') ? "https://paper-api.alpaca.markets" : "https://api.alpaca.markets",
+      keyId: keyIdPlain,
+      secretKey: secretPlain,
+      tradingApiURL: keyIdPlain.startsWith('PK') ? "https://paper-api.alpaca.markets" : "https://api.alpaca.markets",
       dataApiURL: "https://data.alpaca.markets"
     };
 
@@ -387,8 +400,8 @@ exports.editAccount = async (req, res) => {
     const updatedUser = await User.findByIdAndUpdate(
       req.params.userId,
       {
-        ALPACA_API_KEY_ID,
-        ALPACA_API_SECRET_KEY
+        ALPACA_API_KEY_ID: encryptIfPlaintext(keyIdPlain),
+        ALPACA_API_SECRET_KEY: encryptIfPlaintext(secretPlain),
       },
       { new: true }
     );
@@ -400,13 +413,16 @@ exports.editAccount = async (req, res) => {
       });
     }
 
+    clearAlpacaConfigCache(req.params.userId);
+
     return res.status(200).json({
       status: "success",
       user: {
         username: updatedUser.username,
         id: updatedUser._id,
         balance: updatedUser.balance,
-        hasValidKeys: true
+        alpacaKeysPresent: true,
+        alpacaKeyIdMasked: maskKey(keyIdPlain),
       },
     });
 

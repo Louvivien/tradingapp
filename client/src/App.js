@@ -29,9 +29,30 @@ const StrategyLogsRoute = () => {
 
 
 function App() {
+  const loadStoredUser = () => {
+    try {
+      const raw = localStorage.getItem("user");
+      if (!raw) {
+        return undefined;
+      }
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") {
+        return undefined;
+      }
+      // Never persist secrets in localStorage.
+      delete parsed.ALPACA_API_KEY_ID;
+      delete parsed.ALPACA_API_SECRET_KEY;
+      delete parsed.ALPACA_LIVE_API_KEY_ID;
+      delete parsed.ALPACA_LIVE_API_SECRET_KEY;
+      return parsed;
+    } catch {
+      return undefined;
+    }
+  };
+
   const [userData, setUserData] = useState({
     token: localStorage.getItem("auth-token") || undefined,
-    user: JSON.parse(localStorage.getItem("user")) || undefined,
+    user: loadStoredUser(),
     ALPACA_API_KEY_ID: undefined,
     ALPACA_API_SECRET_KEY: undefined,
   });
@@ -42,6 +63,7 @@ function App() {
       if (token == null) {
         localStorage.setItem("auth-token", "");
         token = "";
+        localStorage.removeItem("user");
         setUserData({ token: undefined, user: undefined, ALPACA_API_KEY_ID: undefined, ALPACA_API_SECRET_KEY: undefined });
         return;
       }
@@ -71,6 +93,7 @@ function App() {
         // Store user data in local storage
         localStorage.setItem("user", JSON.stringify(userRes.data));
       } else {
+        localStorage.removeItem("user");
         setUserData({ token: undefined, user: undefined, ALPACA_API_KEY_ID: undefined, ALPACA_API_SECRET_KEY: undefined });
       }
     };

@@ -19,6 +19,11 @@ const auth = async (req, res, next) => {
       return errorMessage(res);
     }
 
+    const requireExp = String(process.env.JWT_REQUIRE_EXP ?? "true").trim().toLowerCase() !== "false";
+    if (requireExp && !verified.exp) {
+      return errorMessage(res);
+    }
+
     req.user = verified.id;
     next();
   } catch {

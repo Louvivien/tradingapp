@@ -3,6 +3,7 @@ const User = require("../models/userModel");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const { getAlpacaConfig } = require('../config/alpacaConfig');
+const { decryptIfEncrypted, maskKey } = require('../utils/secretUtils');
 
 
 
@@ -96,7 +97,11 @@ exports.loginUser = async (req, res) => {
       ALPACA_API_SECRET_KEY = process.env.ALPACA_API_SECRET_KEY;
     }
 
-    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET);
+    const token = jwt.sign(
+      { id: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    );
 
     let userBalance = user.balance;
     try {
@@ -124,14 +129,23 @@ exports.loginUser = async (req, res) => {
       mongoState: mongoose.connection.readyState,
     });
 
+    const keyIdPlain = (() => {
+      try {
+        return decryptIfEncrypted(ALPACA_API_KEY_ID);
+      } catch {
+        return '';
+      }
+    })();
+    const alpacaKeysPresent = Boolean(ALPACA_API_KEY_ID && ALPACA_API_SECRET_KEY);
+
     return res.status(200).json({
       token,
       user: {
         username,
         id: user._id,
         balance: userBalance,
-        ALPACA_API_KEY_ID: ALPACA_API_KEY_ID,
-        ALPACA_API_SECRET_KEY: ALPACA_API_SECRET_KEY,
+        alpacaKeysPresent,
+        alpacaKeyIdMasked: keyIdPlain ? maskKey(keyIdPlain) : null,
       },
     });
   } catch (error) {
@@ -149,6 +163,10 @@ exports.validate = async (req, res) => {
     }
     const verified = jwt.verify(token, process.env.JWT_SECRET);
     if (!verified) {
+      return res.json(false);
+    }
+    const requireExp = String(process.env.JWT_REQUIRE_EXP ?? "true").trim().toLowerCase() !== "false";
+    if (requireExp && !verified.exp) {
       return res.json(false);
     }
 

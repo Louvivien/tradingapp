@@ -14,10 +14,13 @@ const {
   listComposerEvaluations,
 } = require("../controllers/dataController");
 
+// Data routes use 3rd party APIs and can be expensive; require auth by default.
+router.use(auth);
+
 router.route("/prices/:ticker").get(getStockInfo);
 router.route("/prices/:ticker/full").get(getStockHistoricData);
 router.route("/random").get(getRandomStockData);
-router.route("/portfolio/:userId").get(auth, getPortfolioData);
+router.route("/portfolio/:userId").get(getPortfolioData);
 router.route("/analytics/:ticker").get(getWorkflowIndicators);
 router.route("/composer/evaluate").post(evaluateComposerStrategy);
 router.route("/cache/prices/:symbol").get(getCachedHistoricalPrices);

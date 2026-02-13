@@ -1,7 +1,6 @@
 import React, { useState, useContext } from "react";
 import UserContext from "../../context/UserContext";
 import styles from "./PageTemplate.module.css";
-import CryptoJS from "crypto-js";
 
 import {
   Typography,
@@ -41,29 +40,23 @@ const SettingsModal = ({ setSettingsOpen }) => {
 
 const SettingsModalContent = ({ setSettingsOpen }) => {
   const { userData, setUserData } = useContext(UserContext);
-  const [ALPACA_API_KEY_ID, setApiKeyId] = useState(userData.user.ALPACA_API_KEY_ID);
-  const [ALPACA_API_SECRET_KEY, setApiSecretKey] = useState(userData.user.ALPACA_API_SECRET_KEY);
+  const [ALPACA_API_KEY_ID, setApiKeyId] = useState("");
+  const [ALPACA_API_SECRET_KEY, setApiSecretKey] = useState("");
   const [activateSafetyButton, setActiveSafetyButton] = useState(false);
   const [showJwt, setShowJwt] = useState(false);
   const [jwtCopied, setJwtCopied] = useState(false);
   const [userIdCopied, setUserIdCopied] = useState(false);
 
-  
+  const alpacaKeysPresent = Boolean(userData?.user?.alpacaKeysPresent);
+  const alpacaKeyIdMasked = userData?.user?.alpacaKeyIdMasked || null;
 
-  
-
-  
   const handleApiKeyChange = (event) => {
-    // console.log(event.target.value);
-    const ciphertext = CryptoJS.AES.encrypt(event.target.value, process.env.REACT_APP_CryptoJS_secret_key).toString();
-    setApiKeyId(ciphertext);
-  }  
+    setApiKeyId(event.target.value);
+  };
 
   const handleApiSecretKeyChange = (event) => {
-    // console.log(event.target.value);
-    const ciphertext2 = CryptoJS.AES.encrypt(event.target.value, process.env.REACT_APP_CryptoJS_secret_key).toString();
-    setApiSecretKey(ciphertext2);
-};
+    setApiSecretKey(event.target.value);
+  };
 
   const handleClick = () => {
     setSettingsOpen(false);
@@ -237,9 +230,14 @@ const SettingsModalContent = ({ setSettingsOpen }) => {
                   name="ALPACA_API_SECRET_KEY"
                   autoComplete="ALPACA_API_SECRET_KEY"
                   value={ALPACA_API_SECRET_KEY}
+                  type="password"
                   onChange={handleApiSecretKeyChange}
 
                   />
+                <Typography component="p" variant="caption" align="center" sx={{ mt: 1 }}>
+                  Current Alpaca keys: {alpacaKeysPresent ? `Set (${alpacaKeyIdMasked || "masked"})` : "Missing"}.
+                  For security, the app does not display your secret key.
+                </Typography>
               </form>
               <br />
               <Box display="flex" justifyContent="center">
