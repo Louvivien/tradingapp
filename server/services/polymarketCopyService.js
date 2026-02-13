@@ -49,6 +49,13 @@ const POLYMARKET_HTTP_TIMEOUT_MS = (() => {
   }
   return Math.max(1000, Math.min(Math.floor(raw), 120000));
 })();
+const POLYMARKET_CLOB_SERVER_TIME_CACHE_MS = (() => {
+  const raw = Number(process.env.POLYMARKET_CLOB_SERVER_TIME_CACHE_MS);
+  if (!Number.isFinite(raw)) {
+    return 10_000;
+  }
+  return Math.max(0, Math.min(Math.floor(raw), 60_000));
+})();
 const POLYMARKET_PROGRESS_LOG_EVERY_TRADES = (() => {
   const raw = Number(process.env.POLYMARKET_PROGRESS_LOG_EVERY_TRADES);
   if (!Number.isFinite(raw) || raw <= 0) {
@@ -562,7 +569,32 @@ const buildPolyHmacSignature = ({ secret, timestamp, method, requestPath, body }
   return makeUrlSafeBase64(signature);
 };
 
+const clobServerTimeCacheState = {
+  value: null,
+  fetchedAtMs: 0,
+  inFlight: null,
+};
+
 const fetchClobServerTime = async () => {
+  if (POLYMARKET_CLOB_SERVER_TIME_CACHE_MS > 0) {
+    const cachedAt = Number(clobServerTimeCacheState.fetchedAtMs || 0);
+    const cachedValue = Number(clobServerTimeCacheState.value || 0);
+    if (
+      Number.isFinite(cachedValue) &&
+      cachedValue > 0 &&
+      cachedAt > 0 &&
+      Date.now() - cachedAt < POLYMARKET_CLOB_SERVER_TIME_CACHE_MS
+    ) {
+      return cachedValue;
+    }
+
+    const inFlight = clobServerTimeCacheState.inFlight;
+    if (inFlight) {
+      return await inFlight;
+    }
+  }
+
+  const run = (async () => {
   const response = await polymarketAxiosGet(`${CLOB_HOST}/time`, {
     params: buildGeoParams(),
     headers: withClobUserAgent(),
@@ -572,6 +604,24 @@ const fetchClobServerTime = async () => {
     throw new Error('Unable to fetch Polymarket server time.');
   }
   return ts;
+  })();
+
+  if (POLYMARKET_CLOB_SERVER_TIME_CACHE_MS > 0) {
+    clobServerTimeCacheState.inFlight = run;
+  }
+
+  try {
+    const ts = await run;
+    if (POLYMARKET_CLOB_SERVER_TIME_CACHE_MS > 0) {
+      clobServerTimeCacheState.value = ts;
+      clobServerTimeCacheState.fetchedAtMs = Date.now();
+    }
+    return ts;
+  } finally {
+    if (POLYMARKET_CLOB_SERVER_TIME_CACHE_MS > 0 && clobServerTimeCacheState.inFlight === run) {
+      clobServerTimeCacheState.inFlight = null;
+    }
+  }
 };
 
 const createL2Headers = async ({ authAddress, apiKey, secret, passphrase, method, requestPath, body }) => {
@@ -1232,9 +1282,7 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	  const lastTradeId = poly.lastTradeId ? String(poly.lastTradeId).trim() : null;
 	  const lastTradeMatchTime = poly.lastTradeMatchTime ? String(poly.lastTradeMatchTime).trim() : null;
 	  const now = new Date();
-	  const anchorMatchTime = !lastTradeId
-	    ? (lastTradeMatchTime || now.toISOString())
-	    : null;
+	  const anchorMatchTime = lastTradeMatchTime || now.toISOString();
 
 	  let autoRedeem = null;
 	  const autoRedeemEnabled = parseBoolean(process.env.POLYMARKET_AUTO_REDEEM, false);
@@ -1399,6 +1447,8 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 
   const dataApiTakerOnly = parseBooleanEnvDefault(POLYMARKET_DATA_API_TAKER_ONLY_DEFAULT, false);
 
+  const isDataApiTradeId = (tradeId) => String(tradeId || '').startsWith('data-api:');
+
   const collectTrades = async (tradeSource) => {
     const pendingTrades = [];
     const seenTradeIds = new Set();
@@ -1437,6 +1487,21 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
         throw wrapped;
       }
     };
+
+    const stopAtTradeId = (() => {
+      if (!lastTradeId) {
+        return null;
+      }
+      const dataApi = isDataApiTradeId(lastTradeId);
+      if (tradeSource === 'data-api') {
+        return dataApi ? lastTradeId : null;
+      }
+      if (tradeSource === 'clob-l2') {
+        return dataApi ? null : lastTradeId;
+      }
+      return null;
+    })();
+    const stopAtMatchTime = stopAtTradeId ? null : anchorMatchTime;
 
     let nextToken = tradeSource === 'data-api' ? 0 : INITIAL_CURSOR;
     if (tradeSource === 'clob-l2' && !hasClobCredentials) {
@@ -1655,8 +1720,8 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	          if (!id) {
 	            continue;
 	          }
-	          if (lastTradeId) {
-	            if (id === lastTradeId) {
+	          if (stopAtTradeId) {
+	            if (id === stopAtTradeId) {
 	              foundLastTrade = true;
 	              break;
 	            }
@@ -1668,14 +1733,14 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
 	          if (!matchTime) {
 	            continue;
 	          }
-	          if (anchorMatchTime && !isTradeAfterAnchor(matchTime, anchorMatchTime)) {
+	          if (stopAtMatchTime && !isTradeAfterAnchor(matchTime, stopAtMatchTime)) {
 	            foundAnchor = true;
 	            break;
 	          }
 	          pushTrade(trade);
 	        }
 
-	        if (!lastTradeId && foundAnchor) {
+	        if (!stopAtTradeId && foundAnchor) {
 	          break;
 	        }
 	      }
@@ -1786,6 +1851,34 @@ const syncPolymarketPortfolioInternal = async (portfolio, options = {}) => {
       lastTradeMatchTime: anchorMatchTime,
       lastTradeId: null,
     };
+  } else if (
+    mode !== 'backfill' &&
+    lastTradeId &&
+    ((tradeSourceUsed === 'data-api' && !isDataApiTradeId(lastTradeId)) ||
+      (tradeSourceUsed === 'clob-l2' && isDataApiTradeId(lastTradeId)))
+  ) {
+    // Trade source switched (or lastTradeId is incompatible with the current source); reset to timestamp anchor to avoid reprocessing.
+    portfolio.polymarket = {
+      ...snapshotPolymarket(portfolio.polymarket),
+      lastTradeMatchTime: anchorMatchTime,
+      lastTradeId: null,
+    };
+
+    void recordStrategyLog({
+      strategyId: portfolio.strategy_id,
+      userId: portfolio.userId,
+      strategyName: portfolio.name,
+      level: 'warn',
+      message: 'Polymarket trade cursor reset (trade source mismatch)',
+      details: {
+        provider: 'polymarket',
+        mode,
+        address,
+        tradeSource: tradeSourceUsed,
+        lastTradeId,
+        lastTradeMatchTime,
+      },
+    }).catch(() => {});
   }
 
   if (!pendingTrades.length && !shouldSeedFromPositionsSnapshot) {
