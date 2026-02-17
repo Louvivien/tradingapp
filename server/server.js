@@ -133,6 +133,7 @@ mongoose.connection.on('disconnecting', () => logConnectionState('Event: disconn
 
 const app = express();
 const port = process.env.PORT || 3000;
+const bindHost = String(process.env.BIND_HOST || '').trim() || '0.0.0.0';
 
 app.disable('x-powered-by');
 // If behind a reverse proxy (Nginx/DO LB), trust `X-Forwarded-For` so IP-based rate limits work.
@@ -295,7 +296,8 @@ app.use((req, res, next) => {
     console.warn(`[HTTP] Normalized leading slashes: ${originalUrl} -> ${req.url}`);
   }
   const pathForLog = req.path || String(req.url || '').split('?')[0] || req.url;
-  console.log(`[HTTP] Incoming ${req.method} request for ${pathForLog}`);
+  const clientIp = req.ip || req.connection?.remoteAddress || 'unknown';
+  console.log(`[HTTP] ${clientIp} ${req.method} ${pathForLog}`);
   next();
 });
 
@@ -824,8 +826,8 @@ app.get("/api/ping", (req, res) => {
 });
 
 // Start HTTP server immediately (Render expects your process to bind to $PORT quickly).
-app.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+app.listen(port, bindHost, () => {
+  console.log(`Server is running on ${bindHost}:${port}`);
 });
 
 logConnectionState('Initial readyState before connect');
