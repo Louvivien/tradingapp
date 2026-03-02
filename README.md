@@ -201,6 +201,37 @@ These endpoints are helpful when investigating mismatched holdings vs expected a
 
 ## Troubleshooting
 
+### PM2 on DigitalOcean: `npm ERR! enoent Could not read /root/package.json`
+If PM2 is trying to run `npm` from `/root`, the process was started with the wrong working directory.
+
+Fix it by recreating the PM2 app from the repo's server folder:
+
+```sh
+# 1) Stop and remove the broken process
+pm2 delete tradingapp
+
+# 2) Start using the committed PM2 ecosystem file (sets cwd correctly)
+cd /path/to/tradingapp/server
+pm2 start ecosystem.config.js --env production
+
+# 3) Persist across reboot
+pm2 save
+pm2 startup
+```
+
+Quick verification:
+
+```sh
+pm2 show tradingapp   # check "exec cwd" points to .../tradingapp/server
+pm2 logs tradingapp --lines 100
+```
+
+Avoid starting it like this from `/root` (or any folder without `package.json`):
+
+```sh
+pm2 start npm --name tradingapp -- start
+```
+
 ### MongoDB “over your space quota (512 MB of 512 MB)”
 This means your MongoDB tier is out of storage (common on free/small clusters). Writes will fail, which can break rebalances and prevent logs from being recorded.
 
